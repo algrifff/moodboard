@@ -1,0 +1,12 @@
+# moodboard.ai — Railway configuration
+#
+# Two services are configured in the Railway dashboard:
+#   - web: serves apps/web/dist (static via `vite preview` or a static host)
+#   - api: runs apps/api with the Railway volume mounted at /data
+#
+# Postgres + Railway volume are provisioned via Railway add-ons.
+# Per-service build/deploy settings live in the dashboard.
+# This file exists as a marker that the repo is Railway-aware.
+
+[build]
+builder = "NIXPACKS"

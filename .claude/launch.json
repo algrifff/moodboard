@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "moodboard-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@moodboard/web", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "moodboard-api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@moodboard/api", "dev"],
+      "port": 3001
+    }
+  ]
+}

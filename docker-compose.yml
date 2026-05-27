@@ -1,0 +1,23 @@
+# Local-dev Postgres for moodboard.ai.
+# Prod uses Railway's managed Postgres — only DATABASE_URL changes.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: moodboard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: moodboard
+      POSTGRES_PASSWORD: moodboard
+      POSTGRES_DB: moodboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - moodboard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moodboard -d moodboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  moodboard-pgdata:

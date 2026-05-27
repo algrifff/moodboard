@@ -1,0 +1,33 @@
+# deps
+node_modules
+.pnpm-store
+
+# build
+dist
+build
+*.tsbuildinfo
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# misc
+.cache
+
+# Railway volume (never commit uploaded user data)
+data/

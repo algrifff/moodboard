@@ -1,0 +1,47 @@
+# Gates every push and PR with the same three checks we run locally:
+# prettier formatting, strict typecheck across all workspace packages, and
+# the vitest suite. There is no separate lint step — Prettier is the lint
+# and tsc is the correctness check (see CLAUDE.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel an in-flight run when a new commit lands on the same ref. Keeps
+# Actions usage down on PRs that get force-pushed.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: format / typecheck / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must be installed BEFORE setup-node so the node action can wire
+      # up its store for caching. Pin pnpm 9 to match `lockfileVersion: 9.0`.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm test

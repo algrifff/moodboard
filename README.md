@@ -8,20 +8,20 @@ The "feel" of items snapping into a group is the whole product.
 
 ## Stack
 
-| Layer            | Choice                                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Frontend         | Vite + React 19 + TypeScript                                                                                                |
-| Canvas           | Konva.js + react-konva (images, group outlines, pan/zoom); DOM overlays (sticky notes, editable text, widgets, AI panels)   |
-| UI               | Tailwind + shadcn/ui (dark, flat OKLCH theme)                                                                               |
-| Animation        | Framer Motion (DOM) + Konva tween (canvas)                                                                                  |
-| State            | Zustand                                                                                                                     |
-| Backend          | Hono on Node.js                                                                                                             |
-| ORM              | Drizzle                                                                                                                     |
-| DB               | Postgres (Railway in prod, docker-compose locally)                                                                          |
-| Auth             | better-auth                                                                                                                 |
-| AI               | Anthropic Claude — `claude-sonnet-4-6` for depth, `claude-haiku-4-5` for fast passes                                        |
-| File storage     | Railway volume mounted at `/data` (uploads, thumbnails, PDFs). Never binary in Postgres.                                    |
-| Package manager  | pnpm. Always pnpm.                                                                                                          |
+| Layer           | Choice                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Frontend        | Vite + React 19 + TypeScript                                                                                              |
+| Canvas          | Konva.js + react-konva (images, group outlines, pan/zoom); DOM overlays (sticky notes, editable text, widgets, AI panels) |
+| UI              | Tailwind + shadcn/ui (dark, flat OKLCH theme)                                                                             |
+| Animation       | Framer Motion (DOM) + Konva tween (canvas)                                                                                |
+| State           | Zustand                                                                                                                   |
+| Backend         | Hono on Node.js                                                                                                           |
+| ORM             | Drizzle                                                                                                                   |
+| DB              | Postgres (Railway in prod, docker-compose locally)                                                                        |
+| Auth            | better-auth                                                                                                               |
+| AI              | Anthropic Claude — `claude-sonnet-4-6` for depth, `claude-haiku-4-5` for fast passes                                      |
+| File storage    | Railway volume mounted at `/data` (uploads, thumbnails, PDFs). Never binary in Postgres.                                  |
+| Package manager | pnpm. Always pnpm.                                                                                                        |
 
 These are locked decisions. See `CLAUDE.md` for why.
 
@@ -71,14 +71,14 @@ cp apps/web/.env.example apps/web/.env   # currently empty — no client-side en
 
 `apps/api/.env` needs:
 
-| Key                  | What it is                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `PORT`               | API port (default 3001).                                                                |
-| `NODE_ENV`           | `development` locally.                                                                  |
-| `DATABASE_URL`       | Postgres connection string. The example points at docker-compose's local Postgres.      |
-| `AUTH_SECRET`        | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`. |
-| `BETTER_AUTH_URL`    | Base URL for auth callbacks (e.g. `http://localhost:3001`).                             |
-| `ANTHROPIC_API_KEY`  | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it. |
+| Key                 | What it is                                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------------- |
+| `PORT`              | API port (default 3001).                                                                      |
+| `NODE_ENV`          | `development` locally.                                                                        |
+| `DATABASE_URL`      | Postgres connection string. The example points at docker-compose's local Postgres.            |
+| `AUTH_SECRET`       | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`. |
+| `BETTER_AUTH_URL`   | Base URL for auth callbacks (e.g. `http://localhost:3001`).                                   |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it.       |
 
 **Never commit `.env`.** It's in `.gitignore`; verify with `git check-ignore -v apps/api/.env` before any commit. The `.env.example` files document every key with placeholder values only.
 
@@ -105,14 +105,14 @@ This runs `apps/web` (Vite dev server) and `apps/api` (Hono with hot reload) in 
 
 ## Available commands
 
-| Command              | What it does                                                       |
-| -------------------- | ------------------------------------------------------------------ |
-| `pnpm dev`           | Run web + api in parallel with hot reload.                         |
-| `pnpm build`         | Build both apps for production.                                    |
-| `pnpm typecheck`     | Strict `tsc --noEmit` across every workspace package.              |
-| `pnpm test`          | Vitest across every workspace package.                             |
-| `pnpm format`        | Auto-fix all formatting with Prettier.                             |
-| `pnpm format:check`  | Verify formatting without changing files (used in CI).             |
+| Command             | What it does                                           |
+| ------------------- | ------------------------------------------------------ |
+| `pnpm dev`          | Run web + api in parallel with hot reload.             |
+| `pnpm build`        | Build both apps for production.                        |
+| `pnpm typecheck`    | Strict `tsc --noEmit` across every workspace package.  |
+| `pnpm test`         | Vitest across every workspace package.                 |
+| `pnpm format`       | Auto-fix all formatting with Prettier.                 |
+| `pnpm format:check` | Verify formatting without changing files (used in CI). |
 
 There is no ESLint or Biome. **Prettier is the lint; `tsc --strict` is the correctness checker.** Style is enforced by formatter, not by linter rules.
 
@@ -166,13 +166,13 @@ Two items belong to the same group when their bounding boxes are within **24 px 
 
 Five specialist agents read the moodboard, each with a hand-tuned prompt + JSON schema:
 
-| Agent              | Output                                                                                          |
-| ------------------ | ----------------------------------------------------------------------------------------------- |
+| Agent              | Output                                                                                                                                                   |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Art Director       | Headline, summary, mood, tone, palette (hex), adjectives, typographic voice, references, tensions, risks, hooks/statements/tropes from the text content. |
-| Business Analyst   | Business model, brand, niche, target audience, industry — five sectioned paragraphs.            |
-| Audience Profiler  | Three audience segments with demographic, psychographic, and behavioural specificity.           |
-| Channel Strategist | 4–6 channels (named specifically — "Substack newsletter", not "social media") with rationale + success metric. |
-| Copywriter         | Taglines, hero headlines, body copy paragraph, CTAs — written in the implied brand voice.       |
+| Business Analyst   | Business model, brand, niche, target audience, industry — five sectioned paragraphs.                                                                     |
+| Audience Profiler  | Three audience segments with demographic, psychographic, and behavioural specificity.                                                                    |
+| Channel Strategist | 4–6 channels (named specifically — "Substack newsletter", not "social media") with rationale + success metric.                                           |
+| Copywriter         | Taglines, hero headlines, body copy paragraph, CTAs — written in the implied brand voice.                                                                |
 
 A **Synthesizer** takes any 2+ agent outputs and produces a structured brief — palette swatches with role and note, typography samples at scale, audience cards, channel plays, hooks as pull-quotes, tensions, watch-fors. The brief renders as a presentation, not a memo. See `apps/api/src/lib/agents.ts` for prompts; see `apps/web/src/components/canvas/AIAnalysisPanel.tsx` for the renderer.
 

@@ -8,6 +8,13 @@
       "when": 1779911522466,
       "tag": "0000_parallel_dust",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1779914164460,
+      "tag": "0001_wonderful_eternals",
+      "breakpoints": true
     }
   ]
 }

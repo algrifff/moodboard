@@ -1,4 +1,5 @@
 import type { BoardSummary } from '@moodboard/shared'
+import { Plus, SignOut, Trash } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSession, signOut } from '@/lib/authClient'
@@ -62,63 +63,83 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b bg-white">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-lg font-semibold">moodboard.ai</h1>
-          <div className="flex items-center gap-4 text-sm">
+    <div className="min-h-screen bg-background">
+      <header>
+        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+          <h1 className="text-base font-semibold tracking-tight text-foreground">moodboard.ai</h1>
+          <div className="flex items-center gap-5 text-sm">
             <span className="text-muted-foreground">{session?.user?.email}</span>
             <button
               type="button"
               onClick={handleSignOut}
-              className="text-slate-600 hover:text-slate-900"
+              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Sign out"
             >
+              <SignOut size={14} weight="regular" />
               Sign out
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold">Your boards</h2>
+      <main className="max-w-5xl mx-auto px-6 pt-6 pb-16">
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">Your boards</h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              Drop, group, and let the read come to you.
+            </p>
+          </div>
           <button
             type="button"
             onClick={handleCreate}
             disabled={creating}
-            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground pl-3 pr-3.5 py-2 text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-[filter,opacity]"
+            style={{ borderRadius: 'var(--radius)' }}
           >
-            {creating ? 'Creating…' : '+ New board'}
+            <Plus size={14} weight="bold" />
+            {creating ? 'Creating…' : 'New board'}
           </button>
         </div>
 
-        {error && <p className="text-sm text-red-600 mb-4">Error: {error}</p>}
-        {boards === null && !error && (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        )}
+        {error && <p className="text-sm text-destructive mb-4">Error: {error}</p>}
+        {boards === null && !error && <DashboardSkeleton />}
         {boards && boards.length === 0 && (
-          <div className="rounded-lg border-2 border-dashed border-slate-300 bg-white py-12 text-center">
-            <p className="text-sm text-muted-foreground">No boards yet.</p>
+          <div
+            className="bg-card py-16 px-6 text-center"
+            style={{ borderRadius: 'var(--radius-lg)' }}
+          >
+            <h3 className="text-lg font-semibold text-foreground">No boards yet</h3>
+            <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+              Start a board to drop in images, sticky notes, and PDFs. Group them on the canvas and
+              see what Claude sees.
+            </p>
             <button
               type="button"
               onClick={handleCreate}
-              className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 mt-6 bg-primary text-primary-foreground pl-3 pr-3.5 py-2 text-sm font-medium hover:brightness-110 transition-[filter]"
+              style={{ borderRadius: 'var(--radius)' }}
             >
+              <Plus size={14} weight="bold" />
               Create your first board
             </button>
           </div>
         )}
 
         {boards && boards.length > 0 && (
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {boards.map((b) => (
               <li key={b.id} className="group relative">
                 <Link
                   to={`/board/${b.id}`}
-                  className="block rounded-lg border bg-white p-4 hover:border-slate-400 hover:shadow-sm transition"
+                  className="block bg-card p-4 hover:bg-[var(--bg-elevated)] transition-colors"
+                  style={{ borderRadius: 'var(--radius-lg)' }}
                 >
-                  <div className="aspect-[4/3] mb-3 rounded bg-slate-100" />
-                  <p className="text-sm font-medium text-slate-900 truncate">{b.name}</p>
+                  <div
+                    className="aspect-[4/3] mb-3 bg-[var(--bg-muted)]"
+                    style={{ borderRadius: 'var(--radius)' }}
+                  />
+                  <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Edited {formatWhen(b.updatedAt)}
                   </p>
@@ -126,10 +147,12 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => handleDelete(b.id)}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 transition"
+                  className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 p-1.5 text-muted-foreground hover:text-destructive hover:bg-[var(--bg-elevated)] transition-[opacity,color,background-color]"
+                  style={{ borderRadius: 'var(--radius)' }}
                   aria-label="Delete board"
+                  title="Delete board"
                 >
-                  Delete
+                  <Trash size={14} weight="regular" />
                 </button>
               </li>
             ))}
@@ -137,5 +160,35 @@ export function DashboardPage() {
         )}
       </main>
     </div>
+  )
+}
+
+function DashboardSkeleton() {
+  // Three placeholder tiles matching the real card layout. Pulse subtly so
+  // the page doesn't read as broken while the list is in flight.
+  return (
+    <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      {[0, 1, 2].map((i) => (
+        <li
+          key={i}
+          className="bg-card p-4 animate-pulse"
+          aria-hidden
+          style={{ borderRadius: 'var(--radius-lg)' }}
+        >
+          <div
+            className="aspect-[4/3] mb-3 bg-[var(--bg-muted)]"
+            style={{ borderRadius: 'var(--radius)' }}
+          />
+          <div
+            className="h-3.5 w-2/3 bg-[var(--bg-muted)]"
+            style={{ borderRadius: 'var(--radius)' }}
+          />
+          <div
+            className="mt-2 h-3 w-1/3 bg-[var(--bg-muted)]"
+            style={{ borderRadius: 'var(--radius)' }}
+          />
+        </li>
+      ))}
+    </ul>
   )
 }

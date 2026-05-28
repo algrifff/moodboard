@@ -7,10 +7,7 @@ type FitOptions = {
   max?: number
 }
 
-export function useFitText<T extends HTMLElement>(
-  textRef: RefObject<T | null>,
-  opts: FitOptions,
-) {
+export function useFitText<T extends HTMLElement>(textRef: RefObject<T | null>, opts: FitOptions) {
   const { width, height, min = 12, max = 96 } = opts
 
   const fit = useCallback(() => {

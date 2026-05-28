@@ -2,11 +2,14 @@ import { serve } from '@hono/node-server'
 import type { HealthResponse } from '@moodboard/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { auth, type AuthSession, type AuthUser } from './auth'
 import { db } from './db'
+import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
+import { analyze } from './routes/analyze'
 import { boards } from './routes/boards'
 import { files } from './routes/files'
 
@@ -22,15 +25,15 @@ app.use(
   '*',
   cors({
     origin: (origin) =>
-      origin === 'http://localhost:5173' || origin === 'http://localhost:3001'
-        ? origin
-        : null,
+      origin === 'http://localhost:5173' || origin === 'http://localhost:3001' ? origin : null,
     credentials: true,
   }),
 )
 
-// Mount better-auth handler before the api routes so /api/auth/* is owned by it.
-app.all('/api/auth/*', (c) => auth.handler(c.req.raw))
+// Tighten the auth handler against credential stuffing. The bucket size lets a
+// legitimate user retype once or twice without hitting the wall.
+const authRateLimit = rateLimit({ scope: 'auth', limit: 10, windowMs: 60_000 })
+app.all('/api/auth/*', authRateLimit, (c) => auth.handler(c.req.raw))
 
 // Session middleware — populate c.var.user / c.var.session for downstream routes.
 app.use('*', async (c, next) => {
@@ -53,10 +56,11 @@ api.get('/health', (c) => {
 
 api.get('/db/health', async (c) => {
   try {
-    const result = await db.execute(sql`select 1 as ok`)
-    return c.json({ status: 'ok', driver: 'postgres-js', result: result[0] })
+    await db.execute(sql`select 1`)
+    return c.json({ status: 'ok' })
   } catch (e) {
-    return c.json({ status: 'error', error: e instanceof Error ? e.message : String(e) }, 500)
+    console.error('db health failed', e)
+    return c.json({ status: 'error' }, 500)
   }
 })
 
@@ -65,7 +69,19 @@ api.get('/me', (c) => {
   return c.json({ user })
 })
 
+// Bound JSON body size before drizzle/zod see it. Multipart upload routes
+// declare their own larger limit; everything else (boards CRUD, auth JSON)
+// caps at 1MB.
+const jsonBodyLimit = bodyLimit({
+  maxSize: 1024 * 1024,
+  onError: (c) => c.json({ error: 'Payload too large' }, 413),
+})
+
+api.use('/boards', jsonBodyLimit)
+api.use('/boards/*', jsonBodyLimit)
+
 api.route('/boards', boards)
+api.route('/', analyze)
 api.route('/', files)
 
 app.route('/api', api)

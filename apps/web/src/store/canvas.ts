@@ -9,12 +9,20 @@ export type CanvasSnapshot = {
   offset: { x: number; y: number }
 }
 
+// Undo/redo: only the `objects` array is undoable. Pan / zoom are
+// view state and shouldn't consume history slots.
+type HistoryFrame = CanvasObject[]
+const HISTORY_LIMIT = 50
+
 type CanvasState = {
   objects: CanvasObject[]
   scale: number
   offset: { x: number; y: number }
   viewportSize: { width: number; height: number }
   selectedIds: string[]
+
+  past: HistoryFrame[]
+  future: HistoryFrame[]
 
   addObject: (object: CanvasObject) => void
   updateObject: (id: string, patch: Partial<CanvasObject>) => void
@@ -29,6 +37,15 @@ type CanvasState = {
   clearSelection: () => void
   deleteSelection: () => void
 
+  // Call right before a mutation that should be undoable. Snapshots the
+  // current `objects` into history and clears the redo stack. Coalescing
+  // continuous actions (drag, typing) is the caller's job — see usage sites.
+  commitBeforeAction: () => void
+  undo: () => void
+  redo: () => void
+  canUndo: () => boolean
+  canRedo: () => boolean
+
   hydrate: (snapshot: Partial<CanvasSnapshot>) => void
   reset: () => void
 }
@@ -39,12 +56,14 @@ const INITIAL: CanvasSnapshot = {
   offset: { x: 0, y: 0 },
 }
 
-export const useCanvasStore = create<CanvasState>()((set) => ({
+export const useCanvasStore = create<CanvasState>()((set, get) => ({
   objects: INITIAL.objects,
   scale: INITIAL.scale,
   offset: INITIAL.offset,
   viewportSize: { width: 0, height: 0 },
   selectedIds: [],
+  past: [],
+  future: [],
 
   addObject: (object) => set((s) => ({ objects: [...s.objects, object] })),
   updateObject: (id, patch) =>
@@ -82,17 +101,55 @@ export const useCanvasStore = create<CanvasState>()((set) => ({
       selectedIds: [],
     })),
 
+  commitBeforeAction: () =>
+    set((s) => {
+      const nextPast = [...s.past, s.objects]
+      // Drop oldest frames when we cross the bound.
+      if (nextPast.length > HISTORY_LIMIT) nextPast.splice(0, nextPast.length - HISTORY_LIMIT)
+      return { past: nextPast, future: [] }
+    }),
+  undo: () =>
+    set((s) => {
+      if (s.past.length === 0) return {}
+      const previous = s.past[s.past.length - 1]!
+      return {
+        objects: previous,
+        past: s.past.slice(0, -1),
+        future: [...s.future, s.objects],
+        // Selection may reference deleted objects after restoring an older
+        // state; safest to clear it.
+        selectedIds: [],
+      }
+    }),
+  redo: () =>
+    set((s) => {
+      if (s.future.length === 0) return {}
+      const next = s.future[s.future.length - 1]!
+      return {
+        objects: next,
+        past: [...s.past, s.objects],
+        future: s.future.slice(0, -1),
+        selectedIds: [],
+      }
+    }),
+  canUndo: () => get().past.length > 0,
+  canRedo: () => get().future.length > 0,
+
   hydrate: (snapshot) =>
     set(() => ({
       objects: snapshot.objects ?? INITIAL.objects,
       scale: snapshot.scale ?? INITIAL.scale,
       offset: snapshot.offset ?? INITIAL.offset,
       selectedIds: [],
+      past: [],
+      future: [],
     })),
   reset: () =>
     set(() => ({
       ...INITIAL,
       selectedIds: [],
+      past: [],
+      future: [],
     })),
 }))
 

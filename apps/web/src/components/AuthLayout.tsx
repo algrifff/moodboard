@@ -8,11 +8,11 @@ export function AuthLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8">
+    <div className="min-h-screen flex items-center justify-center bg-background p-8">
       <div className="w-full max-w-sm space-y-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{title}</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
         </div>
         {children}
       </div>
@@ -20,13 +20,20 @@ export function AuthLayout({
   )
 }
 
-export function AuthInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function AuthInput({
+  ref,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  ref?: React.Ref<HTMLInputElement>
+}) {
   return (
     <input
+      ref={ref}
       {...props}
-      className={`w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400 ${
+      className={`w-full bg-[var(--bg-card)] px-3 py-2 text-sm text-foreground placeholder:text-[var(--text-faint)] outline-none ring-1 ring-[var(--border-soft)] focus:ring-[var(--accent)] transition-[box-shadow,background-color] ${
         props.className ?? ''
       }`}
+      style={{ borderRadius: 'var(--radius)', ...(props.style ?? {}) }}
     />
   )
 }
@@ -36,9 +43,10 @@ export function AuthButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>)
     <button
       type="submit"
       {...props}
-      className={`w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-50 ${
+      className={`w-full bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:brightness-110 disabled:opacity-50 transition-[filter,opacity] ${
         props.className ?? ''
       }`}
+      style={{ borderRadius: 'var(--radius)', ...(props.style ?? {}) }}
     />
   )
 }

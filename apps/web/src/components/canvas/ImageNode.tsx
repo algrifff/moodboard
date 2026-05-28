@@ -2,7 +2,9 @@ import type { CanvasObject, ImageData } from '@moodboard/shared'
 import type Konva from 'konva'
 import { useEffect, useRef, useState } from 'react'
 import { Image as KonvaImage } from 'react-konva'
+import { useSpawnOpacity } from '@/hooks/useSpawnAnim'
 import { useCanvasStore } from '@/store/canvas'
+import { emitDotRipple, setDragHalo } from './DotGridLayer'
 
 type Zone = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -32,6 +34,7 @@ type Active = {
   pos: { x: number; y: number }
   aspect: number
   initialPositions: Map<string, { x: number; y: number }>
+  moved: boolean
 }
 
 export function ImageNode({
@@ -45,6 +48,7 @@ export function ImageNode({
 }) {
   const [image, setImage] = useState<HTMLImageElement | null>(null)
   const [nearEdge, setNearEdge] = useState(false)
+  const spawnOpacity = useSpawnOpacity()
   const imageRef = useRef<Konva.Image>(null)
   const activeRef = useRef<Active | null>(null)
   const url = isImageData(object.data) ? object.data.url : null
@@ -130,6 +134,10 @@ export function ImageNode({
       state.setSelection([object.id])
     }
 
+    // Snapshot pre-action state for undo. Drag/resize updates that follow
+    // are coalesced into this one history frame.
+    state.commitBeforeAction()
+
     const zone = computeZone(pointer)
     const after = useCanvasStore.getState()
     const initial = new Map<string, { x: number; y: number }>()
@@ -148,6 +156,13 @@ export function ImageNode({
       pos: { x: node.x(), y: node.y() },
       aspect: node.width() / node.height(),
       initialPositions: initial,
+      moved: false,
+    }
+    // Light up the drag halo on every object the gesture will move/resize.
+    if (zone === null) {
+      for (const id of initial.keys()) setDragHalo(id, true)
+    } else {
+      setDragHalo(object.id, true)
     }
 
     const onMove = (ev: MouseEvent) => {
@@ -160,6 +175,12 @@ export function ImageNode({
       const sScale = stg.scaleX()
       const dx = (pX - active.pointer.x) / sScale
       const dy = (pY - active.pointer.y) / sScale
+      if (
+        !active.moved &&
+        (Math.abs(pX - active.pointer.x) > 2 || Math.abs(pY - active.pointer.y) > 2)
+      ) {
+        active.moved = true
+      }
       const updateObject = useCanvasStore.getState().updateObject
 
       if (active.mode === 'drag') {
@@ -217,9 +238,28 @@ export function ImageNode({
     }
 
     const onUp = () => {
+      const active = activeRef.current
       activeRef.current = null
       document.removeEventListener('mousemove', onMove)
       document.removeEventListener('mouseup', onUp)
+      // Clear halos for everything this gesture lit up.
+      if (active) {
+        if (active.mode === 'drag') {
+          for (const id of active.initialPositions.keys()) setDragHalo(id, false)
+        } else {
+          setDragHalo(object.id, false)
+        }
+      }
+      // Real drag/resize → ripple from the object's new center.
+      if (active?.moved) {
+        const live = useCanvasStore.getState().objects.find((o) => o.id === object.id)
+        if (live) {
+          emitDotRipple(
+            live.position.x + live.size.width / 2,
+            live.position.y + live.size.height / 2,
+          )
+        }
+      }
     }
 
     document.addEventListener('mousemove', onMove)
@@ -237,6 +277,7 @@ export function ImageNode({
       width={object.size.width}
       height={object.size.height}
       rotation={object.rotation}
+      opacity={spawnOpacity}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}

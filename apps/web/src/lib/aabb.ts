@@ -25,11 +25,7 @@ export function objectRect(o: CanvasObject): Rect {
   }
 }
 
-export function objectsInMarquee(
-  objects: CanvasObject[],
-  p1: Point,
-  p2: Point,
-): string[] {
+export function objectsInMarquee(objects: CanvasObject[], p1: Point, p2: Point): string[] {
   const m = normalizeRect(p1, p2)
   return objects.filter((o) => aabbIntersect(m, objectRect(o))).map((o) => o.id)
 }
@@ -40,10 +36,7 @@ export function aabbDistance(a: Rect, b: Rect): number {
   return Math.sqrt(dx * dx + dy * dy)
 }
 
-export function proximityGroups(
-  objects: CanvasObject[],
-  threshold = 24,
-): string[][] {
+export function proximityGroups(objects: CanvasObject[], threshold = 24): string[][] {
   const n = objects.length
   if (n < 2) return []
   const parent: number[] = objects.map((_, i) => i)
@@ -78,15 +71,10 @@ export function proximityGroups(
     groups.get(r)!.push(i)
   }
 
-  return [...groups.values()]
-    .filter((g) => g.length >= 2)
-    .map((g) => g.map((i) => objects[i]!.id))
+  return [...groups.values()].filter((g) => g.length >= 2).map((g) => g.map((i) => objects[i]!.id))
 }
 
-export function groupBoundingBox(
-  objects: CanvasObject[],
-  padding = 20,
-): Rect {
+export function groupBoundingBox(objects: CanvasObject[], padding = 20): Rect {
   if (objects.length === 0) {
     return { left: 0, top: 0, right: 0, bottom: 0 }
   }

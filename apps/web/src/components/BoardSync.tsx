@@ -1,6 +1,7 @@
 import type { CanvasSnapshot } from '@/store/canvas'
 import { snapshotFromStore, useCanvasStore } from '@/store/canvas'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { getBoard, updateBoard } from '@/lib/boardsApi'
 
 type Status = 'loading' | 'ready' | 'error' | 'not-found'
@@ -112,23 +113,28 @@ export function BoardSync({
 
   if (status === 'loading') {
     return (
-      <div className="flex items-center justify-center w-full h-full text-sm text-muted-foreground">
-        Loading board…
+      <div className="flex items-center justify-center w-full h-full">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          <span>Loading board…</span>
+        </div>
       </div>
     )
   }
   if (status === 'not-found') {
     return (
-      <div className="flex items-center justify-center w-full h-full text-sm text-muted-foreground">
-        Board not found.
-      </div>
+      <BoardErrorState
+        title="Board not found"
+        body="It may have been deleted, or the link might be wrong."
+      />
     )
   }
   if (status === 'error') {
     return (
-      <div className="flex items-center justify-center w-full h-full text-sm text-red-600">
-        Failed to load: {error}
-      </div>
+      <BoardErrorState
+        title="Couldn't load this board"
+        body={error ?? 'Something went wrong on our end.'}
+      />
     )
   }
   return (
@@ -140,5 +146,32 @@ export function BoardSync({
         </div>
       )}
     </>
+  )
+}
+
+function Spinner() {
+  return (
+    <span
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-[var(--border)] border-t-[var(--accent)]"
+      aria-hidden
+    />
+  )
+}
+
+function BoardErrorState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex items-center justify-center w-full h-full px-6">
+      <div className="max-w-sm text-center">
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <p className="mt-1.5 text-sm text-muted-foreground">{body}</p>
+        <Link
+          to="/"
+          style={{ borderRadius: 'var(--radius)' }}
+          className="mt-5 inline-block bg-primary text-primary-foreground px-3.5 py-2 text-sm font-medium hover:brightness-110 transition-[filter]"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+    </div>
   )
 }

@@ -17,3 +17,9 @@ export const PALETTE_SWATCH_STAGGER = 0.03
 export const AI_PANEL_DURATION = 0.24
 export const TOAST_IN_DURATION = 0.18
 export const TOAST_OUT_DURATION = 0.2
+export const TOOLBAR_PRESS_DURATION = 0.12
+export const OBJECT_SPAWN_DURATION = 0.22
+// Pan/zoom transitions for keyboard shortcuts. Cmd+0 (reset) is the calmer
+// of the two; Cmd+1 (fit-all) is a deliberate gesture that earns the snap.
+export const ZOOM_RESET_DURATION_MS = 250
+export const FIT_ALL_DURATION_MS = 350

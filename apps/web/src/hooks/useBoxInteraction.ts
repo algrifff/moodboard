@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { emitDotRipple, setDragHalo } from '@/components/canvas/DotGridLayer'
 import { useCanvasStore } from '@/store/canvas'
 
 type Zone = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
@@ -152,29 +153,57 @@ export function useBoxInteraction(objectId: string, scale: number, opts: Options
         initial.set(objectId, { x: obj.position.x, y: obj.position.y })
       }
 
+      // Snapshot for undo. Subsequent updateObject calls during the drag
+      // coalesce into this one history frame.
+      useCanvasStore.getState().commitBeforeAction()
+
       originRef.current = {
         mode: 'drag',
         pointer: { x: e.clientX, y: e.clientY },
         initialPositions: initial,
       }
+      // Light up the drag halo for every selected object that's moving.
+      for (const id of initial.keys()) setDragHalo(id, true)
     } else {
+      // Resize: same coalescing strategy as drag.
+      useCanvasStore.getState().commitBeforeAction()
+
       originRef.current = {
         mode: zone,
         pointer: { x: e.clientX, y: e.clientY },
         size: { w: obj.size.width, h: obj.size.height },
         pos: { x: obj.position.x, y: obj.position.y },
       }
+      setDragHalo(objectId, true)
     }
   }
 
   const onPointerUp = (e: React.PointerEvent<HTMLElement>) => {
-    if (originRef.current) {
+    const origin = originRef.current
+    if (origin) {
+      const dx = e.clientX - origin.pointer.x
+      const dy = e.clientY - origin.pointer.y
+      const moved = dx * dx + dy * dy > 16 // 4 screen-px threshold
       try {
         e.currentTarget.releasePointerCapture(e.pointerId)
       } catch {
         // already released
       }
+      // Clear any halos this drag set.
+      if (origin.mode === 'drag') {
+        for (const id of origin.initialPositions.keys()) setDragHalo(id, false)
+      } else {
+        setDragHalo(objectId, false)
+      }
       originRef.current = null
+      // Drag/resize ended with real motion → fire a ripple from the
+      // object's current center.
+      if (moved) {
+        const obj = useCanvasStore.getState().objects.find((o) => o.id === objectId)
+        if (obj) {
+          emitDotRipple(obj.position.x + obj.size.width / 2, obj.position.y + obj.size.height / 2)
+        }
+      }
     }
   }
 

@@ -15,13 +15,29 @@ export function SignUpPage() {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    const result = await signUp.email({ name, email, password })
-    setBusy(false)
-    if (result.error) {
-      setError(result.error.message ?? 'Sign up failed')
-      return
+    try {
+      const result = await signUp.email({ name, email, password })
+      if (result?.error) {
+        console.warn('sign-up error', result.error)
+        setError(result.error.message || result.error.statusText || 'Could not create account.')
+        return
+      }
+      if (!result?.data) {
+        setError('Sign up failed. Please try again.')
+        return
+      }
+      try {
+        localStorage.setItem('moodboard:lastSignInEmail', email)
+      } catch {
+        // localStorage unavailable (private mode); not fatal.
+      }
+      navigate('/', { replace: true })
+    } catch (e) {
+      console.warn('sign-up threw', e)
+      setError(e instanceof Error ? e.message : 'Sign up failed.')
+    } finally {
+      setBusy(false)
     }
-    navigate('/', { replace: true })
   }
 
   return (
@@ -52,12 +68,15 @@ export function SignUpPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
         <AuthButton disabled={busy}>{busy ? 'Creating account…' : 'Create account'}</AuthButton>
       </form>
       <p className="text-center text-xs text-muted-foreground">
         Already have an account?{' '}
-        <Link to="/sign-in" className="font-medium text-slate-900 underline">
+        <Link
+          to="/sign-in"
+          className="font-medium text-foreground underline underline-offset-4 decoration-[var(--border)] hover:decoration-foreground"
+        >
           Sign in
         </Link>
       </p>

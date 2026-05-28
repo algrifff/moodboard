@@ -17,10 +17,7 @@ export function CanvasOverlayLayer({
 }) {
   const selectedSet = new Set(selectedIds)
   return (
-    <div
-      className="absolute inset-0 overflow-hidden"
-      style={{ pointerEvents: 'none' }}
-    >
+    <div className="absolute inset-0 overflow-hidden" style={{ pointerEvents: 'none' }}>
       <div
         style={{
           position: 'absolute',

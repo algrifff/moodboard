@@ -37,6 +37,33 @@ export function uploadPath(filename: string): string {
   return path.join(UPLOADS_DIR, filename)
 }
 
+export function pdfPath(filename: string): string {
+  return path.join(PDF_DIR, filename)
+}
+
+export function pdfThumbPath(filename: string): string {
+  return path.join(PDF_THUMB_DIR, filename)
+}
+
 export function isSafeFilename(name: string): boolean {
   return /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+$/.test(name)
+}
+
+export async function savePdf(
+  buffer: Buffer,
+  id: string,
+): Promise<{ id: string; filename: string; size: number }> {
+  const { writeFile, stat } = await import('node:fs/promises')
+  const filename = `${id}.pdf`
+  const fullPath = pdfPath(filename)
+  await writeFile(fullPath, buffer)
+  const s = await stat(fullPath)
+  return { id, filename, size: s.size }
+}
+
+export async function savePdfThumbnail(buffer: Buffer, id: string): Promise<{ filename: string }> {
+  const { writeFile } = await import('node:fs/promises')
+  const filename = `${id}.png`
+  await writeFile(pdfThumbPath(filename), buffer)
+  return { filename }
 }

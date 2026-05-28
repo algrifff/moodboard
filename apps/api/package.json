@@ -15,13 +15,16 @@
     "db:studio": "tsx --env-file=.env ./node_modules/drizzle-kit/bin.cjs studio"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
     "@hono/node-server": "^1.13.7",
     "@moodboard/shared": "workspace:*",
+    "@napi-rs/canvas": "^1.0.0",
     "better-auth": "^1.6.11",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.10",
     "nanoid": "^5.1.11",
     "postgres": "^3.4.9",
+    "unpdf": "^1.6.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {

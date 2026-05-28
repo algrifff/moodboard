@@ -32,14 +32,17 @@ If you think you need to swap any of these, stop and ask — there's almost alwa
 These are load-bearing. Don't drift from them without an explicit conversation.
 
 ### Hybrid Konva + DOM rendering
+
 - **Konva renders:** images, PDF thumbnails, group outlines, pan/zoom transform, hit detection
 - **DOM overlays render:** sticky notes, editable text, palette widget, AI analysis panel, toolbar/chrome
 - DOM overlays are absolutely positioned and tracked to the canvas via `worldToScreen({x, y}, {scale, offsetX, offsetY})` driven by a Zustand slice that subscribes to Stage `dragmove` / `wheel`.
 
 ### Editable text = DOM contentEditable, never Konva.Text
+
 Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, paste, autocomplete for free.
 
 ### Grouping rule (24px world-space proximity)
+
 - Two items belong to the same group when their bounding boxes are within **24px in world space** — overlapping, touching edges, or with a gap ≤ 24px all count.
 - Group computation: build a proximity graph (nodes = items, edges = pairs within 24px), then connected components = groups.
 - A group requires **≥ 2 items**. Isolated items are not groups.
@@ -47,6 +50,7 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - Item drops below 24px to all other group members → leaves the group. Group drops below 2 items → dissolves.
 
 ### Group outline visuals (canonical)
+
 - 20px world-space padding around items
 - 12px corner radius
 - 1.5px solid stroke, accent `#7B5CFF`
@@ -54,21 +58,25 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - Rendered on a layer **behind** items
 
 ### AI analysis cache (mandatory — burns money otherwise)
+
 - Cache key = stable hash of `(sorted object IDs + per-object content hash + model version tag)`
 - Cached results stored in Postgres (in-memory during dev is fine pre-Phase 4)
 - Only call Claude when the hash changes or the user clicks "Re-analyze"
 - AI call debounced 800ms after the group settles (no `dragend` within window)
 
 ### Overlap detection complexity
+
 - Naive O(n²) pairwise check on `dragend` is fine for < 100 objects
 - Don't add `rbush` or spatial indexing until profiling shows it's needed
 
 ### File storage
+
 - Files on Railway volume at `/data/{uploads,thumbnails,pdfs,pdf-thumbs}/`
 - Served via `GET /api/files/:id` streaming so we can add auth later
 - **Never store binary data in Postgres.** Only file metadata.
 
 ### PDF processing
+
 - Extraction (`unpdf`) and thumbnailing (`pdfjs-dist` headless) happen **server-side**, never on the main browser thread
 - Preview modal lazy-loads `pdfjs-dist` (~600KB chunk)
 
@@ -91,6 +99,7 @@ export const EASE_OUT_QUICK = [0.3, 0, 0.2, 1] as const
 Durations: group outline appear 280ms, palette swatch 220ms (30ms stagger), AI panel 240ms, toolbar press 120ms, toast 180ms in / 200ms out, fit-all 350ms, Cmd+0 reset 250ms.
 
 **Don'ts:**
+
 - Don't use `ease-in-out` anywhere it matters. It's the smooth-floaty default that makes products feel cheap.
 - Don't tween things that should feel instant (selection, hover, drag follow, wheel zoom).
 - Don't anticipate every animation. Reserve full snap+anticipation for group-form, palette-appear, drop-into-group.
@@ -102,7 +111,7 @@ Durations: group outline appear 280ms, palette swatch 220ms (30ms stagger), AI p
 - **TypeScript:** strict mode on. No `any` without a comment explaining why.
 - **Formatting:** Prettier only. No ESLint, no Biome — relying on `tsc` for correctness.
 - **Shared types:** all types/Zod schemas in `packages/shared`. Never duplicate type definitions between `apps/web` and `apps/api`. Both apps import from `@moodboard/shared`.
-- **No comments unless the *why* is non-obvious.** Well-named identifiers do the rest.
+- **No comments unless the _why_ is non-obvious.** Well-named identifiers do the rest.
 - **No premature abstractions.** Three similar lines beats a clever generic.
 - **No backwards-compat shims, no `_unused` placeholders, no removed-code comments.** Delete it.
 
@@ -128,6 +137,7 @@ Run `pnpm test` before declaring a phase complete. New canonical math gets a uni
 The plan is phased deliberately. **Ship one phase, stop, wait for confirmation.** Each phase has a deliverable in [PLAN.md](PLAN.md); don't expand scope. Don't preemptively wire Phase N+1 features into Phase N code.
 
 When a phase is done:
+
 1. Run `pnpm test` and verify green
 2. Confirm the phase deliverable works in the browser
 3. Summarise what's done and **explicitly wait** for go-ahead on the next phase

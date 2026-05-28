@@ -1,7 +1,9 @@
 import type { CanvasObject, TextData } from '@moodboard/shared'
+import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
 import { useFitText } from '@/hooks/useFitText'
+import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
 
 export function TextObject({
@@ -61,6 +63,7 @@ export function TextObject({
     if (textRef.current) {
       const next = textRef.current.innerText
       if (next !== data.text) {
+        useCanvasStore.getState().commitBeforeAction()
         updateObject(object.id, { data: { ...data, text: next } })
       }
     }
@@ -68,7 +71,10 @@ export function TextObject({
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: OBJECT_SPAWN_DURATION, ease: [...SNAP_CURVE] }}
       onPointerEnter={interaction.onPointerEnter}
       onPointerLeave={interaction.onPointerLeave}
       onPointerMove={interaction.onPointerMove}
@@ -92,7 +98,7 @@ export function TextObject({
         pointerEvents: 'auto',
         fontFamily: data.font,
         lineHeight: 1.25,
-        color: '#0f172a',
+        color: 'var(--text)',
       }}
     >
       <div
@@ -143,7 +149,7 @@ export function TextObject({
               position: 'absolute',
               top: 6,
               left: 8,
-              color: '#94a3b8',
+              color: 'var(--text-faint)',
               pointerEvents: 'none',
               fontSize: 18,
             }}
@@ -152,6 +158,6 @@ export function TextObject({
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   )
 }

@@ -3,56 +3,219 @@
 @tailwind utilities;
 
 @layer base {
+  /* Drenched dark. The canvas IS the surface; everything is gravity around
+     it. All neutrals tinted ~285° (violet whisper) so the dark never reads
+     as pure grey. No light-mode counterpart — there is no light mode. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
-  }
+    /* Surfaces, dark → light by elevation */
+    --bg: oklch(13% 0.012 285); /* the canvas + the world */
+    --bg-card: oklch(17% 0.014 285); /* primary panels, toolbar pill */
+    --bg-elevated: oklch(20% 0.016 285); /* hover / press surfaces */
+    --bg-muted: oklch(22% 0.018 285); /* code blocks, skeletons */
+    --bg-overlay: oklch(10% 0.012 285 / 0.72); /* modal backdrop */
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
+    /* Hairlines — used sparingly; only where a real boundary needs to read.
+       Default is to separate by elevation, not by drawn border. */
+    --border: oklch(28% 0.018 285);
+    --border-soft: oklch(24% 0.016 285);
 
-  * {
-    @apply border-border;
+    /* Type */
+    --text: oklch(96% 0.005 285);
+    --text-soft: oklch(78% 0.01 285);
+    --text-mute: oklch(58% 0.012 285);
+    --text-faint: oklch(42% 0.014 285);
+
+    /* Accent — bumped vs. canonical #7B5CFF (62% L) so it actually reads
+       against dark surfaces. Same hue, more luminance. */
+    --accent: oklch(72% 0.22 285);
+    --accent-soft: oklch(28% 0.1 285); /* for tinted fills, badge bgs */
+    --accent-fade: oklch(72% 0.22 285 / 0.18); /* for glows */
+
+    /* Semantic */
+    --danger: oklch(70% 0.2 25);
+    --warning: oklch(80% 0.16 75);
+    --success: oklch(75% 0.16 155);
+
+    /* Geometry */
+    --radius: 2px; /* sharp by default; cards & buttons share this */
+    --radius-lg: 6px; /* reserved for modals and the toolbar pill */
+
+    /* shadcn token bridge — kept so utility classes that already reference
+       --background / --muted-foreground keep working unchanged. */
+    --background: var(--bg);
+    --foreground: var(--text);
+    --card: var(--bg-card);
+    --card-foreground: var(--text);
+    --popover: var(--bg-card);
+    --popover-foreground: var(--text);
+    --primary: var(--accent);
+    --primary-foreground: var(--bg);
+    --secondary: var(--bg-elevated);
+    --secondary-foreground: var(--text);
+    --muted: var(--bg-muted);
+    --muted-foreground: var(--text-mute);
+    --accent-foreground: var(--bg);
+    --destructive: var(--danger);
+    --destructive-foreground: var(--bg);
+    --input: var(--border);
+    --ring: var(--accent);
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--bg);
+    color: var(--text);
+    font-family:
+      'Geist',
+      ui-sans-serif,
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      system-ui,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Default focus ring across the app — flat, accent-coloured, no offset.
+     Replaces shadcn's outlined-with-offset pattern. */
+  :focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+}
+
+/* react-colorful picker sizing for the palette swatch popover. The
+   library exposes class names on its internals; we shrink the saturation
+   pad + hue bar to fit a 160-px content column inside the 180-px popover. */
+.palette-picker .react-colorful {
+  width: 160px;
+  height: auto;
+}
+.palette-picker .react-colorful__saturation {
+  height: 130px;
+  border-radius: var(--radius);
+  border-bottom: none;
+}
+.palette-picker .react-colorful__hue {
+  height: 10px;
+  border-radius: var(--radius);
+  margin-top: 8px;
+}
+.palette-picker .react-colorful__pointer {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* Loading shimmer — exception to the gradient-text ban in CLAUDE.md.
+   This is functional state indication (motion conveying "we're working"),
+   not decoration. A bright peak sweeps through the muted text, masked to
+   the glyphs via background-clip.
+
+   The gradient endpoints are both `--text-mute`, so when the background
+   tiles (background-repeat: repeat) the seam is invisible — the glyphs
+   are always covered by *some* part of the gradient, never landing on an
+   uncovered patch where bg-clip would render them transparent. (That was
+   the clipping bug — `no-repeat` left the text uncovered during the
+   second half of each animation cycle.) */
+.text-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--text-mute) 0%,
+    var(--text) 50%,
+    var(--text-mute) 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  background-repeat: repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: text-shimmer 1.8s linear infinite;
+}
+@keyframes text-shimmer {
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .text-shimmer {
+    animation: none;
+    color: var(--text-mute);
+    -webkit-text-fill-color: var(--text-mute);
+  }
+}
+
+@layer utilities {
+  /* Tailwind generates these rules with the legacy `hsl(var(--…))` wrapper
+     from when the shadcn config was first scaffolded. Our tokens are now
+     OKLCH, so the wrapper produces invalid CSS. Override at the utility
+     layer so the same class names keep working without depending on a
+     Tailwind config reload — which has been unreliable in this dev setup. */
+  .bg-background {
+    background-color: var(--bg);
+  }
+  .bg-card {
+    background-color: var(--bg-card);
+  }
+  .bg-muted {
+    background-color: var(--bg-muted);
+  }
+  .bg-popover {
+    background-color: var(--bg-card);
+  }
+  .bg-primary {
+    background-color: var(--accent);
+  }
+  .bg-secondary {
+    background-color: var(--bg-elevated);
+  }
+  .bg-accent {
+    background-color: var(--bg-elevated);
+  }
+  .bg-destructive {
+    background-color: var(--danger);
+  }
+
+  .text-foreground {
+    color: var(--text);
+  }
+  .text-muted-foreground {
+    color: var(--text-mute);
+  }
+  .text-card-foreground {
+    color: var(--text);
+  }
+  .text-popover-foreground {
+    color: var(--text);
+  }
+  .text-primary {
+    color: var(--accent);
+  }
+  .text-primary-foreground {
+    color: var(--bg);
+  }
+  .text-secondary-foreground {
+    color: var(--text);
+  }
+  .text-accent-foreground {
+    color: var(--text);
+  }
+  .text-destructive {
+    color: var(--danger);
+  }
+  .text-destructive-foreground {
+    color: var(--bg);
+  }
+
+  .border-border {
+    border-color: var(--border);
+  }
+  .border-input {
+    border-color: var(--border);
+  }
+  .ring-ring {
+    --tw-ring-color: var(--accent);
   }
 }

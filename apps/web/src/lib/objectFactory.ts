@@ -6,10 +6,7 @@ const STICKY_DEFAULT_COLOR = '#FEF3C7'
 const TEXT_DEFAULT_FONT = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont'
 const TEXT_DEFAULT_FONT_SIZE = 18
 
-export function createSticky(
-  worldCenter: { x: number; y: number },
-  zIndex: number,
-): CanvasObject {
+export function createSticky(worldCenter: { x: number; y: number }, zIndex: number): CanvasObject {
   const data: StickyData = { text: '', color: STICKY_DEFAULT_COLOR }
   return {
     id: nanoid(),
@@ -28,13 +25,14 @@ export function createSticky(
 export function createText(
   worldCenter: { x: number; y: number },
   zIndex: number,
+  initialText = '',
 ): CanvasObject {
   const data: TextData = {
-    text: '',
+    text: initialText,
     font: TEXT_DEFAULT_FONT,
     fontSize: TEXT_DEFAULT_FONT_SIZE,
   }
-  const size = { width: 240, height: 56 }
+  const size = sizeForText(initialText)
   return {
     id: nanoid(),
     type: 'text',
@@ -44,4 +42,19 @@ export function createText(
     zIndex,
     data,
   }
+}
+
+// Pick a sensible default tile size for pasted text. The fit-text hook
+// shrinks the font to fit, but we still want the box itself to feel
+// proportionate to the content — a one-line snippet shouldn't land in a
+// paragraph-sized box.
+function sizeForText(text: string): { width: number; height: number } {
+  if (!text) return { width: 240, height: 56 }
+  const explicitLines = text.split('\n').length
+  const longestLine = text.split('\n').reduce((max, line) => Math.max(max, line.length), 0)
+  // Approximate visual lines after soft-wrap at ~50 chars per line.
+  const softWrappedLines = Math.max(explicitLines, Math.ceil(text.length / 50))
+  const width = Math.max(240, Math.min(480, longestLine * 9 + 40))
+  const height = Math.max(56, Math.min(420, softWrappedLines * 26 + 24))
+  return { width, height }
 }

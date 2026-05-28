@@ -6,20 +6,20 @@ An infinite-canvas mood board app with auto-grouping and AI-powered analysis of 
 
 ## Tech Stack (locked)
 
-| Layer | Choice |
-|---|---|
-| Frontend | Vite + React 19 + TypeScript |
-| Canvas | Konva.js + react-konva |
-| UI | Tailwind + shadcn/ui |
-| Animations | Framer Motion (DOM) + Konva Tween (canvas) |
-| State | Zustand |
-| Backend | Hono on Node.js |
-| ORM | Drizzle |
-| DB | Postgres (Railway) |
-| Auth | better-auth (Phase 4+) |
-| AI | Anthropic Claude (Sonnet for depth, Haiku for fast passes) |
-| File storage | Railway volume |
-| Hosting | Railway (web static service + api service + Postgres + volume) |
+| Layer        | Choice                                                         |
+| ------------ | -------------------------------------------------------------- |
+| Frontend     | Vite + React 19 + TypeScript                                   |
+| Canvas       | Konva.js + react-konva                                         |
+| UI           | Tailwind + shadcn/ui                                           |
+| Animations   | Framer Motion (DOM) + Konva Tween (canvas)                     |
+| State        | Zustand                                                        |
+| Backend      | Hono on Node.js                                                |
+| ORM          | Drizzle                                                        |
+| DB           | Postgres (Railway)                                             |
+| Auth         | better-auth (Phase 4+)                                         |
+| AI           | Anthropic Claude (Sonnet for depth, Haiku for fast passes)     |
+| File storage | Railway volume                                                 |
+| Hosting      | Railway (web static service + api service + Postgres + volume) |
 
 **Critical architectural decision:** Hybrid Konva + DOM. Konva renders images, PDF thumbnails, group outlines, pan/zoom. DOM overlays (positioned via canvas transform) handle sticky notes, editable text, widgets, AI panels. This mirrors how Figma works under the hood and avoids fighting Konva.Text for real text editing.
 
@@ -68,13 +68,13 @@ export type Group = {
   objectIds: string[]
   boundingBox: { x: number; y: number; w: number; h: number }
   analysis?: AIAnalysis
-  analysisHash?: string   // for cache invalidation
+  analysisHash?: string // for cache invalidation
 }
 
 export type AIAnalysis = {
   mood: string
   tone: string
-  palette: string[]       // hex colors
+  palette: string[] // hex colors
   adjectives: string[]
   themes: string[]
   summary: string
@@ -82,7 +82,7 @@ export type AIAnalysis = {
 
 export type Board = {
   id: string
-  userId: string | null   // null until Phase 4
+  userId: string | null // null until Phase 4
   name: string
   objects: CanvasObject[]
   groups: Group[]
@@ -95,21 +95,24 @@ export type Board = {
 
 ## User Interaction Spec (MVP)
 
-This is the behavioural backbone. The grouping rules and visual feedback here are what make the app *feel* right — get this layer correct before anything else.
+This is the behavioural backbone. The grouping rules and visual feedback here are what make the app _feel_ right — get this layer correct before anything else.
 
 ### Canvas Interactions
 
 **Pan**
+
 - Hold `Space` + drag with left mouse
 - Or two-finger trackpad pan
 - Or middle-mouse drag
 
 **Zoom**
+
 - Scroll wheel zooms focused on the cursor position (not centre)
 - Clamped 0.1× – 4×
 - `Cmd/Ctrl + 0` resets to 100%
 
 **Selection**
+
 - Click an item → selects it; resize handles appear
 - Click empty canvas → deselects
 - `Shift + click` → multi-select
@@ -117,6 +120,7 @@ This is the behavioural backbone. The grouping rules and visual feedback here ar
 - Groups are **not directly selectable** — they're derived from item positions. You select items; groups follow.
 
 **Object manipulation**
+
 - Drag to move (works selected or not)
 - Drag corner handles to resize (aspect locked for images & PDFs, free for stickies)
 - `Delete` / `Backspace` removes selected items
@@ -137,17 +141,20 @@ This is the behavioural backbone. The grouping rules and visual feedback here ar
 → Two items belong to the same group when their bounding boxes are **within 24px of each other in world space**.
 
 That is:
+
 - Overlapping → grouped
 - Edges touching → grouped
 - Within 24px gap → grouped
 - More than 24px apart → not grouped (with each other)
 
 **Group computation:**
+
 - Build a proximity graph: nodes = items, edges = pairs within 24px
 - Connected components in that graph = groups
 - A group requires **2+ items**; isolated items are not groups
 
 **Live during drag:**
+
 - As an item is dragged, recompute grouping continuously (throttled ~30Hz)
 - When the dragged item enters proximity of another item / existing group:
   - Both target items / the group outline get a subtle accent glow
@@ -155,6 +162,7 @@ That is:
 - On drop: outline commits its final shape with a small settle animation (scale 0.97 → 1, 180ms)
 
 **Leaving / dissolving a group:**
+
 - Drag an item out → if it now falls beyond 24px from every other group member, it leaves the group
 - If a group drops below 2 items, the group dissolves (outline fades out, palette + AI panel disappear)
 
@@ -203,24 +211,26 @@ That is:
 
 ### Per-Object Behaviour
 
-| Object | Default size | Resize | Edit | Notes |
-|---|---|---|---|---|
-| **Image** | 400px longest side | Corner handles, aspect locked | n/a | Min 80px, max 1200px |
-| **Sticky** | 200×200 | Corner handles, free aspect | Click → contentEditable | 6 colour presets |
-| **Text** | Auto-sizes to content | Width handle only | Click → contentEditable | Sizes: 12/16/18/24/32/48 |
-| **PDF** | 240×320 (A4 ratio) | Corner handles, aspect locked | Click → modal preview | PDF badge bottom-left |
+| Object     | Default size          | Resize                        | Edit                    | Notes                    |
+| ---------- | --------------------- | ----------------------------- | ----------------------- | ------------------------ |
+| **Image**  | 400px longest side    | Corner handles, aspect locked | n/a                     | Min 80px, max 1200px     |
+| **Sticky** | 200×200               | Corner handles, free aspect   | Click → contentEditable | 6 colour presets         |
+| **Text**   | Auto-sizes to content | Width handle only             | Click → contentEditable | Sizes: 12/16/18/24/32/48 |
+| **PDF**    | 240×320 (A4 ratio)    | Corner handles, aspect locked | Click → modal preview   | PDF badge bottom-left    |
 
 ---
 
 ### Chrome / Fixed UI
 
 **Top-center floating toolbar:**
+
 - `+ Image` (opens file picker)
 - `+ Sticky`
 - `+ Text`
 - `+ PDF` (Phase 6)
 
 **Bottom-right zoom cluster:**
+
 - Zoom out `−`
 - Current zoom % (click → reset to 100%)
 - Zoom in `+`
@@ -233,37 +243,40 @@ That is:
 ### Empty State
 
 When a board has no objects:
+
 - Subtle dotted background grid (8px grid, very low opacity)
-- Centred hint text: *"Drop images here, paste from clipboard, or use the toolbar to add"*
+- Centred hint text: _"Drop images here, paste from clipboard, or use the toolbar to add"_
 - Toolbar visible with a soft pulse on the `+ Image` button
 
 ---
 
 ### Keyboard Shortcuts
 
-| Action | Shortcut |
-|---|---|
-| Pan canvas | Hold `Space` + drag |
-| Zoom in/out | Scroll, or `Cmd +` / `Cmd −` |
-| Reset zoom | `Cmd 0` |
-| Fit all to view | `Cmd 1` |
-| Delete | `Delete` / `Backspace` |
-| Multi-select | `Shift + click` |
-| Deselect all | `Escape` |
-| Undo / Redo | `Cmd Z` / `Cmd Shift Z` |
-| Copy / Paste | `Cmd C` / `Cmd V` |
+| Action          | Shortcut                     |
+| --------------- | ---------------------------- |
+| Pan canvas      | Hold `Space` + drag          |
+| Zoom in/out     | Scroll, or `Cmd +` / `Cmd −` |
+| Reset zoom      | `Cmd 0`                      |
+| Fit all to view | `Cmd 1`                      |
+| Delete          | `Delete` / `Backspace`       |
+| Multi-select    | `Shift + click`              |
+| Deselect all    | `Escape`                     |
+| Undo / Redo     | `Cmd Z` / `Cmd Shift Z`      |
+| Copy / Paste    | `Cmd C` / `Cmd V`            |
 
 ---
 
 ### Component Inventory
 
 **Konva (canvas layer):**
+
 - `<MoodBoardCanvas>` — Stage wrapper, owns pan/zoom + event routing
 - `<ImageNode>` — Konva.Image + Transformer
 - `<PDFNode>` — Konva.Image showing thumbnail + badge (Phase 6)
 - `<GroupOutline>` — Konva.Rect on a layer beneath items
 
 **DOM overlay layer (positioned via canvas transform):**
+
 - `<CanvasOverlayLayer>` — container that tracks `{ scale, x, y }`
 - `<StickyNote>` — contentEditable + colour picker
 - `<TextObject>` — contentEditable + size picker
@@ -271,6 +284,7 @@ When a board has no objects:
 - `<AIAnalysisPanel>` — pinned to group, below
 
 **Fixed chrome:**
+
 - `<Toolbar>` — top-center
 - `<ZoomControls>` — bottom-right
 - `<BoardHeader>` — top-left (board name + breadcrumb)
@@ -279,17 +293,18 @@ When a board has no objects:
 
 ## Animation & Motion
 
-The whole product should feel **snappy and physical** — like things have weight and respond to forces. Not smooth, not floaty. *Snap.*
+The whole product should feel **snappy and physical** — like things have weight and respond to forces. Not smooth, not floaty. _Snap._
 
 ### The Snap Curve
 
 Default easing for major interactions is a **snap with anticipation**:
+
 - Slight pull-back at the start (0 → −0.05) — builds tension
 - Slow buildup through the first 40-50% of duration
 - Sharp acceleration through 50-90%
 - Small overshoot (1.0 → 1.04) → settle to 1.0
 
-It mimics how a magnet pulls a fridge magnet across the last half-inch of distance — slow approach, *thunk*, slight rebound, set.
+It mimics how a magnet pulls a fridge magnet across the last half-inch of distance — slow approach, _thunk_, slight rebound, set.
 
 ```ts
 // CSS / Framer Motion cubic-bezier
@@ -309,53 +324,63 @@ export const SNAP_SPRING = {
 ### Specific Animations
 
 **Group outline appears** — the money moment
+
 - Total duration: ~280ms
-- Phase 1 (0–60ms): scale 1.0 → 0.97, opacity 0 → 0.2 — *anticipation, outline pulls in*
-- Phase 2 (60–200ms): scale 0.97 → 1.03, opacity 0.2 → 1 — *snap*
-- Phase 3 (200–280ms): scale 1.03 → 1.0 — *settle*
+- Phase 1 (0–60ms): scale 1.0 → 0.97, opacity 0 → 0.2 — _anticipation, outline pulls in_
+- Phase 2 (60–200ms): scale 0.97 → 1.03, opacity 0.2 → 1 — _snap_
+- Phase 3 (200–280ms): scale 1.03 → 1.0 — _settle_
 - Feels like: two pieces clicking together magnetically
 
 **Group outline updates** (items added/removed, reshape)
+
 - Bounding box position + size interpolate over 200ms with `cubic-bezier(0.3, 0, 0.2, 1)` — quicker, no anticipation
 - Don't anticipate every update; only the initial appearance gets the full snap
 
 **Group outline dissolves**
+
 - Duration: 180ms
 - scale 1.0 → 0.96 (shrink), opacity 1 → 0
 - Linear-to-ease-in, no overshoot — it's leaving, not arriving
 
 **Colour palette widget appears**
+
 - Starts 50ms after group outline begins
 - Each of the 5 swatches staggered by 30ms (full stagger = 120ms)
 - Per swatch: scale 0.6 → 1.05 → 1.0, opacity 0 → 1, 220ms with snap curve
 - Feels like: palette unfolding sideways out of the group
 
 **Object drop into group**
+
 - The dropped item itself: scale 1.0 → 0.96 (compress) → 1.02 (rebound) → 1.0, 200ms
 - Synced with the group outline appearance so the whole event reads as one beat
-- Feels like: a click, a satisfying *thunk*
+- Feels like: a click, a satisfying _thunk_
 
 **Proximity hint** (while dragging near another item)
+
 - Target items pulse: scale 1.0 → 1.015 → 1.0, looping every 1200ms, ease-in-out
 - Soft glow appears via `box-shadow` or Konva blur, 0 → 4px over 200ms, stays while in range
 - Feels like: gravity pulling, magnets recognising each other
 
 **AI panel reveal** — restrained, informational, not snappy
+
 - Slide up + fade: `y: 12px → 0`, opacity 0 → 1
 - Duration: 240ms, `cubic-bezier(0.2, 0.8, 0.2, 1)` (standard ease-out)
 - Inner chips/summary staggered 40ms apart
 - Feels like: a card sliding into place, not a thunk
 
 **Toolbar button press**
+
 - Scale 1.0 → 0.94 → 1.0, 120ms
 - Tactile micro-feedback
 
 **Toast confirm** ("Copied #7B5CFF")
+
 - Slide down + fade in (top of viewport): `y: -8px → 0`, opacity 0 → 1, 180ms
 - Holds 1.5s
 - Slide up + fade out, 200ms
 
 **Zoom**
+
 - Wheel zoom: instant, no transition (input feedback must be 1:1)
 - Cmd+0 reset: 250ms, `cubic-bezier(0.4, 0, 0.2, 1)` standard
 - Fit-all: 350ms, snap curve (deliberate gesture)
@@ -365,6 +390,7 @@ export const SNAP_SPRING = {
 ### Implementation Notes
 
 **Framer Motion** for DOM overlays:
+
 ```tsx
 <motion.div
   initial={{ scale: 0.97, opacity: 0 }}
@@ -377,10 +403,11 @@ export const SNAP_SPRING = {
 Konva's built-in easings don't include anticipation. Two options:
 
 1. Custom easing function:
+
 ```ts
 const snapWithAnticipation = (t: number, b: number, c: number, d: number) => {
   const x = t / d
-  if (x < 0.2) return b + c * (-0.25 * x)              // pull back
+  if (x < 0.2) return b + c * (-0.25 * x) // pull back
   const x2 = (x - 0.2) / 0.8
   return b - 0.05 * c + c * (1.05 - Math.pow(1 - x2, 4)) // snap + overshoot
 }

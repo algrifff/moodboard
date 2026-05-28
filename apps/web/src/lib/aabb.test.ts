@@ -70,11 +70,7 @@ describe('normalizeRect', () => {
 })
 
 describe('objectsInMarquee', () => {
-  const objects = [
-    obj('a', 0, 0),
-    obj('b', 200, 200),
-    obj('c', 50, 50),
-  ]
+  const objects = [obj('a', 0, 0), obj('b', 200, 200), obj('c', 50, 50)]
 
   it('finds objects inside a marquee that contains them', () => {
     expect(objectsInMarquee(objects, { x: -10, y: -10 }, { x: 110, y: 110 })).toEqual(['a', 'c'])

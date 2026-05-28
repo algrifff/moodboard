@@ -1,4 +1,7 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { PageMotion } from '@/components/PageMotion'
 import { RequireAuth } from '@/components/RequireAuth'
 import { BoardPage } from '@/pages/Board'
 import { DashboardPage } from '@/pages/Dashboard'
@@ -7,15 +10,45 @@ import { SignUpPage } from '@/pages/SignUp'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/sign-in" element={<SignInPage />} />
-        <Route path="/sign-up" element={<SignUpPage />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AnimatedRoutes />
+      </BrowserRouter>
+    </ErrorBoundary>
+  )
+}
+
+// Routes inside BrowserRouter so useLocation() resolves. AnimatePresence
+// mode="wait" makes the exit complete before the new page mounts — keeps
+// the fade clean instead of crossing two routes mid-flight.
+function AnimatedRoutes() {
+  const location = useLocation()
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/sign-in"
+          element={
+            <PageMotion>
+              <SignInPage />
+            </PageMotion>
+          }
+        />
+        <Route
+          path="/sign-up"
+          element={
+            <PageMotion>
+              <SignUpPage />
+            </PageMotion>
+          }
+        />
         <Route
           path="/"
           element={
             <RequireAuth>
-              <DashboardPage />
+              <PageMotion>
+                <DashboardPage />
+              </PageMotion>
             </RequireAuth>
           }
         />
@@ -23,12 +56,14 @@ export default function App() {
           path="/board/:id"
           element={
             <RequireAuth>
-              <BoardPage />
+              <PageMotion>
+                <BoardPage />
+              </PageMotion>
             </RequireAuth>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </AnimatePresence>
   )
 }

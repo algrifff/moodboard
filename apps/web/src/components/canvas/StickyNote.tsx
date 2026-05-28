@@ -1,7 +1,9 @@
 import type { CanvasObject, StickyData } from '@moodboard/shared'
+import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
 import { useFitText } from '@/hooks/useFitText'
+import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
 
 export function StickyNote({
@@ -59,6 +61,8 @@ export function StickyNote({
     if (textRef.current) {
       const next = textRef.current.innerText
       if (next !== data.text) {
+        // Snapshot pre-edit state so the whole edit session is one undo step.
+        useCanvasStore.getState().commitBeforeAction()
         updateObject(object.id, { data: { ...data, text: next } })
       }
     }
@@ -66,7 +70,10 @@ export function StickyNote({
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: OBJECT_SPAWN_DURATION, ease: [...SNAP_CURVE] }}
       onPointerEnter={interaction.onPointerEnter}
       onPointerLeave={interaction.onPointerLeave}
       onPointerMove={interaction.onPointerMove}
@@ -104,8 +111,7 @@ export function StickyNote({
           color: '#0f172a',
           overflow: 'hidden',
           boxSizing: 'border-box',
-          outline:
-            selected || interaction.nearEdge ? '2px solid #7B5CFF' : 'none',
+          outline: selected || interaction.nearEdge ? '2px solid #7B5CFF' : 'none',
           outlineOffset: 3,
         }}
       >
@@ -131,6 +137,6 @@ export function StickyNote({
           }}
         />
       </div>
-    </div>
+    </motion.div>
   )
 }

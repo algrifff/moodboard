@@ -1,12 +1,5 @@
 import { sql } from 'drizzle-orm'
-import {
-  boolean,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-} from 'drizzle-orm/pg-core'
+import { boolean, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 // ---------------------------------------------------------------------------
 // better-auth tables (singular names, matches better-auth v1 defaults).
@@ -74,7 +67,9 @@ export const board = pgTable('board', {
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
-  data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+  data: jsonb('data')
+    .notNull()
+    .default(sql`'{}'::jsonb`),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
@@ -87,5 +82,18 @@ export const asset = pgTable('asset', {
   filename: text('filename').notNull(),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
+  // 'upload' (images on UPLOADS_DIR), 'pdf' (PDFs on PDF_DIR),
+  // 'pdf-thumb' (server-rendered first-page PNG on PDF_THUMB_DIR).
+  // Drives which directory /api/files/:filename serves from.
+  kind: text('kind').notNull().default('upload'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
+// Cache for AI group analyses. Key = sha256 of (sorted object IDs +
+// per-object content hash + model tag). Same content → same key → reuse.
+export const groupAnalysis = pgTable('group_analysis', {
+  cacheKey: text('cache_key').primaryKey(),
+  model: text('model').notNull(),
+  analysis: jsonb('analysis').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })

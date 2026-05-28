@@ -24,10 +24,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # pnpm must be installed BEFORE setup-node so the node action can wire
-      # up its store for caching. Pin pnpm 9 to match `lockfileVersion: 9.0`.
+      # up its store for caching. Version is read from the `packageManager`
+      # field in root package.json so local and CI stay in lockstep — bump
+      # once, both follow.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:

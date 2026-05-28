@@ -49,8 +49,8 @@ Monorepo via pnpm workspaces. **Types and Zod schemas live in `packages/shared` 
 
 ### Prerequisites
 
-- Node ≥ 20
-- pnpm ≥ 9
+- Node ≥ 22.13 (pnpm 11 needs the `node:sqlite` builtin that landed in 22.13)
+- pnpm ≥ 11 (the repo pins `pnpm@11.4.0` via `packageManager`, so any modern Corepack-enabled setup picks it up automatically)
 - Postgres (or Docker for the bundled docker-compose setup)
 - An Anthropic API key (for AI analysis — the app boots without it, but `/analyze` returns 503)
 

@@ -29,9 +29,10 @@ jobs:
       # once, both follow.
       - uses: pnpm/action-setup@v4
 
+      # Node 22 — required by pnpm 11 (uses node:sqlite, a 22.13+ builtin).
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - name: Install

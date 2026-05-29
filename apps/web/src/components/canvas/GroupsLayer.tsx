@@ -105,6 +105,19 @@ export function GroupsLayer({
   // the same boardId doesn't trample fresh in-memory state with the (now
   // stale) localStorage snapshot.
   const hydratedForBoardRef = useRef<string | null>(null)
+  // Once we've ever seen objects on the canvas, the purge effect is
+  // allowed to drop keys that no longer have a corresponding group.
+  // Without this, the first render after mount runs with objects=[] (the
+  // board API hasn't responded yet) and the purge wipes everything
+  // hydrate just loaded. Then objects arrive, but the state is already
+  // gone — that was the "log out / log in lost my work" bug.
+  const objectsArrivedRef = useRef(false)
+  // Snapshot of every key that has any state. The purge-and-transfer
+  // effect reads this to find candidate source keys whose membership
+  // overlaps a new group (e.g. adding/removing an image changes the
+  // group's key but most members are the same — transfer instead of
+  // dropping).
+  const allActiveKeysRef = useRef<Set<string>>(new Set())
 
   // Hydrate from localStorage when boardId changes. Loading kinds are
   // dropped — they're transient and shouldn't survive a reload.
@@ -173,22 +186,79 @@ export function GroupsLayer({
     saveBoardState(boardId, state)
   }, [boardId, displayByGroup, lastRunSelectionByGroup, selectedByGroup, aiPaletteByGroup])
 
-  // Purge state for groups that no longer exist on the canvas. The save
-  // effect picks this up and drops them from localStorage next tick.
+  // Once we've seen objects on the canvas, the purge effect is allowed
+  // to run. See objectsArrivedRef comment above for why.
   useEffect(() => {
+    if (objects.length > 0) objectsArrivedRef.current = true
+  }, [objects])
+
+  // Track every key that currently has state in any of the per-group
+  // stores. The purge-and-transfer effect reads from this ref so it can
+  // look up old keys that have been orphaned by a group-membership change.
+  useEffect(() => {
+    allActiveKeysRef.current = new Set<string>([
+      ...Object.keys(displayByGroup),
+      ...Object.keys(lastRunSelectionByGroup),
+      ...Object.keys(selectedByGroup),
+      ...Object.keys(aiPaletteByGroup),
+    ])
+  }, [displayByGroup, lastRunSelectionByGroup, selectedByGroup, aiPaletteByGroup])
+
+  // Purge state for groups that no longer exist on the canvas, AND
+  // transfer state forward when a group's members change (added image,
+  // removed image, merge, split). The group key is a sorted join of
+  // object IDs (groupId in lib/aabb.ts), so we can decode any old key
+  // back to its member set with split('|') and find the best-overlap
+  // match for each new key that's lost its source.
+  useEffect(() => {
+    if (!objectsArrivedRef.current) return
     const nextKeys = new Set(groups.map((g) => g.key))
     visibleKeysRef.current = nextKeys
-    const purge = <T,>(prev: Record<string, T>): Record<string, T> => {
+
+    // For each new group key without state, find the orphaned old key
+    // with the highest member overlap. Ties resolve to whichever was
+    // discovered first — good enough; the alternative (largest old
+    // group, most-recent-touched) doesn't have a clearly-better
+    // semantic in practice.
+    const transfers = new Map<string, string>()
+    for (const g of groups) {
+      if (allActiveKeysRef.current.has(g.key)) continue
+      const gSet = new Set(g.ids)
+      let bestKey: string | undefined
+      let bestOverlap = 0
+      for (const oldKey of allActiveKeysRef.current) {
+        if (nextKeys.has(oldKey)) continue // still a current group, can't be a source
+        const oldMembers = oldKey.split('|')
+        let overlap = 0
+        for (const id of oldMembers) {
+          if (gSet.has(id)) overlap++
+        }
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap
+          bestKey = oldKey
+        }
+      }
+      if (bestKey && bestOverlap > 0) transfers.set(g.key, bestKey)
+    }
+
+    const purgeAndTransfer = <T,>(prev: Record<string, T>): Record<string, T> => {
       const next: Record<string, T> = {}
       for (const key of nextKeys) {
-        if (prev[key] !== undefined) next[key] = prev[key]
+        if (prev[key] !== undefined) {
+          next[key] = prev[key]
+        } else {
+          const srcKey = transfers.get(key)
+          if (srcKey && prev[srcKey] !== undefined) {
+            next[key] = prev[srcKey]
+          }
+        }
       }
       return next
     }
-    setDisplayByGroup(purge)
-    setLastRunSelectionByGroup(purge)
-    setSelectedByGroup(purge)
-    setAiPaletteByGroup(purge)
+    setDisplayByGroup(purgeAndTransfer)
+    setLastRunSelectionByGroup(purgeAndTransfer)
+    setSelectedByGroup(purgeAndTransfer)
+    setAiPaletteByGroup(purgeAndTransfer)
   }, [groups])
 
   const enqueue = (key: string, exec: () => Promise<void>) => {

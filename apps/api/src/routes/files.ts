@@ -19,6 +19,7 @@ import {
   saveUpload,
   uploadPath,
 } from '../lib/storage'
+import { deriveFontFamily } from '../lib/fontFamily'
 import {
   ALLOWED_FONT_MIME,
   ALLOWED_IMAGE_MIME,
@@ -179,18 +180,6 @@ files.post(
     })
   },
 )
-
-// "AktivGrotesk-Bold.woff2" → "AktivGrotesk Bold". Strip extension,
-// replace dashes/underscores with spaces. Camel-case is left alone so
-// "AktivGrotesk" stays joined — users who care about presentation can
-// rename later. The CSS @font-face uses this as its family identifier.
-function deriveFontFamily(filename: string): string {
-  const lastSlash = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'))
-  const base = lastSlash >= 0 ? filename.slice(lastSlash + 1) : filename
-  const dot = base.lastIndexOf('.')
-  const stem = dot >= 0 ? base.slice(0, dot) : base
-  return stem.replace(/[-_]+/g, ' ').trim() || 'Custom Font'
-}
 
 async function fetchUpstreamSafely(initialUrl: URL, maxHops = 3): Promise<Response> {
   let current = initialUrl

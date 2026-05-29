@@ -1,7 +1,7 @@
 import type { AgentId, AIAnalysis, SectionedParagraphs, SynthesisBrief } from '@moodboard/shared'
 import { ArrowsOutSimple, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AI_PANEL_DURATION, EASE_OUT_STANDARD } from '@/lib/motion'
 import { AgentRow, type PlayState } from './AgentRow'
@@ -35,6 +35,8 @@ export function AIAnalysisPanel({
   displaySlot,
   selectedAgentIds,
   selectionMatchesDisplay,
+  logoOverrideOptions,
+  onChangeLogo,
   onAddAgent,
   onRemoveAgent,
   onRun,
@@ -50,6 +52,10 @@ export function AIAnalysisPanel({
   // `displaySlot`. Drives the play button: matches → refresh icon (re-run
   // same combo); differs → play icon (the click will run something new).
   selectionMatchesDisplay: boolean
+  // Images in this group the user could pin as the logo (overrides the
+  // AD's pick). Empty when the group has no images.
+  logoOverrideOptions: { url: string }[]
+  onChangeLogo: (url: string) => void
   onAddAgent: (id: AgentId) => void
   onRemoveAgent: (id: AgentId) => void
   onRun: () => void
@@ -158,6 +164,8 @@ export function AIAnalysisPanel({
           state={activeState}
           empty={selectedAgentIds.length === 0 && activeState.kind === 'idle'}
           onFullscreen={() => setIsFullscreen(true)}
+          logoOverrideOptions={logoOverrideOptions}
+          onChangeLogo={onChangeLogo}
         />
         <ResizeHandle onMouseDown={onResizeStart} />
       </motion.div>
@@ -187,6 +195,8 @@ export function AIAnalysisPanel({
                 key="fullscreen-drawer"
                 state={activeState}
                 onClose={() => setIsFullscreen(false)}
+                logoOverrideOptions={logoOverrideOptions}
+                onChangeLogo={onChangeLogo}
               />
             )}
           </AnimatePresence>,
@@ -240,10 +250,14 @@ function SummaryCard({
   state,
   empty,
   onFullscreen,
+  logoOverrideOptions,
+  onChangeLogo,
 }: {
   state: SlotState
   empty: boolean
   onFullscreen: () => void
+  logoOverrideOptions: { url: string }[]
+  onChangeLogo: (url: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDone =
@@ -335,7 +349,15 @@ function SummaryCard({
             <SectionedGlance data={state.data} />
           ))}
         {state.kind === 'ready-brief' &&
-          (expanded ? <BriefReadout data={state.data} /> : <BriefGlance data={state.data} />)}
+          (expanded ? (
+            <BriefReadout
+              data={state.data}
+              logoOverrideOptions={logoOverrideOptions}
+              onChangeLogo={onChangeLogo}
+            />
+          ) : (
+            <BriefGlance data={state.data} />
+          ))}
         {state.kind === 'error' && (
           <div className="text-[11px] text-destructive break-words">{state.message}</div>
         )}
@@ -602,7 +624,17 @@ function Chips({
 // combined synthesis content render identically — just with more room.
 // ---------------------------------------------------------------------------
 
-function FullscreenDrawer({ state, onClose }: { state: SlotState; onClose: () => void }) {
+function FullscreenDrawer({
+  state,
+  onClose,
+  logoOverrideOptions,
+  onChangeLogo,
+}: {
+  state: SlotState
+  onClose: () => void
+  logoOverrideOptions: { url: string }[]
+  onChangeLogo: (url: string) => void
+}) {
   return (
     <motion.div
       data-canvas-scrollable
@@ -657,7 +689,13 @@ function FullscreenDrawer({ state, onClose }: { state: SlotState; onClose: () =>
       >
         {state.kind === 'ready-ad' && <ArtDirectorReadout data={state.data} />}
         {state.kind === 'ready-sec' && <SectionedReadout data={state.data} />}
-        {state.kind === 'ready-brief' && <BriefReadout data={state.data} />}
+        {state.kind === 'ready-brief' && (
+          <BriefReadout
+            data={state.data}
+            logoOverrideOptions={logoOverrideOptions}
+            onChangeLogo={onChangeLogo}
+          />
+        )}
         {state.kind === 'error' && (
           <div className="text-[13px] text-destructive break-words">{state.message}</div>
         )}
@@ -680,7 +718,15 @@ function FullscreenDrawer({ state, onClose }: { state: SlotState; onClose: () =>
 // so a 2-agent synthesis doesn't drag empty sections through the page.
 // ---------------------------------------------------------------------------
 
-function BriefReadout({ data }: { data: SynthesisBrief }) {
+function BriefReadout({
+  data,
+  logoOverrideOptions,
+  onChangeLogo,
+}: {
+  data: SynthesisBrief
+  logoOverrideOptions: { url: string }[]
+  onChangeLogo: (url: string) => void
+}) {
   const hasPositioning =
     data.positioning.model.trim().length > 0 ||
     data.positioning.niche.trim().length > 0 ||
@@ -692,7 +738,12 @@ function BriefReadout({ data }: { data: SynthesisBrief }) {
       )}
       {hasPositioning && <PositioningBlock data={data.positioning} />}
       {data.logo.url.trim().length > 0 && (
-        <LogoBlock url={data.logo.url} reason={data.logo.reason} />
+        <LogoBlock
+          url={data.logo.url}
+          reason={data.logo.reason}
+          overrideOptions={logoOverrideOptions}
+          onChange={onChangeLogo}
+        />
       )}
       {data.palette.length > 0 && <PaletteBlock items={data.palette} />}
       {data.typography.feel.trim().length > 0 && <TypographyBlock feel={data.typography.feel} />}
@@ -910,34 +961,148 @@ function FontsBlock({
 }
 
 // The brand's mark — image displayed at logo size on an elevated surface
-// with the AD's one-clause reason underneath. Click-through is left out;
-// this is a read-only artifact in the brief.
-function LogoBlock({ url, reason }: { url: string; reason: string }) {
+// with the AD's one-clause reason underneath. Clicking the image opens a
+// popover with thumbnails of every image in the group so the user can
+// override the AD's pick; useful when the model misses or grabs a
+// photographic reference instead of the mark.
+function LogoBlock({
+  url,
+  reason,
+  overrideOptions,
+  onChange,
+}: {
+  url: string
+  reason: string
+  overrideOptions: { url: string }[]
+  onChange: (url: string) => void
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [pickerOpen])
+
+  // Only show the override hint when there's something to pick from.
+  const canOverride = overrideOptions.length > 1
+
   return (
     <div>
       <BlockHeading>Logo</BlockHeading>
       <div
         className="mt-2 flex flex-col items-center gap-3"
         style={{
+          position: 'relative',
           padding: '20px 16px',
           borderRadius: 'var(--radius)',
           backgroundColor: 'var(--bg-elevated)',
         }}
       >
-        <img
-          src={url}
-          alt="Brand mark"
-          loading="lazy"
+        <button
+          type="button"
+          onClick={() => canOverride && setPickerOpen((v) => !v)}
+          aria-label={canOverride ? 'Choose a different logo image' : 'Logo'}
+          title={canOverride ? 'Click to choose a different image' : undefined}
           style={{
-            maxWidth: '60%',
-            maxHeight: 120,
-            objectFit: 'contain',
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: canOverride ? 'pointer' : 'default',
             display: 'block',
           }}
-        />
+        >
+          <img
+            src={url}
+            alt="Brand mark"
+            loading="lazy"
+            style={{
+              maxWidth: 220,
+              maxHeight: 120,
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </button>
         {reason.trim().length > 0 && (
           <div className="text-[11.5px] text-[var(--text-mute)] italic leading-snug text-center">
             {reason}
+          </div>
+        )}
+
+        {pickerOpen && canOverride && (
+          <div
+            ref={pickerRef}
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 6px)',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              minWidth: 240,
+              maxWidth: 320,
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: 'var(--shadow-popover)',
+              padding: 10,
+              zIndex: 60,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold mb-2">
+              Pin a different image
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {overrideOptions.map((opt, i) => {
+                const isCurrent = opt.url === url
+                return (
+                  <button
+                    key={`${opt.url}-${i}`}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.url)
+                      setPickerOpen(false)
+                    }}
+                    style={{
+                      padding: 0,
+                      borderRadius: 'var(--radius)',
+                      backgroundColor: 'var(--bg-elevated)',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      aspectRatio: '1 / 1',
+                      outline: isCurrent ? '2px solid var(--accent)' : 'none',
+                      outlineOffset: -2,
+                      border: 'none',
+                    }}
+                    aria-label={isCurrent ? 'Current logo' : 'Use as logo'}
+                  >
+                    <img
+                      src={opt.url}
+                      alt=""
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  </button>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

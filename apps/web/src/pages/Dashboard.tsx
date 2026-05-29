@@ -2,6 +2,7 @@ import type { BoardPreview, BoardSummary } from '@moodboard/shared'
 import { Plus, SignOut, Trash } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { ensureFontLoaded } from '@/components/canvas/FontNode'
 import { useSession, signOut } from '@/lib/authClient'
 import { createBoard, deleteBoard, listBoards } from '@/lib/boardsApi'
 
@@ -221,35 +222,7 @@ function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
     return <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={o.color ?? '#fde68a'} />
   }
   if (o.type === 'font') {
-    // Card with a big serif "Aa" — the dashboard doesn't load the actual
-    // family (would be wasteful for thumbnails), so we render a generic
-    // typographic marker that communicates "font specimen here" at a glance.
-    const aaSize = Math.min(o.w * 0.42, o.h * 0.62)
-    return (
-      <g>
-        <rect
-          x={o.x}
-          y={o.y}
-          width={o.w}
-          height={o.h}
-          fill="var(--bg-card)"
-          stroke="var(--border-soft)"
-          strokeWidth={1}
-        />
-        <text
-          x={o.x + o.w / 2}
-          y={o.y + o.h / 2}
-          fontFamily='ui-serif, Georgia, "Iowan Old Style", serif'
-          fontSize={aaSize}
-          fontWeight={500}
-          fill="var(--text)"
-          textAnchor="middle"
-          dominantBaseline="central"
-        >
-          Aa
-        </text>
-      </g>
-    )
+    return <FontPreviewCell o={o} />
   }
   // Text — render as a faint underline at the baseline. No content, no
   // height ratios; just enough to communicate "text is here".
@@ -262,6 +235,63 @@ function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
       fill="var(--text-mute)"
       opacity={0.6}
     />
+  )
+}
+
+// Renders a font specimen in the actual uploaded font. Loads the
+// FontFace on mount (shared cache with FontNode — one fetch per family
+// across the whole app) and falls back to a serif "Aa" until the load
+// resolves. The dashboard only paints "Aa" rather than a full sentence
+// because thumbnails are too small to read body copy.
+function FontPreviewCell({ o }: { o: BoardPreview['objects'][number] }) {
+  const family = o.family ?? 'Custom Font'
+  const url = o.url
+  const [loaded, setLoaded] = useState(() =>
+    typeof document !== 'undefined' ? document.fonts.check(`16px "${family}"`) : false,
+  )
+  useEffect(() => {
+    if (!url || loaded) return
+    let cancelled = false
+    ensureFontLoaded(family, url)
+      .then(() => {
+        if (!cancelled) setLoaded(true)
+      })
+      .catch(() => {
+        // Quiet — fallback serif stays.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [family, url, loaded])
+
+  const aaSize = Math.min(o.w * 0.5, o.h * 0.7)
+  const fontFamily = loaded
+    ? `"${family}", ui-serif, Georgia, "Iowan Old Style", serif`
+    : 'ui-serif, Georgia, "Iowan Old Style", serif'
+  return (
+    <g>
+      <rect
+        x={o.x}
+        y={o.y}
+        width={o.w}
+        height={o.h}
+        fill="var(--bg-card)"
+        stroke="var(--border-soft)"
+        strokeWidth={1}
+      />
+      <text
+        x={o.x + o.w / 2}
+        y={o.y + o.h / 2}
+        fontFamily={fontFamily}
+        fontSize={aaSize}
+        fontWeight={500}
+        fill="var(--text)"
+        textAnchor="middle"
+        dominantBaseline="central"
+      >
+        Aa
+      </text>
+    </g>
   )
 }
 

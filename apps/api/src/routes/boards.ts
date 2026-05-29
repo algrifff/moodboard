@@ -78,8 +78,9 @@ function buildPreview(data: unknown): BoardPreview {
         typeof d.thumbnailUrl === 'string' ? d.thumbnailUrl : (d.url as string | undefined)
       if (typeof url === 'string') base.thumbnailUrl = url
     }
-    if (o.type === 'font' && d && typeof d.family === 'string') {
-      base.family = d.family
+    if (o.type === 'font' && d) {
+      if (typeof d.family === 'string') base.family = d.family
+      if (typeof d.url === 'string') base.url = d.url
     }
     return base
   })

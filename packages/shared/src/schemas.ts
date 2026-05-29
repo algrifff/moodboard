@@ -234,10 +234,10 @@ export const boardPreviewObjectSchema = z.object({
   type: z.enum(['image', 'sticky', 'text', 'pdf', 'font']),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
-  // For font specimens — the family name. Lets the dashboard render a
-  // tiny "Aa" placeholder labelled with the family, without needing to
-  // load the actual font in the dashboard.
+  // For font specimens — family + url so the dashboard can register the
+  // FontFace and render the "Aa" badge in the actual uploaded typeface.
   family: z.string().optional(),
+  url: z.string().optional(),
 })
 export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
 

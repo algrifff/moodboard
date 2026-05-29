@@ -5,20 +5,9 @@ import { HexColorPicker } from 'react-colorful'
 import ReactMarkdown from 'react-markdown'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
 import { useFitText } from '@/hooks/useFitText'
+import { readableOn } from '@/lib/color'
 import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
-
-// Auto-pick a readable text colour for a given background. Standard
-// luma weighting. Lets the note stay readable when the user picks any
-// hex from the colour picker. Falls back to dark when parsing fails.
-function readableOn(hex: string): string {
-  if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex)) return '#0f172a'
-  const r = parseInt(hex.slice(1, 3), 16) / 255
-  const g = parseInt(hex.slice(3, 5), 16) / 255
-  const b = parseInt(hex.slice(5, 7), 16) / 255
-  const lum = 0.299 * r + 0.587 * g + 0.114 * b
-  return lum > 0.55 ? '#0f172a' : '#f8fafc'
-}
 
 export function StickyNote({
   object,

@@ -295,6 +295,40 @@ export function GroupsLayer({
         const selectedAgentIds = selectedByGroup[g.key] ?? []
         const lastRunSelection = lastRunSelectionByGroup[g.key] ?? []
 
+        // Images the user could pin as the logo — same group, image or
+        // PDF objects with a URL. Passed to LogoBlock so the user can
+        // override the AD's choice without re-running.
+        const groupImageOptions: { url: string }[] = []
+        for (const o of g.items) {
+          if (o.type === 'image') {
+            const url = (o.data as { url?: string }).url
+            if (typeof url === 'string') groupImageOptions.push({ url })
+          } else if (o.type === 'pdf') {
+            const thumb = (o.data as { thumbnailUrl?: string }).thumbnailUrl
+            if (typeof thumb === 'string') groupImageOptions.push({ url: thumb })
+          }
+        }
+
+        // Patches the brief's logo URL in place. Persists via the existing
+        // localStorage save effect. Only applies when the displayed slot
+        // is a ready-brief (synthesis output).
+        const handleChangeLogo = (newUrl: string) => {
+          setDisplayByGroup((prev) => {
+            const slot = prev[g.key]
+            if (!slot || slot.kind !== 'ready-brief') return prev
+            return {
+              ...prev,
+              [g.key]: {
+                ...slot,
+                data: {
+                  ...slot.data,
+                  logo: { ...slot.data.logo, url: newUrl },
+                },
+              },
+            }
+          })
+        }
+
         // Does the current row match the agents that produced the displayed
         // result? Empty selection never matches (clicking play would do
         // nothing anyway, the button is disabled).
@@ -328,6 +362,8 @@ export function GroupsLayer({
             displaySlot={displaySlot}
             selectedAgentIds={selectedAgentIds}
             selectionMatchesDisplay={selectionMatchesDisplay}
+            logoOverrideOptions={groupImageOptions}
+            onChangeLogo={handleChangeLogo}
             onAddAgent={(id) =>
               setSelectedByGroup((prev) => {
                 const current = prev[g.key] ?? []

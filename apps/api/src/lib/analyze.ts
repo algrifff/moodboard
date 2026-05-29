@@ -221,7 +221,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     content.push({
       type: 'text',
       text:
-        "PDF contents (treat as reference material, not the final design — read for subject matter, voice, and visual references). PDF typography is incidental and does NOT dictate the brand's chosen fonts; only uploaded font specimens and text-node font tags do.\n\n" +
+        'PDF contents (treat as reference material — read for subject matter, voice, and visual references). PDF layout typography is incidental and does NOT dictate the brand\'s chosen fonts. BUT if a PDF excerpt explicitly names a typeface ("use Helvetica", "set in Akzidenz Grotesk", etc.), treat that name as a deliberate typography reference and count it for the fonts field.\n\n' +
         pdfExcerpts.join('\n\n'),
     })
   }
@@ -296,7 +296,11 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      FONTS block with MUST-INCLUDE instructions; PDF excerpt
   //      preamble explicitly notes typography in PDFs is incidental;
   //      AD prompt restructured to enforce strict trust hierarchy.
-  const v = 'v6'
+  // v7 = font priority re-ordered: photos with type rank above text-
+  //      node and PDF content, which only count when they explicitly
+  //      name a typeface. CSS-fallback-stack text-node font tags are
+  //      now explicitly in the IGNORE list.
+  const v = 'v7'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -309,7 +313,10 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //      content; downstream synthesis input changes too.
   // v6 — uploaded fonts now in a dedicated BRAND FONTS block at the
   //      top of the AD prompt; downstream synth inputs change.
-  const v = 'v6'
+  // v7 — font priority hierarchy re-ordered (photos > text/PDF unless
+  //      explicit naming); AD output shape unchanged but content
+  //      shifts noticeably, so downstream synth needs to re-run.
+  const v = 'v7'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

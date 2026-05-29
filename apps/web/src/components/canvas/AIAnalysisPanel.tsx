@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AI_PANEL_DURATION, EASE_OUT_STANDARD } from '@/lib/motion'
-import { AgentRow, AGENT_ORDER, type PlayState } from './AgentRow'
+import { AgentRow, type PlayState } from './AgentRow'
 
 // Inline panel width bounds. Default sits at 320 to match the original
 // fixed layout; drag the right edge to widen for long-form readouts.
@@ -24,10 +24,6 @@ export type SlotState =
   | { kind: 'ready-brief'; data: SynthesisBrief; cached: boolean }
   | { kind: 'error'; message: string }
 
-// Re-exported for callers that want to iterate canonical agent order without
-// pulling the AgentRow module directly.
-export { AGENT_ORDER }
-
 // ---------------------------------------------------------------------------
 // Panel — avatar row on top, summary card below.
 // ---------------------------------------------------------------------------
@@ -36,9 +32,9 @@ export function AIAnalysisPanel({
   bounds,
   scale,
   offset,
-  slots,
-  combinedSlot,
+  displaySlot,
   selectedAgentIds,
+  selectionMatchesDisplay,
   onAddAgent,
   onRemoveAgent,
   onRun,
@@ -46,9 +42,14 @@ export function AIAnalysisPanel({
   bounds: { left: number; top: number; right: number; bottom: number }
   scale: number
   offset: { x: number; y: number }
-  slots: Record<AgentId, SlotState>
-  combinedSlot: SlotState
+  // The single slot this panel renders. Decoupled from selection — only
+  // a fresh analysis run replaces it. Set by GroupsLayer's displayByGroup.
+  displaySlot: SlotState
   selectedAgentIds: AgentId[]
+  // True when the current selection matches the agents that produced
+  // `displaySlot`. Drives the play button: matches → refresh icon (re-run
+  // same combo); differs → play icon (the click will run something new).
+  selectionMatchesDisplay: boolean
   onAddAgent: (id: AgentId) => void
   onRemoveAgent: (id: AgentId) => void
   onRun: () => void
@@ -106,30 +107,29 @@ export function AIAnalysisPanel({
     return () => document.removeEventListener('keydown', onKey)
   }, [isFullscreen])
 
-  // Determine what to show in the summary card. Single agent → that agent's
-  // slot; 2+ agents → the combined slot; empty → idle.
-  const activeState: SlotState =
-    selectedAgentIds.length === 0
-      ? { kind: 'idle' }
-      : selectedAgentIds.length === 1
-        ? (slots[selectedAgentIds[0]!] ?? { kind: 'idle' })
-        : combinedSlot
+  // The panel renders whatever `displaySlot` says — selection is just
+  // metadata for what the play button will do next.
+  const activeState: SlotState = displaySlot
 
+  // Loading + error states track the slot directly. "ready" only when the
+  // current selection actually matches what produced the displayed result
+  // — otherwise clicking play runs a new combo, not a refresh.
+  const isReadyKind =
+    activeState.kind === 'ready-ad' ||
+    activeState.kind === 'ready-sec' ||
+    activeState.kind === 'ready-brief'
   const playState: PlayState =
     activeState.kind === 'loading'
       ? 'loading'
-      : activeState.kind === 'ready-ad' ||
-          activeState.kind === 'ready-sec' ||
-          activeState.kind === 'ready-brief'
-        ? 'ready'
-        : activeState.kind === 'error'
-          ? 'error'
+      : activeState.kind === 'error' && selectionMatchesDisplay
+        ? 'error'
+        : isReadyKind && selectionMatchesDisplay
+          ? 'ready'
           : 'idle'
 
   // Bump z-index when the user has engaged with this panel so the active
   // panel sits above any neighbouring group's idle panel.
-  const hasActivity =
-    selectedAgentIds.length > 0 || playState !== 'idle' || isAnythingActive(slots, combinedSlot)
+  const hasActivity = selectedAgentIds.length > 0 || activeState.kind !== 'idle'
 
   return (
     <>
@@ -156,7 +156,7 @@ export function AIAnalysisPanel({
         />
         <SummaryCard
           state={activeState}
-          empty={selectedAgentIds.length === 0}
+          empty={selectedAgentIds.length === 0 && activeState.kind === 'idle'}
           onFullscreen={() => setIsFullscreen(true)}
         />
         <ResizeHandle onMouseDown={onResizeStart} />
@@ -208,22 +208,6 @@ function ResizeHandle({ onMouseDown }: { onMouseDown: (e: React.MouseEvent) => v
       />
     </div>
   )
-}
-
-function isAnythingActive(slots: Record<AgentId, SlotState>, combinedSlot: SlotState): boolean {
-  if (
-    combinedSlot.kind === 'loading' ||
-    combinedSlot.kind === 'ready-brief' ||
-    combinedSlot.kind === 'error'
-  )
-    return true
-  for (const a of AGENT_ORDER) {
-    const k = slots[a]?.kind
-    if (k === 'loading' || k === 'ready-ad' || k === 'ready-sec' || k === 'error') {
-      return true
-    }
-  }
-  return false
 }
 
 // ---------------------------------------------------------------------------

@@ -7,17 +7,55 @@ import { AIAnalysisPanel, type SlotState } from './AIAnalysisPanel'
 import { ColorPaletteWidget } from './ColorPaletteWidget'
 import { GroupOutline } from './GroupOutline'
 
-type GroupSlots = Partial<Record<AgentId, SlotState>>
+const IDLE_SLOT: SlotState = { kind: 'idle' }
 
-const EMPTY_SLOTS: Record<AgentId, SlotState> = {
-  'art-director': { kind: 'idle' },
-  'business-analyst': { kind: 'idle' },
-  'audience-profiler': { kind: 'idle' },
-  'channel-strategist': { kind: 'idle' },
-  copywriter: { kind: 'idle' },
+// ---------------------------------------------------------------------------
+// Persistence — per-board localStorage so the displayed analysis survives
+// agent-row toggles, board navigation, and full reloads.
+// ---------------------------------------------------------------------------
+
+type PersistedGroup = {
+  // Last completed run for this group. The display is decoupled from the
+  // current agent-row selection — only a fresh run replaces it.
+  display: SlotState
+  // The sorted agent IDs that produced `display`. Drives the play-vs-refresh
+  // icon: refresh when current selection matches, play when it differs.
+  lastRunSelection: AgentId[]
+  // What's currently in the agent row.
+  currentSelection: AgentId[]
+  // Palette hexes pushed to the ColorPaletteWidget (locks every slot).
+  aiPalette: string[]
+}
+type PersistedBoard = Record<string, PersistedGroup>
+
+const STORAGE_PREFIX = 'moodboard:analysis:'
+
+function storageKey(boardId: string): string {
+  return `${STORAGE_PREFIX}${boardId}`
 }
 
-const IDLE_SLOT: SlotState = { kind: 'idle' }
+function loadBoardState(boardId: string): PersistedBoard {
+  try {
+    const raw = localStorage.getItem(storageKey(boardId))
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as PersistedBoard) : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveBoardState(boardId: string, state: PersistedBoard) {
+  try {
+    localStorage.setItem(storageKey(boardId), JSON.stringify(state))
+  } catch {
+    // Quota exceeded / storage disabled — best-effort, silent.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Layer
+// ---------------------------------------------------------------------------
 
 export function GroupsLayer({
   objects,
@@ -44,23 +82,96 @@ export function GroupsLayer({
     })
   }, [objects])
 
-  // Per-(groupKey × agentId) slots for single agents.
-  const [slotsByGroup, setSlotsByGroup] = useState<Record<string, GroupSlots>>({})
-  // Combined slots keyed by groupKey → sortedIds.join(',') → SlotState.
-  const [combinedByGroup, setCombinedByGroup] = useState<Record<string, Record<string, SlotState>>>(
+  // The single displayed analysis per group. Only changes when a run
+  // completes (or starts — transitions to loading). Toggling agents in the
+  // row does NOT change this.
+  const [displayByGroup, setDisplayByGroup] = useState<Record<string, SlotState>>({})
+  // The sorted agent IDs that produced the currently-displayed slot. Drives
+  // the play button: matches current selection → "refresh", differs → "play".
+  const [lastRunSelectionByGroup, setLastRunSelectionByGroup] = useState<Record<string, AgentId[]>>(
     {},
   )
-  // Which agents are in each group's avatar row right now.
+  // Current agent-row state. Independent of `displayByGroup`.
   const [selectedByGroup, setSelectedByGroup] = useState<Record<string, AgentId[]>>({})
-  // Palette hexes captured from the latest AD or synthesis run for each
-  // group. ColorPaletteWidget consumes this — when set, it overrides the
-  // image-extracted swatches and locks every slot.
+  // Palette hexes captured from the latest AD or synthesis run. The
+  // ColorPaletteWidget consumes this — when set, it overrides image
+  // extraction and locks every slot.
   const [aiPaletteByGroup, setAiPaletteByGroup] = useState<Record<string, string[]>>({})
+
   const visibleKeysRef = useRef<Set<string>>(new Set())
   // Per-group request queue so multiple rapid clicks serialise.
   const queueByGroup = useRef<Map<string, Promise<void>>>(new Map())
+  // Tracks which boardId we've already hydrated for, so a re-render with
+  // the same boardId doesn't trample fresh in-memory state with the (now
+  // stale) localStorage snapshot.
+  const hydratedForBoardRef = useRef<string | null>(null)
 
-  // Purge state for groups that no longer exist.
+  // Hydrate from localStorage when boardId changes. Loading kinds are
+  // dropped — they're transient and shouldn't survive a reload.
+  useEffect(() => {
+    if (!boardId) return
+    if (hydratedForBoardRef.current === boardId) return
+    hydratedForBoardRef.current = boardId
+
+    const persisted = loadBoardState(boardId)
+    const nextDisplay: Record<string, SlotState> = {}
+    const nextLastRun: Record<string, AgentId[]> = {}
+    const nextSelected: Record<string, AgentId[]> = {}
+    const nextPalette: Record<string, string[]> = {}
+    for (const [key, group] of Object.entries(persisted)) {
+      if (group.display && group.display.kind !== 'loading') {
+        nextDisplay[key] = group.display
+      }
+      if (Array.isArray(group.lastRunSelection)) {
+        nextLastRun[key] = group.lastRunSelection
+      }
+      if (Array.isArray(group.currentSelection)) {
+        nextSelected[key] = group.currentSelection
+      }
+      if (Array.isArray(group.aiPalette) && group.aiPalette.length > 0) {
+        nextPalette[key] = group.aiPalette
+      }
+    }
+    setDisplayByGroup(nextDisplay)
+    setLastRunSelectionByGroup(nextLastRun)
+    setSelectedByGroup(nextSelected)
+    setAiPaletteByGroup(nextPalette)
+  }, [boardId])
+
+  // Save to localStorage whenever any of the persisted fields change.
+  // Debounced 200ms so a flurry of state updates writes once. Skipped
+  // until hydration completes for this boardId so we don't overwrite the
+  // stored state with an empty initial in-memory state on first mount.
+  useEffect(() => {
+    if (!boardId) return
+    if (hydratedForBoardRef.current !== boardId) return
+    const id = setTimeout(() => {
+      const state: PersistedBoard = {}
+      const allKeys = new Set<string>([
+        ...Object.keys(displayByGroup),
+        ...Object.keys(lastRunSelectionByGroup),
+        ...Object.keys(selectedByGroup),
+        ...Object.keys(aiPaletteByGroup),
+      ])
+      for (const key of allKeys) {
+        const display = displayByGroup[key] ?? IDLE_SLOT
+        // Don't persist the loading state — it would deadlock the panel
+        // if the user closes the tab mid-run.
+        if (display.kind === 'loading') continue
+        state[key] = {
+          display,
+          lastRunSelection: lastRunSelectionByGroup[key] ?? [],
+          currentSelection: selectedByGroup[key] ?? [],
+          aiPalette: aiPaletteByGroup[key] ?? [],
+        }
+      }
+      saveBoardState(boardId, state)
+    }, 200)
+    return () => clearTimeout(id)
+  }, [boardId, displayByGroup, lastRunSelectionByGroup, selectedByGroup, aiPaletteByGroup])
+
+  // Purge state for groups that no longer exist on the canvas. The save
+  // effect picks this up and drops them from localStorage next tick.
   useEffect(() => {
     const nextKeys = new Set(groups.map((g) => g.key))
     visibleKeysRef.current = nextKeys
@@ -71,8 +182,8 @@ export function GroupsLayer({
       }
       return next
     }
-    setSlotsByGroup(purge)
-    setCombinedByGroup(purge)
+    setDisplayByGroup(purge)
+    setLastRunSelectionByGroup(purge)
     setSelectedByGroup(purge)
     setAiPaletteByGroup(purge)
   }, [groups])
@@ -87,42 +198,33 @@ export function GroupsLayer({
   const runAgent = useCallback(
     (key: string, ids: string[], agentId: AgentId, force = false) => {
       if (!boardId) return
-      setSlotsByGroup((s) => ({
-        ...s,
-        [key]: { ...(s[key] ?? {}), [agentId]: { kind: 'loading' } },
-      }))
+      // Transition to loading immediately so the panel reflects activity.
+      // Record the selection-that-produced-this so the play button matches.
+      setDisplayByGroup((s) => ({ ...s, [key]: { kind: 'loading' } }))
+      setLastRunSelectionByGroup((s) => ({ ...s, [key]: [agentId] }))
 
       return enqueue(key, async () => {
         try {
           const res = await analyzeGroup(boardId, ids, agentId, { force })
           if (!visibleKeysRef.current.has(key)) return
-          setSlotsByGroup((s) => ({
+          setDisplayByGroup((s) => ({
             ...s,
-            [key]: {
-              ...(s[key] ?? {}),
-              [agentId]:
-                res.agentId === 'art-director'
-                  ? { kind: 'ready-ad', data: res.data, cached: res.cached }
-                  : { kind: 'ready-sec', data: res.data, cached: res.cached },
-            },
+            [key]:
+              res.agentId === 'art-director'
+                ? { kind: 'ready-ad', data: res.data, cached: res.cached }
+                : { kind: 'ready-sec', data: res.data, cached: res.cached },
           }))
-          // Push the Art Director's curated palette into the colour widget
-          // — locked. Synthesis runs (below) do the same with the brief's
-          // palette and will overwrite this when they land.
           if (res.agentId === 'art-director' && res.data.palette.length > 0) {
             const palette = res.data.palette
             setAiPaletteByGroup((p) => ({ ...p, [key]: palette }))
           }
         } catch (e) {
           if (!visibleKeysRef.current.has(key)) return
-          setSlotsByGroup((s) => ({
+          setDisplayByGroup((s) => ({
             ...s,
             [key]: {
-              ...(s[key] ?? {}),
-              [agentId]: {
-                kind: 'error',
-                message: e instanceof Error ? e.message : String(e),
-              },
+              kind: 'error',
+              message: e instanceof Error ? e.message : String(e),
             },
           }))
         }
@@ -135,41 +237,28 @@ export function GroupsLayer({
     (key: string, ids: string[], agentIds: AgentId[], force = false) => {
       if (!boardId) return
       const sortedIds = [...agentIds].sort()
-      const slotKey = sortedIds.join(',')
-
-      setCombinedByGroup((c) => ({
-        ...c,
-        [key]: { ...(c[key] ?? {}), [slotKey]: { kind: 'loading' } },
-      }))
+      setDisplayByGroup((s) => ({ ...s, [key]: { kind: 'loading' } }))
+      setLastRunSelectionByGroup((s) => ({ ...s, [key]: sortedIds }))
 
       return enqueue(key, async () => {
         try {
           const res = await synthesizeGroupApi(boardId, ids, sortedIds, { force })
           if (!visibleKeysRef.current.has(key)) return
-          setCombinedByGroup((c) => ({
-            ...c,
-            [key]: {
-              ...(c[key] ?? {}),
-              [slotKey]: { kind: 'ready-brief', data: res.data, cached: res.cached },
-            },
+          setDisplayByGroup((s) => ({
+            ...s,
+            [key]: { kind: 'ready-brief', data: res.data, cached: res.cached },
           }))
-          // Same as the AD path — push the brief's palette into the colour
-          // widget. Synthesis takes precedence when both have run because
-          // it lands later in the user's flow.
           if (res.data.palette.length > 0) {
             const hexes = res.data.palette.map((p) => p.hex)
             setAiPaletteByGroup((p) => ({ ...p, [key]: hexes }))
           }
         } catch (e) {
           if (!visibleKeysRef.current.has(key)) return
-          setCombinedByGroup((c) => ({
-            ...c,
+          setDisplayByGroup((s) => ({
+            ...s,
             [key]: {
-              ...(c[key] ?? {}),
-              [slotKey]: {
-                kind: 'error',
-                message: e instanceof Error ? e.message : String(e),
-              },
+              kind: 'error',
+              message: e instanceof Error ? e.message : String(e),
             },
           }))
         }
@@ -199,22 +288,30 @@ export function GroupsLayer({
       ))}
 
       {groups.map((g) => {
-        const slots = { ...EMPTY_SLOTS, ...(slotsByGroup[g.key] ?? {}) }
+        const displaySlot = displayByGroup[g.key] ?? IDLE_SLOT
         const selectedAgentIds = selectedByGroup[g.key] ?? []
-        const combinedKey = [...selectedAgentIds].sort().join(',')
-        const combinedSlot: SlotState =
-          (selectedAgentIds.length >= 2 && combinedByGroup[g.key]?.[combinedKey]) || IDLE_SLOT
+        const lastRunSelection = lastRunSelectionByGroup[g.key] ?? []
+
+        // Does the current row match the agents that produced the displayed
+        // result? Empty selection never matches (clicking play would do
+        // nothing anyway, the button is disabled).
+        const currentSorted = [...selectedAgentIds].sort().join(',')
+        const lastSorted = [...lastRunSelection].sort().join(',')
+        const selectionMatchesDisplay = selectedAgentIds.length > 0 && currentSorted === lastSorted
 
         const handleRun = () => {
           if (selectedAgentIds.length === 0) return
+          // Force a fresh call only if the user is re-running the same
+          // combo that's currently displayed — that's the explicit
+          // "refresh" intent. Different combo = new analysis, cache is fine.
+          const isReady =
+            displaySlot.kind === 'ready-ad' ||
+            displaySlot.kind === 'ready-sec' ||
+            displaySlot.kind === 'ready-brief'
+          const force = selectionMatchesDisplay && isReady
           if (selectedAgentIds.length === 1) {
-            const only = selectedAgentIds[0]!
-            const existing = slotsByGroup[g.key]?.[only]?.kind
-            const force = existing === 'ready-ad' || existing === 'ready-sec'
-            runAgent(g.key, g.ids, only, force)
+            runAgent(g.key, g.ids, selectedAgentIds[0]!, force)
           } else {
-            const existing = combinedByGroup[g.key]?.[combinedKey]?.kind
-            const force = existing === 'ready-brief'
             runCombined(g.key, g.ids, selectedAgentIds, force)
           }
         }
@@ -225,9 +322,9 @@ export function GroupsLayer({
             bounds={g.bounds}
             scale={scale}
             offset={offset}
-            slots={slots}
-            combinedSlot={combinedSlot}
+            displaySlot={displaySlot}
             selectedAgentIds={selectedAgentIds}
+            selectionMatchesDisplay={selectionMatchesDisplay}
             onAddAgent={(id) =>
               setSelectedByGroup((prev) => {
                 const current = prev[g.key] ?? []

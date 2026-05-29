@@ -1,4 +1,4 @@
-import type { AgentId, CanvasObject } from '@moodboard/shared'
+import type { AgentId, CanvasObject, SynthesisBrief } from '@moodboard/shared'
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupBoundingBox, groupId, proximityGroups } from '@/lib/aabb'
@@ -382,6 +382,22 @@ export function GroupsLayer({
         }
 
         // Patches the brief's logo URL in place. Persists via the existing
+        // Patch the entire brief in place. Used by inline edits in the
+        // BriefReadout — the user double-clicks a text field, types,
+        // and the edit propagates up through the prop chain. The save
+        // effect persists; on reload the edited brief is what comes
+        // back. Re-running the AD/synth overwrites.
+        const handlePatchBrief = (newBrief: SynthesisBrief) => {
+          setDisplayByGroup((prev) => {
+            const slot = prev[g.key]
+            if (!slot || slot.kind !== 'ready-brief') return prev
+            return {
+              ...prev,
+              [g.key]: { ...slot, data: newBrief },
+            }
+          })
+        }
+
         // localStorage save effect. Only applies when the displayed slot
         // is a ready-brief (synthesis output). Preserves the AD's
         // `reason` for URLs that were already in the logo set; new URLs
@@ -440,6 +456,7 @@ export function GroupsLayer({
             selectionMatchesDisplay={selectionMatchesDisplay}
             logoOverrideOptions={groupImageOptions}
             onChangeLogos={handleChangeLogos}
+            onPatchBrief={handlePatchBrief}
             onAddAgent={(id) =>
               setSelectedByGroup((prev) => {
                 const current = prev[g.key] ?? []

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AI_PANEL_DURATION, EASE_OUT_STANDARD } from '@/lib/motion'
 import { AgentRow, type PlayState } from './AgentRow'
+import { EditableText } from './EditableText'
 
 // Inline panel width bounds. Default sits at 320 to match the original
 // fixed layout; drag the right edge to widen for long-form readouts.
@@ -37,6 +38,7 @@ export function AIAnalysisPanel({
   selectionMatchesDisplay,
   logoOverrideOptions,
   onChangeLogos,
+  onPatchBrief,
   onAddAgent,
   onRemoveAgent,
   onRun,
@@ -56,6 +58,10 @@ export function AIAnalysisPanel({
   // AD's pick). Empty when the group has no images.
   logoOverrideOptions: { url: string }[]
   onChangeLogos: (urls: string[]) => void
+  // Patch the entire SynthesisBrief in place — used by inline-editable
+  // fields in the BriefReadout. Bubbles up to GroupsLayer's
+  // displayByGroup, which persists via the existing save effect.
+  onPatchBrief: (brief: SynthesisBrief) => void
   onAddAgent: (id: AgentId) => void
   onRemoveAgent: (id: AgentId) => void
   onRun: () => void
@@ -166,6 +172,7 @@ export function AIAnalysisPanel({
           onFullscreen={() => setIsFullscreen(true)}
           logoOverrideOptions={logoOverrideOptions}
           onChangeLogos={onChangeLogos}
+          onPatchBrief={onPatchBrief}
         />
         <ResizeHandle onMouseDown={onResizeStart} />
       </motion.div>
@@ -197,6 +204,7 @@ export function AIAnalysisPanel({
                 onClose={() => setIsFullscreen(false)}
                 logoOverrideOptions={logoOverrideOptions}
                 onChangeLogos={onChangeLogos}
+                onPatchBrief={onPatchBrief}
               />
             )}
           </AnimatePresence>,
@@ -252,12 +260,14 @@ function SummaryCard({
   onFullscreen,
   logoOverrideOptions,
   onChangeLogos,
+  onPatchBrief,
 }: {
   state: SlotState
   empty: boolean
   onFullscreen: () => void
   logoOverrideOptions: { url: string }[]
   onChangeLogos: (urls: string[]) => void
+  onPatchBrief: (brief: SynthesisBrief) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDone =
@@ -354,6 +364,7 @@ function SummaryCard({
               data={state.data}
               logoOverrideOptions={logoOverrideOptions}
               onChangeLogos={onChangeLogos}
+              onPatchBrief={onPatchBrief}
             />
           ) : (
             <BriefGlance data={state.data} />
@@ -629,11 +640,13 @@ function FullscreenDrawer({
   onClose,
   logoOverrideOptions,
   onChangeLogos,
+  onPatchBrief,
 }: {
   state: SlotState
   onClose: () => void
   logoOverrideOptions: { url: string }[]
   onChangeLogos: (urls: string[]) => void
+  onPatchBrief: (brief: SynthesisBrief) => void
 }) {
   return (
     <motion.div
@@ -694,6 +707,7 @@ function FullscreenDrawer({
             data={state.data}
             logoOverrideOptions={logoOverrideOptions}
             onChangeLogos={onChangeLogos}
+            onPatchBrief={onPatchBrief}
           />
         )}
         {state.kind === 'error' && (
@@ -722,11 +736,20 @@ function BriefReadout({
   data,
   logoOverrideOptions,
   onChangeLogos,
+  onPatchBrief,
 }: {
   data: SynthesisBrief
   logoOverrideOptions: { url: string }[]
   onChangeLogos: (urls: string[]) => void
+  onPatchBrief: (brief: SynthesisBrief) => void
 }) {
+  // Convenience wrapper — each block hands us its new slice of the brief
+  // and we splice it onto the rest. Pass these into each block's
+  // onChange prop.
+  const patch =
+    <K extends keyof SynthesisBrief>(key: K) =>
+    (value: SynthesisBrief[K]) =>
+      onPatchBrief({ ...data, [key]: value })
   const hasPositioning =
     data.positioning.model.trim().length > 0 ||
     data.positioning.niche.trim().length > 0 ||
@@ -734,28 +757,56 @@ function BriefReadout({
   return (
     <div className="space-y-5">
       {data.throughline.trim().length > 0 && (
-        <ThroughlineBlock text={data.throughline} source={data.throughlineSource} />
+        <ThroughlineBlock
+          text={data.throughline}
+          source={data.throughlineSource}
+          onChange={patch('throughline')}
+        />
       )}
-      {hasPositioning && <PositioningBlock data={data.positioning} />}
+      {hasPositioning && (
+        <PositioningBlock data={data.positioning} onChange={patch('positioning')} />
+      )}
       {data.logo.length > 0 && (
         <LogoBlock
           logos={data.logo}
           overrideOptions={logoOverrideOptions}
           onChange={onChangeLogos}
+          onChangeReason={(i, reason) =>
+            patch('logo')(data.logo.map((l, j) => (j === i ? { ...l, reason } : l)))
+          }
         />
       )}
-      {data.palette.length > 0 && <PaletteBlock items={data.palette} />}
-      {data.typography.feel.trim().length > 0 && <TypographyBlock feel={data.typography.feel} />}
-      {data.fonts.length > 0 && <FontsBlock items={data.fonts} />}
-      {data.references.length > 0 && <ReferencesBlock items={data.references} />}
-      {data.tensions.length > 0 && <TensionsBlock items={data.tensions} />}
-      {data.audiences.length > 0 && <AudienceBlock items={data.audiences} />}
-      {data.channels.length > 0 && <ChannelBlock items={data.channels} />}
-      {data.hooks.length > 0 && <HooksBlock items={data.hooks} />}
-      {data.bodyCopy.trim().length > 0 && <BodyCopyBlock text={data.bodyCopy} />}
-      {data.statements.length > 0 && <StatementsBlock items={data.statements} />}
-      {data.watchFors.length > 0 && <WatchForsBlock items={data.watchFors} />}
-      {data.notes.length > 0 && <NotesBlock items={data.notes} />}
+      {data.palette.length > 0 && <PaletteBlock items={data.palette} onChange={patch('palette')} />}
+      {data.typography.feel.trim().length > 0 && (
+        <TypographyBlock
+          feel={data.typography.feel}
+          onChange={(feel) => patch('typography')({ feel })}
+        />
+      )}
+      {data.fonts.length > 0 && <FontsBlock items={data.fonts} onChange={patch('fonts')} />}
+      {data.references.length > 0 && (
+        <ReferencesBlock items={data.references} onChange={patch('references')} />
+      )}
+      {data.tensions.length > 0 && (
+        <TensionsBlock items={data.tensions} onChange={patch('tensions')} />
+      )}
+      {data.audiences.length > 0 && (
+        <AudienceBlock items={data.audiences} onChange={patch('audiences')} />
+      )}
+      {data.channels.length > 0 && (
+        <ChannelBlock items={data.channels} onChange={patch('channels')} />
+      )}
+      {data.hooks.length > 0 && <HooksBlock items={data.hooks} onChange={patch('hooks')} />}
+      {data.bodyCopy.trim().length > 0 && (
+        <BodyCopyBlock text={data.bodyCopy} onChange={patch('bodyCopy')} />
+      )}
+      {data.statements.length > 0 && (
+        <StatementsBlock items={data.statements} onChange={patch('statements')} />
+      )}
+      {data.watchFors.length > 0 && (
+        <WatchForsBlock items={data.watchFors} onChange={patch('watchFors')} />
+      )}
+      {data.notes.length > 0 && <NotesBlock items={data.notes} onChange={patch('notes')} />}
     </div>
   )
 }
@@ -811,7 +862,15 @@ function BlockHeading({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ThroughlineBlock({ text, source }: { text: string; source: string }) {
+function ThroughlineBlock({
+  text,
+  source,
+  onChange,
+}: {
+  text: string
+  source: string
+  onChange: (next: string) => void
+}) {
   return (
     <div
       style={{
@@ -822,16 +881,17 @@ function ThroughlineBlock({ text, source }: { text: string; source: string }) {
       }}
     >
       <BlockHeading>The throughline</BlockHeading>
-      <div
+      <EditableText
+        value={text}
+        onCommit={onChange}
+        multiline
         className="mt-1.5 font-medium text-foreground"
         style={{
           fontFamily: 'ui-serif, Georgia, "Iowan Old Style", serif',
           fontSize: 16,
           lineHeight: 1.4,
         }}
-      >
-        {text}
-      </div>
+      />
       {source.trim().length > 0 && (
         <div className="mt-2 text-[11px] text-[var(--text-faint)]">— {source}</div>
       )}
@@ -839,7 +899,15 @@ function ThroughlineBlock({ text, source }: { text: string; source: string }) {
   )
 }
 
-function PaletteBlock({ items }: { items: { hex: string; role: string; note: string }[] }) {
+function PaletteBlock({
+  items,
+  onChange,
+}: {
+  items: { hex: string; role: string; note: string }[]
+  onChange: (items: { hex: string; role: string; note: string }[]) => void
+}) {
+  const patchItem = (i: number, p: Partial<{ role: string; note: string }>) =>
+    onChange(items.map((it, j) => (j === i ? { ...it, ...p } : it)))
   return (
     <div>
       <BlockHeading>Palette</BlockHeading>
@@ -859,18 +927,23 @@ function PaletteBlock({ items }: { items: { hex: string; role: string; note: str
               }}
             />
             <div className="min-w-0">
-              <div className="text-[11px] text-foreground font-medium leading-tight">{p.role}</div>
+              <EditableText
+                value={p.role}
+                onCommit={(role) => patchItem(i, { role })}
+                className="text-[11px] text-foreground font-medium leading-tight"
+              />
               <div
                 className="text-[11px] text-[var(--text-mute)] font-mono leading-tight"
                 style={{ fontVariantNumeric: 'tabular-nums' }}
               >
                 {p.hex.toUpperCase()}
               </div>
-              {p.note.trim().length > 0 && (
-                <div className="mt-0.5 text-[11px] text-[var(--text-soft)] leading-snug">
-                  {p.note}
-                </div>
-              )}
+              <EditableText
+                value={p.note}
+                onCommit={(note) => patchItem(i, { note })}
+                multiline
+                className="mt-0.5 text-[11px] text-[var(--text-soft)] leading-snug"
+              />
             </div>
           </div>
         ))}
@@ -896,11 +969,16 @@ const SAMPLE_SIZES: Record<string, { size: number; family: string; weight: numbe
 
 // Typography block now carries only the `feel` line. Concrete typeface
 // samples moved to FontsBlock (Move A consolidation).
-function TypographyBlock({ feel }: { feel: string }) {
+function TypographyBlock({ feel, onChange }: { feel: string; onChange: (next: string) => void }) {
   return (
     <div>
       <BlockHeading>Typography</BlockHeading>
-      <div className="mt-1.5 text-[12.5px] text-[var(--text-soft)] italic">{feel}</div>
+      <EditableText
+        value={feel}
+        onCommit={onChange}
+        multiline
+        className="mt-1.5 text-[12.5px] text-[var(--text-soft)] italic"
+      />
     </div>
   )
 }
@@ -910,9 +988,15 @@ function TypographyBlock({ feel }: { feel: string }) {
 // reads as its own piece of the system.
 function FontsBlock({
   items,
+  onChange,
 }: {
   items: { name: string; category: string; role: string; sample: string }[]
+  onChange: (items: { name: string; category: string; role: string; sample: string }[]) => void
 }) {
+  const patchItem = (
+    i: number,
+    p: Partial<{ name: string; category: string; role: string; sample: string }>,
+  ) => onChange(items.map((it, j) => (j === i ? { ...it, ...p } : it)))
   return (
     <div>
       <BlockHeading>Fonts</BlockHeading>
@@ -929,16 +1013,32 @@ function FontsBlock({
           const isCaption = f.role.toLowerCase() === 'caption'
           // Name takes precedence; fall back to category when the AD only
           // had a typographic family to describe.
-          const label = f.name.trim().length > 0 ? f.name : f.category
+          const labelValue = f.name.trim().length > 0 ? 'name' : 'category'
           return (
             <div key={i}>
               <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] mb-0.5 flex items-baseline gap-2">
-                <span>{f.role}</span>
+                <EditableText
+                  as="span"
+                  value={f.role}
+                  onCommit={(role) => patchItem(i, { role })}
+                />
                 <span className="text-[var(--text-mute)] normal-case tracking-normal">
-                  · {label}
+                  ·{' '}
+                  <EditableText
+                    as="span"
+                    value={labelValue === 'name' ? f.name : f.category}
+                    onCommit={(v) =>
+                      labelValue === 'name'
+                        ? patchItem(i, { name: v })
+                        : patchItem(i, { category: v })
+                    }
+                  />
                 </span>
               </div>
-              <div
+              <EditableText
+                value={f.sample}
+                onCommit={(sample) => patchItem(i, { sample })}
+                multiline
                 className="text-foreground"
                 style={{
                   fontSize: sz.size,
@@ -948,9 +1048,7 @@ function FontsBlock({
                   letterSpacing: isCaption ? '0.08em' : undefined,
                   textTransform: isCaption ? 'uppercase' : undefined,
                 }}
-              >
-                {f.sample}
-              </div>
+              />
             </div>
           )
         })}
@@ -973,10 +1071,12 @@ function LogoBlock({
   logos,
   overrideOptions,
   onChange,
+  onChangeReason,
 }: {
   logos: { url: string; reason: string }[]
   overrideOptions: { url: string }[]
   onChange: (urls: string[]) => void
+  onChangeReason: (index: number, reason: string) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -1058,14 +1158,13 @@ function LogoBlock({
                     display: 'block',
                   }}
                 />
-                {logo.reason.trim().length > 0 && (
-                  <div
-                    className="text-[11px] text-[var(--text-mute)] italic leading-snug text-center"
-                    style={{ maxWidth: 180 }}
-                  >
-                    {logo.reason}
-                  </div>
-                )}
+                <EditableText
+                  value={logo.reason}
+                  onCommit={(reason) => onChangeReason(i, reason)}
+                  multiline
+                  className="text-[11px] text-[var(--text-mute)] italic leading-snug text-center"
+                  style={{ maxWidth: 180 }}
+                />
               </div>
             ))}
           </div>
@@ -1138,7 +1237,15 @@ function LogoBlock({
   )
 }
 
-function AudienceBlock({ items }: { items: { label: string; insight: string }[] }) {
+function AudienceBlock({
+  items,
+  onChange,
+}: {
+  items: { label: string; insight: string }[]
+  onChange: (items: { label: string; insight: string }[]) => void
+}) {
+  const patchItem = (i: number, p: Partial<{ label: string; insight: string }>) =>
+    onChange(items.map((it, j) => (j === i ? { ...it, ...p } : it)))
   return (
     <div>
       <BlockHeading>Audiences</BlockHeading>
@@ -1152,7 +1259,9 @@ function AudienceBlock({ items }: { items: { label: string; insight: string }[] 
               backgroundColor: 'var(--bg-elevated)',
             }}
           >
-            <div
+            <EditableText
+              value={a.label}
+              onCommit={(label) => patchItem(i, { label })}
               className="text-foreground"
               style={{
                 fontFamily: 'ui-serif, Georgia, "Iowan Old Style", serif',
@@ -1160,12 +1269,13 @@ function AudienceBlock({ items }: { items: { label: string; insight: string }[] 
                 fontWeight: 500,
                 lineHeight: 1.3,
               }}
-            >
-              {a.label}
-            </div>
-            <div className="mt-1 text-[12.5px] text-[var(--text-soft)] leading-snug">
-              {a.insight}
-            </div>
+            />
+            <EditableText
+              value={a.insight}
+              onCommit={(insight) => patchItem(i, { insight })}
+              multiline
+              className="mt-1 text-[12.5px] text-[var(--text-soft)] leading-snug"
+            />
           </div>
         ))}
       </div>
@@ -1173,7 +1283,15 @@ function AudienceBlock({ items }: { items: { label: string; insight: string }[] 
   )
 }
 
-function ChannelBlock({ items }: { items: { name: string; play: string }[] }) {
+function ChannelBlock({
+  items,
+  onChange,
+}: {
+  items: { name: string; play: string }[]
+  onChange: (items: { name: string; play: string }[]) => void
+}) {
+  const patchItem = (i: number, p: Partial<{ name: string; play: string }>) =>
+    onChange(items.map((it, j) => (j === i ? { ...it, ...p } : it)))
   return (
     <div>
       <BlockHeading>Channels</BlockHeading>
@@ -1191,12 +1309,20 @@ function ChannelBlock({ items }: { items: { name: string; play: string }[] }) {
             >
               →
             </span>
-            <div className="min-w-0">
-              <span className="text-[12.5px] text-foreground font-medium">{c.name}</span>
-              <span className="text-[12.5px] text-[var(--text-soft)]">
-                {' — '}
-                {c.play}
-              </span>
+            <div className="min-w-0 flex-1">
+              <EditableText
+                as="span"
+                value={c.name}
+                onCommit={(name) => patchItem(i, { name })}
+                className="text-[12.5px] text-foreground font-medium"
+              />
+              <span className="text-[12.5px] text-[var(--text-soft)]">{' — '}</span>
+              <EditableText
+                as="span"
+                value={c.play}
+                onCommit={(play) => patchItem(i, { play })}
+                className="text-[12.5px] text-[var(--text-soft)]"
+              />
             </div>
           </div>
         ))}
@@ -1205,14 +1331,18 @@ function ChannelBlock({ items }: { items: { name: string; play: string }[] }) {
   )
 }
 
-function HooksBlock({ items }: { items: string[] }) {
+function HooksBlock({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>Hooks</BlockHeading>
       <div className="mt-2 space-y-1.5">
         {items.map((h, i) => (
-          <div
+          <EditableText
             key={i}
+            value={h}
+            onCommit={(v) => patchItem(i, v)}
+            multiline
             className="text-foreground"
             style={{
               fontFamily: 'ui-serif, Georgia, "Iowan Old Style", serif',
@@ -1221,16 +1351,21 @@ function HooksBlock({ items }: { items: string[] }) {
               paddingLeft: 10,
               borderLeft: '2px solid var(--accent)',
             }}
-          >
-            {h}
-          </div>
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function StatementsBlock({ items }: { items: string[] }) {
+function StatementsBlock({
+  items,
+  onChange,
+}: {
+  items: string[]
+  onChange: (items: string[]) => void
+}) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>Statements</BlockHeading>
@@ -1243,7 +1378,12 @@ function StatementsBlock({ items }: { items: string[] }) {
             <span className="text-[var(--accent)]" style={{ flex: '0 0 auto', marginTop: 1 }}>
               •
             </span>
-            <span>{s}</span>
+            <EditableText
+              as="span"
+              value={s}
+              onCommit={(v) => patchItem(i, v)}
+              className="flex-1"
+            />
           </li>
         ))}
       </ul>
@@ -1251,7 +1391,14 @@ function StatementsBlock({ items }: { items: string[] }) {
   )
 }
 
-function WatchForsBlock({ items }: { items: string[] }) {
+function WatchForsBlock({
+  items,
+  onChange,
+}: {
+  items: string[]
+  onChange: (items: string[]) => void
+}) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>Watch for</BlockHeading>
@@ -1263,7 +1410,12 @@ function WatchForsBlock({ items }: { items: string[] }) {
             style={{ color: 'var(--warning)' }}
           >
             <span style={{ flex: '0 0 auto', marginTop: 1 }}>×</span>
-            <span>{w}</span>
+            <EditableText
+              as="span"
+              value={w}
+              onCommit={(v) => patchItem(i, v)}
+              className="flex-1"
+            />
           </li>
         ))}
       </ul>
@@ -1271,7 +1423,8 @@ function WatchForsBlock({ items }: { items: string[] }) {
   )
 }
 
-function NotesBlock({ items }: { items: string[] }) {
+function NotesBlock({ items, onChange }: { items: string[]; onChange: (items: string[]) => void }) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>Notes</BlockHeading>
@@ -1282,7 +1435,12 @@ function NotesBlock({ items }: { items: string[] }) {
             className="text-[11.5px] text-[var(--text-mute)] italic leading-snug flex items-start gap-2"
           >
             <span style={{ flex: '0 0 auto' }}>–</span>
-            <span>{n}</span>
+            <EditableText
+              as="span"
+              value={n}
+              onCommit={(v) => patchItem(i, v)}
+              className="flex-1"
+            />
           </li>
         ))}
       </ul>
@@ -1291,23 +1449,36 @@ function NotesBlock({ items }: { items: string[] }) {
 }
 
 // Three labeled mini-rows for the Business Analyst's contribution.
-function PositioningBlock({ data }: { data: { model: string; niche: string; category: string } }) {
-  const rows: { label: string; text: string }[] = [
-    { label: 'Model', text: data.model },
-    { label: 'Niche', text: data.niche },
-    { label: 'Category', text: data.category },
-  ].filter((r) => r.text.trim().length > 0)
+function PositioningBlock({
+  data,
+  onChange,
+}: {
+  data: { model: string; niche: string; category: string }
+  onChange: (next: { model: string; niche: string; category: string }) => void
+}) {
+  const rows = (
+    [
+      { key: 'model', label: 'Model', text: data.model },
+      { key: 'niche', label: 'Niche', text: data.niche },
+      { key: 'category', label: 'Category', text: data.category },
+    ] as const
+  ).filter((r) => r.text.trim().length > 0)
   if (rows.length === 0) return null
   return (
     <div>
       <BlockHeading>Positioning</BlockHeading>
       <div className="mt-2 space-y-2">
         {rows.map((r) => (
-          <div key={r.label}>
+          <div key={r.key}>
             <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold mb-0.5">
               {r.label}
             </div>
-            <div className="text-[12.5px] text-foreground leading-snug">{r.text}</div>
+            <EditableText
+              value={r.text}
+              onCommit={(v) => onChange({ ...data, [r.key]: v })}
+              multiline
+              className="text-[12.5px] text-foreground leading-snug"
+            />
           </div>
         ))}
       </div>
@@ -1316,22 +1487,30 @@ function PositioningBlock({ data }: { data: { model: string; niche: string; cate
 }
 
 // Small-caps chip row — the lineage line for the brief.
-function ReferencesBlock({ items }: { items: string[] }) {
+function ReferencesBlock({
+  items,
+  onChange,
+}: {
+  items: string[]
+  onChange: (items: string[]) => void
+}) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>References</BlockHeading>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {items.map((r, i) => (
-          <span
+          <EditableText
             key={`${r}-${i}`}
+            as="span"
+            value={r}
+            onCommit={(v) => patchItem(i, v)}
             className="inline-block px-2 py-1 text-[10.5px] uppercase tracking-[0.08em] text-[var(--text-soft)]"
             style={{
               borderRadius: 'var(--radius)',
               backgroundColor: 'var(--bg-elevated)',
             }}
-          >
-            {r}
-          </span>
+          />
         ))}
       </div>
     </div>
@@ -1339,7 +1518,14 @@ function ReferencesBlock({ items }: { items: string[] }) {
 }
 
 // `↔` indicator + verbatim tension line — distinct from watchFors which use `×`.
-function TensionsBlock({ items }: { items: string[] }) {
+function TensionsBlock({
+  items,
+  onChange,
+}: {
+  items: string[]
+  onChange: (items: string[]) => void
+}) {
+  const patchItem = (i: number, v: string) => onChange(items.map((it, j) => (j === i ? v : it)))
   return (
     <div>
       <BlockHeading>Tensions</BlockHeading>
@@ -1349,7 +1535,12 @@ function TensionsBlock({ items }: { items: string[] }) {
             <span className="text-[var(--accent)]" style={{ flex: '0 0 auto', marginTop: 1 }}>
               ↔
             </span>
-            <span className="text-[12.5px] text-[var(--text-soft)] leading-snug">{t}</span>
+            <EditableText
+              as="span"
+              value={t}
+              onCommit={(v) => patchItem(i, v)}
+              className="text-[12.5px] text-[var(--text-soft)] leading-snug flex-1"
+            />
           </div>
         ))}
       </div>
@@ -1359,11 +1550,14 @@ function TensionsBlock({ items }: { items: string[] }) {
 
 // The only longform field in the brief — rendered as a serif card so it
 // reads like an actual about-page mockup.
-function BodyCopyBlock({ text }: { text: string }) {
+function BodyCopyBlock({ text, onChange }: { text: string; onChange: (next: string) => void }) {
   return (
     <div>
       <BlockHeading>Body copy</BlockHeading>
-      <div
+      <EditableText
+        value={text}
+        onCommit={onChange}
+        multiline
         className="mt-2 text-foreground"
         style={{
           fontFamily: 'ui-serif, Georgia, "Iowan Old Style", serif',
@@ -1373,9 +1567,7 @@ function BodyCopyBlock({ text }: { text: string }) {
           borderRadius: 'var(--radius)',
           backgroundColor: 'var(--bg-elevated)',
         }}
-      >
-        {text}
-      </div>
+      />
     </div>
   )
 }

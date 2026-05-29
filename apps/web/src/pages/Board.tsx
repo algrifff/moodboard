@@ -108,7 +108,7 @@ export function BoardPage() {
         <ToastHost />
 
         <div
-          className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[0_6px_24px_-12px_rgba(0,0,0,0.6)]"
+          className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"
           style={{ borderRadius: 'var(--radius-lg)' }}
         >
           <Link
@@ -145,7 +145,7 @@ export function BoardPage() {
         </div>
 
         <div
-          className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card/95 backdrop-blur-md px-1.5 py-1 text-xs font-mono shadow-[0_6px_24px_-12px_rgba(0,0,0,0.6)]"
+          className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card/95 backdrop-blur-md px-1.5 py-1 text-xs font-mono shadow-[var(--shadow-toast)]"
           style={{ borderRadius: 'var(--radius-lg)' }}
         >
           <button

@@ -72,6 +72,11 @@ type Props = {
 export function DotGridLayer({ scale, offset, viewportSize }: Props) {
   const layerRef = useRef<Konva.Layer>(null)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
+  // Konva paints to a 2D canvas, so it can't read CSS variables directly.
+  // We cache the `--dot-rgb` triple (e.g. "255, 255, 255") and re-read it
+  // whenever the document's data-theme attribute flips. The sceneFunc
+  // composes `rgba(${dotRgb}, alpha)` at frame time.
+  const dotRgbRef = useRef<string>('255, 255, 255')
 
   // 60fps redraw. The callback is a no-op — Konva.Animation forces a layer
   // batchDraw each frame so the sceneFunc re-runs.
@@ -83,6 +88,22 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
     return () => {
       anim.stop()
     }
+  }, [])
+
+  // Read the --dot-rgb token from CSS, and re-read whenever the document's
+  // data-theme attribute flips. Avoids a per-frame getComputedStyle call.
+  useEffect(() => {
+    const readDot = () => {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--dot-rgb').trim()
+      if (v) dotRgbRef.current = v
+    }
+    readDot()
+    const observer = new MutationObserver(readDot)
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    })
+    return () => observer.disconnect()
   }, [])
 
   // Track the cursor in world space. Listen at the window level rather than
@@ -309,7 +330,7 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
 
               ctx.beginPath()
               ctx.arc(drawX, drawY, dotR, 0, Math.PI * 2)
-              ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(alpha, 1)})`
+              ctx.fillStyle = `rgba(${dotRgbRef.current}, ${Math.min(alpha, 1)})`
               ctx.fill()
             }
           }

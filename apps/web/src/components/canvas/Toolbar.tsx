@@ -1,8 +1,11 @@
 import type { PDFData } from '@moodboard/shared'
 import {
+  Desktop,
   FilePdf,
   Image as ImageIcon,
+  Moon,
   NoteBlank,
+  Sun,
   TextT,
   Trash,
   type Icon,
@@ -13,6 +16,7 @@ import { uploadFile } from '@/lib/api'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { TOOLBAR_PRESS_DURATION } from '@/lib/motion'
 import { createSticky, createText } from '@/lib/objectFactory'
+import { useTheme, type ThemePref } from '@/lib/theme'
 import { screenToWorld } from '@/lib/transform'
 import { useCanvasStore } from '@/store/canvas'
 import { nanoid } from 'nanoid'
@@ -100,7 +104,7 @@ export function Toolbar() {
 
   return (
     <div
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 bg-card/95 backdrop-blur-md p-1 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.6)]"
+      className="fixed top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 bg-card/95 backdrop-blur-md p-1 shadow-[var(--shadow-pill)]"
       style={{ borderRadius: 'var(--radius-lg)' }}
     >
       <input
@@ -122,6 +126,8 @@ export function Toolbar() {
       <ToolbarButton icon={NoteBlank} label="Sticky" onClick={handleAddSticky} />
       <ToolbarButton icon={TextT} label="Text" onClick={handleAddText} />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />
+      <ThemeToggle />
+      <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />
       <ToolbarButton
         icon={Trash}
         label="Clear"
@@ -137,6 +143,25 @@ export function Toolbar() {
       />
     </div>
   )
+}
+
+// Three-state cycle: system → light → dark → system. The icon reflects the
+// CURRENT preference (Desktop for system, Sun for light, Moon for dark), so
+// users can tell what state they're in without hovering. Tooltip shows
+// what clicking next will do.
+function ThemeToggle() {
+  const { pref, setPref } = useTheme()
+  const cycle: Record<ThemePref, ThemePref> = {
+    system: 'light',
+    light: 'dark',
+    dark: 'system',
+  }
+  const icon = pref === 'system' ? Desktop : pref === 'light' ? Sun : Moon
+  const label =
+    pref === 'system' ? 'Theme: system' : pref === 'light' ? 'Theme: light' : 'Theme: dark'
+  const next = cycle[pref]
+  const tooltip = `${label} — click for ${next}`
+  return <ToolbarButton icon={icon} label={tooltip} onlyIcon muted onClick={() => setPref(next)} />
 }
 
 function ToolbarButton({

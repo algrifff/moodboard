@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>moodboard.ai</title>
+    <!--
+      Theme bootstrap. Sets data-theme on <html> BEFORE the page paints so
+      the user never sees a flash of the wrong theme. Reads the same
+      localStorage key the runtime hook uses (`moodboard:theme`) and falls
+      back to the OS preference when no override is set. Mirrors the
+      resolution logic in src/lib/theme.ts — keep them in sync.
+    -->
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('moodboard:theme')
+          var pref = stored === 'light' || stored === 'dark' ? stored : 'system'
+          var resolved =
+            pref === 'system'
+              ? window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'dark'
+              : pref
+          document.documentElement.setAttribute('data-theme', resolved)
+        } catch (_) {
+          document.documentElement.setAttribute('data-theme', 'dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

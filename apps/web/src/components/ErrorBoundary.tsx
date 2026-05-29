@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-6">
         <div
-          className="max-w-md w-full bg-card p-6 text-center shadow-[0_8px_32px_-12px_rgba(0,0,0,0.6)]"
+          className="max-w-md w-full bg-card p-6 text-center shadow-[var(--shadow-modal)]"
           style={{ borderRadius: 'var(--radius-lg)' }}
         >
           <h2 className="text-lg font-semibold text-foreground">Something went wrong</h2>

@@ -41,7 +41,7 @@ export function ToastHost() {
               enter: { duration: TOAST_IN_DURATION, ease: [0.2, 0.8, 0.2, 1] },
               exit: { duration: TOAST_OUT_DURATION, ease: [0.4, 0, 0.6, 1] },
             }}
-            className="bg-card/95 backdrop-blur-md px-3 py-1.5 text-xs font-mono text-foreground shadow-[0_6px_24px_-12px_rgba(0,0,0,0.6)]"
+            className="bg-card/95 backdrop-blur-md px-3 py-1.5 text-xs font-mono text-foreground shadow-[var(--shadow-toast)]"
             style={{ borderRadius: 'var(--radius)' }}
           >
             {m.text}

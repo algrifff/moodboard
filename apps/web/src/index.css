@@ -3,11 +3,21 @@
 @tailwind utilities;
 
 @layer base {
-  /* Drenched dark. The canvas IS the surface; everything is gravity around
-     it. All neutrals tinted ~285° (violet whisper) so the dark never reads
-     as pure grey. No light-mode counterpart — there is no light mode. */
+  /* Theme tokens. Two flavours of the same world — neutrals tinted ~285°
+     (violet whisper) so the surfaces never read as pure grey, accent kept
+     consistent in hue and re-tuned in luminance per theme so it reads
+     against both. The default `:root` block carries the dark tokens for
+     two reasons: zero-attribute fallback (pre-bootstrap, SSR-safe) and so
+     the geometry / shadcn-bridge tokens only get defined once.
+
+     The data-theme attribute is set by the inline bootstrap in
+     `index.html` BEFORE first paint to avoid FOUC. The runtime hook in
+     `lib/theme.ts` reads from `moodboard:theme` localStorage with values
+     `'system' | 'light' | 'dark'`; `system` defers to the OS pref. */
   :root {
-    /* Surfaces, dark → light by elevation */
+    color-scheme: dark;
+
+    /* Surfaces, darkest → lightest by elevation */
     --bg: oklch(13% 0.012 285); /* the canvas + the world */
     --bg-card: oklch(17% 0.014 285); /* primary panels, toolbar pill */
     --bg-elevated: oklch(20% 0.016 285); /* hover / press surfaces */
@@ -36,6 +46,28 @@
     --warning: oklch(80% 0.16 75);
     --success: oklch(75% 0.16 155);
 
+    /* Shadows. Single source of truth — every component reads from these
+       so we can flip them per theme without sweeping component files. The
+       dark set is deep + dark; the light set is shallower with a warm
+       violet undertone matching --bg's hue. */
+    --shadow-small: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-tight: 0 1px 4px rgba(0, 0, 0, 0.4);
+    --shadow-pill: 0 8px 32px -12px rgba(0, 0, 0, 0.6);
+    --shadow-card: 0 8px 32px -12px rgba(0, 0, 0, 0.6);
+    --shadow-popover: 0 10px 32px -12px rgba(0, 0, 0, 0.7);
+    --shadow-toast: 0 6px 24px -12px rgba(0, 0, 0, 0.6);
+    --shadow-modal: 0 24px 64px -24px rgba(0, 0, 0, 0.7);
+    --shadow-drawer: -12px 0 48px -12px rgba(0, 0, 0, 0.7);
+    /* Inset hairline applied to filled discs (swatches, agent avatars).
+       In dark mode a white inset reads as light catching the edge; in
+       light mode that would be invisible — drops to transparent. */
+    --swatch-inset: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+
+    /* Konva dot grid colour. Kept as a raw RGB triple so the layer can
+       compose `rgba(${--dot-rgb}, alpha)` at frame time without parsing
+       a full colour. White on dark; near-black on light. */
+    --dot-rgb: 255, 255, 255;
+
     /* Geometry */
     --radius: 2px; /* sharp by default; cards & buttons share this */
     --radius-lg: 6px; /* reserved for modals and the toolbar pill */
@@ -59,6 +91,47 @@
     --destructive-foreground: var(--bg);
     --input: var(--border);
     --ring: var(--accent);
+  }
+
+  /* LIGHT theme. Same 285° hue, inverted luminance ramp, accent dropped
+     to L=55% so it reads on white. Shadows are shallower and tinted with
+     the same violet rather than pure black — keeps the world consistent. */
+  :root[data-theme='light'] {
+    color-scheme: light;
+
+    --bg: oklch(98% 0.004 285);
+    --bg-card: oklch(100% 0 0);
+    --bg-elevated: oklch(95% 0.008 285);
+    --bg-muted: oklch(93% 0.01 285);
+    --bg-overlay: oklch(96% 0.004 285 / 0.72);
+
+    --border: oklch(83% 0.012 285);
+    --border-soft: oklch(89% 0.01 285);
+
+    --text: oklch(18% 0.012 285);
+    --text-soft: oklch(32% 0.014 285);
+    --text-mute: oklch(50% 0.014 285);
+    --text-faint: oklch(64% 0.014 285);
+
+    --accent: oklch(55% 0.22 285);
+    --accent-soft: oklch(92% 0.06 285);
+    --accent-fade: oklch(55% 0.22 285 / 0.12);
+
+    --danger: oklch(55% 0.22 25);
+    --warning: oklch(58% 0.18 75);
+    --success: oklch(50% 0.16 155);
+
+    --shadow-small: 0 1px 2px rgba(20, 16, 40, 0.08);
+    --shadow-tight: 0 1px 3px rgba(20, 16, 40, 0.1);
+    --shadow-pill: 0 6px 20px -8px rgba(20, 16, 40, 0.12);
+    --shadow-card: 0 6px 20px -8px rgba(20, 16, 40, 0.1);
+    --shadow-popover: 0 8px 24px -8px rgba(20, 16, 40, 0.15);
+    --shadow-toast: 0 4px 16px -8px rgba(20, 16, 40, 0.12);
+    --shadow-modal: 0 20px 48px -16px rgba(20, 16, 40, 0.2);
+    --shadow-drawer: -10px 0 36px -10px rgba(20, 16, 40, 0.15);
+    --swatch-inset: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+
+    --dot-rgb: 30, 25, 55;
   }
 
   body {

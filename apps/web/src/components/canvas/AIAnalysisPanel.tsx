@@ -240,7 +240,7 @@ function SummaryCard({
   const activeStyle: React.CSSProperties = {
     backgroundColor: 'var(--bg-card)',
     borderRadius: 'var(--radius-lg)',
-    boxShadow: '0 8px 32px -12px rgba(0,0,0,0.6)',
+    boxShadow: 'var(--shadow-card)',
     padding: 12,
     color: 'var(--text)',
     fontSize: 13,
@@ -595,7 +595,7 @@ function FullscreenDrawer({ state, onClose }: { state: SlotState; onClose: () =>
         bottom: 0,
         width: 'min(720px, max(480px, 50vw))',
         backgroundColor: 'var(--bg-card)',
-        boxShadow: '-12px 0 48px -12px rgba(0,0,0,0.7)',
+        boxShadow: 'var(--shadow-drawer)',
         zIndex: 80,
         display: 'flex',
         flexDirection: 'column',

@@ -80,6 +80,15 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - Extraction (`unpdf`) and thumbnailing (`pdfjs-dist` headless) happen **server-side**, never on the main browser thread
 - Preview modal lazy-loads `pdfjs-dist` (~600KB chunk)
 
+### Theming (dark + light)
+
+Two themes, same world. Neutrals tinted at the 285° hue in both, accent retuned per theme so it reads against the surface. Single source of truth: `apps/web/src/index.css`, with token blocks at `:root` (dark default) and `:root[data-theme="light"]`.
+
+- **Bootstrap** — inline script in `index.html` reads `localStorage["moodboard:theme"]` (`'system' | 'light' | 'dark'`) and sets `data-theme` on `<html>` _before_ first paint. No FOUC.
+- **Runtime** — `apps/web/src/lib/theme.ts` exposes `useTheme()` returning `{ pref, resolved, setPref }`. Hooks to `(prefers-color-scheme)` so `system` mode tracks the OS live.
+- **Shadows are tokens.** Never hardcode `rgba(0,0,0,…)` in a component — read from `--shadow-card`, `--shadow-popover`, `--shadow-modal`, `--shadow-pill`, `--shadow-toast`, `--shadow-drawer`, `--shadow-small`, `--shadow-tight`. Filled discs (swatches, agent avatars) use `var(--shadow-small), var(--swatch-inset)`.
+- **Konva can't read CSS vars.** The dot grid caches `--dot-rgb` (raw RGB triple) via `getComputedStyle`, re-reads on `data-theme` attribute change through a `MutationObserver`. Same pattern for any future Konva-rendered colour that should react to theme.
+
 ---
 
 ## Animation tokens (canonical)
@@ -164,4 +173,5 @@ When a phase is done:
 - Tweening selection/hover/drag-follow → must be 1:1 with input
 - `pdfjs-dist` on the main thread → server or worker
 - Type drift between web and api → both import from `packages/shared`
+- Hardcoded `rgba(0,…)` shadows in a component → use a `--shadow-*` token so light mode adjusts
 - Phase creep → finish current phase, ship, then start the next

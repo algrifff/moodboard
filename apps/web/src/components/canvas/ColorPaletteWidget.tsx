@@ -235,7 +235,7 @@ function SwatchCell({
           height: SWATCH,
           borderRadius: RADIUS,
           backgroundColor: hex,
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.10)',
+          boxShadow: 'var(--shadow-small), var(--swatch-inset)',
           cursor: 'pointer',
           padding: 0,
           position: 'relative',
@@ -249,7 +249,7 @@ function SwatchCell({
             height: 16,
             borderRadius: 999,
             backgroundColor: 'var(--bg-card)',
-            boxShadow: '0 1px 4px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-tight)',
           }}
           onClick={(e) => {
             e.preventDefault()
@@ -275,7 +275,7 @@ function SwatchCell({
             height: 16,
             borderRadius: 999,
             backgroundColor: locked ? 'var(--accent)' : 'var(--bg-card)',
-            boxShadow: '0 1px 4px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'var(--shadow-tight)',
           }}
           onClick={(e) => {
             e.preventDefault()
@@ -384,7 +384,7 @@ function EditPopover({
         // the analysis cards behind it.
         backgroundColor: 'var(--bg-card)',
         borderRadius: 'var(--radius-lg)',
-        boxShadow: '0 10px 32px -12px rgba(0,0,0,0.7)',
+        boxShadow: 'var(--shadow-popover)',
         padding: 10,
         zIndex: 50,
       }}

@@ -82,7 +82,7 @@ function AgentAvatar({ agentId, onRemove }: { agentId: AgentId; onRemove: () => 
           borderRadius: 999,
           backgroundColor: 'var(--accent)',
           color: 'var(--bg)',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.10)',
+          boxShadow: 'var(--shadow-small), var(--swatch-inset)',
         }}
         title={meta.label}
         aria-label={meta.label}
@@ -103,7 +103,7 @@ function AgentAvatar({ agentId, onRemove }: { agentId: AgentId; onRemove: () => 
           borderRadius: 999,
           backgroundColor: 'var(--bg-card)',
           color: 'var(--text)',
-          boxShadow: '0 1px 4px rgba(0, 0, 0, 0.5)',
+          boxShadow: 'var(--shadow-tight)',
         }}
         aria-label={`Remove ${meta.label}`}
         title={`Remove ${meta.label}`}
@@ -177,7 +177,7 @@ function AddAgentSlot({
             minWidth: 200,
             backgroundColor: 'var(--bg-card)',
             borderRadius: 'var(--radius-lg)',
-            boxShadow: '0 10px 32px -12px rgba(0,0,0,0.7)',
+            boxShadow: 'var(--shadow-popover)',
             padding: 4,
             zIndex: 60,
           }}
@@ -252,7 +252,7 @@ function PlayButton({
         backgroundColor: bg,
         color: fg,
         boxShadow: filled
-          ? '0 1px 3px rgba(0, 0, 0, 0.30), inset 0 0 0 1px rgba(255, 255, 255, 0.10)'
+          ? 'var(--shadow-small), var(--swatch-inset)'
           : 'inset 0 0 0 1px var(--border-soft)',
       }}
       aria-label={

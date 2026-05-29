@@ -126,7 +126,7 @@ export function PdfPreviewModal({
       }}
     >
       <div
-        className="bg-card overflow-hidden flex flex-col max-h-[92vh] shadow-[0_24px_64px_-24px_rgba(0,0,0,0.7)]"
+        className="bg-card overflow-hidden flex flex-col max-h-[92vh] shadow-[var(--shadow-modal)]"
         style={{ borderRadius: 'var(--radius-lg)' }}
       >
         <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-soft)]">

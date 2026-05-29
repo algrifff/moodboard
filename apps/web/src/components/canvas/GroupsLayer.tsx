@@ -69,7 +69,9 @@ export function GroupsLayer({
   boardId?: string
 }) {
   const groups = useMemo(() => {
-    const idGroups = proximityGroups(objects, 24)
+    // No explicit threshold — picks up the canonical GROUP_PROXIMITY_PX
+    // default from aabb.ts. Single source of truth for the rule.
+    const idGroups = proximityGroups(objects)
     const byId = new Map(objects.map((o) => [o.id, o]))
     return idGroups.map((ids) => {
       const items = ids.map((id) => byId.get(id)!).filter(Boolean)

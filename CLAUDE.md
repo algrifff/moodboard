@@ -6,7 +6,7 @@ Operational rules for working on this codebase. The product brief and phased pla
 
 ## What this app is
 
-Infinite-canvas mood board. Users drop images, sticky notes, text, and PDFs onto a canvas. When two or more items come within 24px of each other in world space they auto-group; a coloured outline appears, a palette widget extracts colours, and Claude analyses the group's mood/tone/themes. The "feel" of the grouping moment is the whole product.
+Infinite-canvas mood board. Users drop images, sticky notes, text, and PDFs onto a canvas. When two or more items come within 72px of each other in world space they auto-group; a coloured outline appears, a palette widget extracts colours, and Claude analyses the group's mood/tone/themes. The "feel" of the grouping moment is the whole product.
 
 ---
 
@@ -41,13 +41,13 @@ These are load-bearing. Don't drift from them without an explicit conversation.
 
 Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, paste, autocomplete for free.
 
-### Grouping rule (24px world-space proximity)
+### Grouping rule (72px world-space proximity)
 
-- Two items belong to the same group when their bounding boxes are within **24px in world space** — overlapping, touching edges, or with a gap ≤ 24px all count.
-- Group computation: build a proximity graph (nodes = items, edges = pairs within 24px), then connected components = groups.
+- Two items belong to the same group when their bounding boxes are within **72px in world space** — overlapping, touching edges, or with a gap ≤ 72px all count.
+- Group computation: build a proximity graph (nodes = items, edges = pairs within 72px), then connected components = groups.
 - A group requires **≥ 2 items**. Isolated items are not groups.
 - Live during drag: recompute throttled to ~30Hz. Show preview outline immediately when proximity is entered.
-- Item drops below 24px to all other group members → leaves the group. Group drops below 2 items → dissolves.
+- Item drops below 72px to all other group members → leaves the group. Group drops below 2 items → dissolves.
 
 ### Group outline visuals (canonical)
 
@@ -130,7 +130,7 @@ Durations: group outline appear 280ms, palette swatch 220ms (30ms stagger), AI p
 
 The interaction layer is tested manually phase-by-phase. The deterministic logic is unit-tested. Aim to cover at minimum:
 
-- `proximityGroups(objects, threshold = 24)` — boundary cases: exactly 24px gap, overlap, single-item input, dragging an item across the threshold
+- `proximityGroups(objects, threshold = GROUP_PROXIMITY_PX)` — boundary cases: exactly at the threshold gap, overlap, single-item input, dragging an item across the threshold
 - `aabbOverlap(rectA, rectB)` and `aabbDistance(rectA, rectB)` — touching edges, identical rects, far apart
 - `worldToScreen(point, transform)` and `screenToWorld(point, transform)` — round-trip identity, edge zoom values (0.1×, 4×)
 - `groupBoundingBox(objects, padding = 20)` — empty, single, many objects

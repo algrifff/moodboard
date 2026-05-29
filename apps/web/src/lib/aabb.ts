@@ -36,7 +36,16 @@ export function aabbDistance(a: Rect, b: Rect): number {
   return Math.sqrt(dx * dx + dy * dy)
 }
 
-export function proximityGroups(objects: CanvasObject[], threshold = 24): string[][] {
+// Canonical world-space proximity for auto-grouping. CLAUDE.md is the
+// other source of truth — keep them in sync. Bumped to 72 (from the
+// original 24) so the grouping feels generous: a user doesn't have to
+// nudge items pixel-close before the outline forms.
+export const GROUP_PROXIMITY_PX = 72
+
+export function proximityGroups(
+  objects: CanvasObject[],
+  threshold = GROUP_PROXIMITY_PX,
+): string[][] {
   const n = objects.length
   if (n < 2) return []
   const parent: number[] = objects.map((_, i) => i)

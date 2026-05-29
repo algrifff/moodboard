@@ -49,6 +49,18 @@ export const aiAnalysisSchema = z.object({
   hooks: z.array(z.string()),
   statements: z.array(z.string()),
   tropes: z.array(z.string()),
+  logo: z.object({
+    url: z.string(),
+    reason: z.string(),
+  }),
+  fonts: z.array(
+    z.object({
+      name: z.string(),
+      category: z.string(),
+      role: z.string(),
+      sample: z.string(),
+    }),
+  ),
 })
 
 export const sectionedParagraphsSchema = z.object({
@@ -83,12 +95,18 @@ export const synthesisBriefSchema = z.object({
   ),
   typography: z.object({
     feel: z.string(),
-    samples: z.array(
-      z.object({
-        role: z.string(),
-        text: z.string(),
-      }),
-    ),
+  }),
+  fonts: z.array(
+    z.object({
+      name: z.string(),
+      category: z.string(),
+      role: z.string(),
+      sample: z.string(),
+    }),
+  ),
+  logo: z.object({
+    url: z.string(),
+    reason: z.string(),
   }),
   references: z.array(z.string()),
   tensions: z.array(z.string()),

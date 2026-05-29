@@ -119,12 +119,17 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     if (o.type === 'image' && isImageData(o.data)) {
       const block = await loadImageBlock(o.data.url)
       if (block) {
+        // Label the image with its URL so the AD can write the URL back
+        // when identifying a logo. Without this, agents have no stable
+        // identifier to refer to images.
+        content.push({ type: 'text', text: `Image URL: ${o.data.url}` })
         content.push(block)
         imageCount += 1
       }
     } else if (o.type === 'pdf' && isPdfData(o.data)) {
       const block = await loadPdfThumbBlock(o.data.thumbnailUrl)
       if (block) {
+        content.push({ type: 'text', text: `PDF thumbnail URL: ${o.data.thumbnailUrl}` })
         content.push(block)
         pdfCount += 1
       }
@@ -147,7 +152,12 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     } else if (o.type === 'text' && isTextData(o.data)) {
       textCount += 1
       const t = o.data.text.trim() || '(empty)'
-      textLines.push(`- Text label: "${t}"`)
+      // Surface the user-chosen font + size — this is ground truth for the
+      // AD's `fonts` field. Without it the AD would have to guess from
+      // image evidence alone.
+      textLines.push(
+        `- Text label: "${t}" [font: ${o.data.font}, size: ${Math.round(o.data.fontSize)}px]`,
+      )
     } else if (o.type === 'pdf' && isPdfData(o.data)) {
       const raw = o.data.extractedText.trim()
       if (raw) {
@@ -238,16 +248,18 @@ export async function analyzeGroup(
 export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   // Suffix bumps invalidate the on-disk cache when the schema changes.
   // v3 = agent registry introduction (different cache bucket per agent).
-  const v = 'v3'
+  // v4 = AIAnalysis gained logo + fonts fields; prompt + content builder
+  //      changed (image URL labels, text-node font metadata).
+  const v = 'v4'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
 export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): string {
-  // v3 — added positioning / references / tensions / bodyCopy fields. Old
-  // v2 cache entries would parse (extra fields tolerated by zod by default)
-  // but wouldn't have the new content, so we'd serve stale stripped-down
-  // briefs from cache. Bump to force a fresh synth.
-  const v = 'v3'
+  // v3 — added positioning / references / tensions / bodyCopy fields.
+  // v4 — added logo + fonts; dropped typography.samples (consolidated
+  //      into fonts). AD prompt changes (image URL labels, text-node
+  //      font metadata) also affect synth inputs, so bumping here too.
+  const v = 'v4'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

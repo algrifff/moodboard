@@ -669,10 +669,12 @@ function BriefReadout({ data }: { data: SynthesisBrief }) {
         <ThroughlineBlock text={data.throughline} source={data.throughlineSource} />
       )}
       {hasPositioning && <PositioningBlock data={data.positioning} />}
-      {data.palette.length > 0 && <PaletteBlock items={data.palette} />}
-      {data.typography.feel.trim().length > 0 && (
-        <TypographyBlock feel={data.typography.feel} samples={data.typography.samples} />
+      {data.logo.url.trim().length > 0 && (
+        <LogoBlock url={data.logo.url} reason={data.logo.reason} />
       )}
+      {data.palette.length > 0 && <PaletteBlock items={data.palette} />}
+      {data.typography.feel.trim().length > 0 && <TypographyBlock feel={data.typography.feel} />}
+      {data.fonts.length > 0 && <FontsBlock items={data.fonts} />}
       {data.references.length > 0 && <ReferencesBlock items={data.references} />}
       {data.tensions.length > 0 && <TensionsBlock items={data.tensions} />}
       {data.audiences.length > 0 && <AudienceBlock items={data.audiences} />}
@@ -820,52 +822,103 @@ const SAMPLE_SIZES: Record<string, { size: number; family: string; weight: numbe
   caption: { size: 11, family: 'inherit', weight: 500 },
 }
 
-function TypographyBlock({
-  feel,
-  samples,
-}: {
-  feel: string
-  samples: { role: string; text: string }[]
-}) {
+// Typography block now carries only the `feel` line. Concrete typeface
+// samples moved to FontsBlock (Move A consolidation).
+function TypographyBlock({ feel }: { feel: string }) {
   return (
     <div>
       <BlockHeading>Typography</BlockHeading>
       <div className="mt-1.5 text-[12.5px] text-[var(--text-soft)] italic">{feel}</div>
-      {samples.length > 0 && (
-        <div
-          className="mt-3 space-y-2.5"
-          style={{
-            padding: '14px 14px',
-            borderRadius: 'var(--radius)',
-            backgroundColor: 'var(--bg-elevated)',
-          }}
-        >
-          {samples.map((s, i) => {
-            const sz = SAMPLE_SIZES[s.role.toLowerCase()] ?? SAMPLE_SIZES.body!
-            const isCaption = s.role.toLowerCase() === 'caption'
-            return (
-              <div key={i}>
-                <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] mb-0.5">
-                  {s.role}
-                </div>
-                <div
-                  className="text-foreground"
-                  style={{
-                    fontSize: sz.size,
-                    fontFamily: sz.family,
-                    fontWeight: sz.weight,
-                    lineHeight: isCaption ? 1.4 : 1.25,
-                    letterSpacing: isCaption ? '0.08em' : undefined,
-                    textTransform: isCaption ? 'uppercase' : undefined,
-                  }}
-                >
-                  {s.text}
-                </div>
+    </div>
+  )
+}
+
+// Per-typeface card: role label + name (or category fallback) + sample
+// rendered at the role's display size. Stacks vertically so each typeface
+// reads as its own piece of the system.
+function FontsBlock({
+  items,
+}: {
+  items: { name: string; category: string; role: string; sample: string }[]
+}) {
+  return (
+    <div>
+      <BlockHeading>Fonts</BlockHeading>
+      <div
+        className="mt-2 space-y-3"
+        style={{
+          padding: '14px 14px',
+          borderRadius: 'var(--radius)',
+          backgroundColor: 'var(--bg-elevated)',
+        }}
+      >
+        {items.map((f, i) => {
+          const sz = SAMPLE_SIZES[f.role.toLowerCase()] ?? SAMPLE_SIZES.body!
+          const isCaption = f.role.toLowerCase() === 'caption'
+          // Name takes precedence; fall back to category when the AD only
+          // had a typographic family to describe.
+          const label = f.name.trim().length > 0 ? f.name : f.category
+          return (
+            <div key={i}>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] mb-0.5 flex items-baseline gap-2">
+                <span>{f.role}</span>
+                <span className="text-[var(--text-mute)] normal-case tracking-normal">
+                  · {label}
+                </span>
               </div>
-            )
-          })}
-        </div>
-      )}
+              <div
+                className="text-foreground"
+                style={{
+                  fontSize: sz.size,
+                  fontFamily: sz.family,
+                  fontWeight: sz.weight,
+                  lineHeight: isCaption ? 1.4 : 1.25,
+                  letterSpacing: isCaption ? '0.08em' : undefined,
+                  textTransform: isCaption ? 'uppercase' : undefined,
+                }}
+              >
+                {f.sample}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// The brand's mark — image displayed at logo size on an elevated surface
+// with the AD's one-clause reason underneath. Click-through is left out;
+// this is a read-only artifact in the brief.
+function LogoBlock({ url, reason }: { url: string; reason: string }) {
+  return (
+    <div>
+      <BlockHeading>Logo</BlockHeading>
+      <div
+        className="mt-2 flex flex-col items-center gap-3"
+        style={{
+          padding: '20px 16px',
+          borderRadius: 'var(--radius)',
+          backgroundColor: 'var(--bg-elevated)',
+        }}
+      >
+        <img
+          src={url}
+          alt="Brand mark"
+          loading="lazy"
+          style={{
+            maxWidth: '60%',
+            maxHeight: 120,
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
+        {reason.trim().length > 0 && (
+          <div className="text-[11.5px] text-[var(--text-mute)] italic leading-snug text-center">
+            {reason}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

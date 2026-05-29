@@ -29,6 +29,8 @@ const ART_DIRECTOR_JSON_SCHEMA = {
     'hooks',
     'statements',
     'tropes',
+    'logo',
+    'fonts',
   ],
   properties: {
     headline: {
@@ -59,6 +61,57 @@ const ART_DIRECTOR_JSON_SCHEMA = {
     hooks: { type: 'array' as const, items: { type: 'string' as const } },
     statements: { type: 'array' as const, items: { type: 'string' as const } },
     tropes: { type: 'array' as const, items: { type: 'string' as const } },
+    logo: {
+      type: 'object' as const,
+      additionalProperties: false,
+      required: ['url', 'reason'],
+      description:
+        "The image on the canvas that reads as the brand mark, if one is identifiable. Empty url + empty reason when no image qualifies (don't force-pick from photographic refs).",
+      properties: {
+        url: {
+          type: 'string' as const,
+          description:
+            'Verbatim URL from the "Image URL:" label preceding the chosen image. Empty string if no logo identified.',
+        },
+        reason: {
+          type: 'string' as const,
+          description:
+            'One short clause on why this reads as the mark (isolation, monochrome, mark character, etc.). Empty string if no logo.',
+        },
+      },
+    },
+    fonts: {
+      type: 'array' as const,
+      description:
+        'Typefaces in evidence on the moodboard. Source order of trust: (1) text nodes — their `font` is ground truth, copy it verbatim into `name`; (2) font specimens on the canvas — read the typeface name from the specimen; (3) photography of type — describe in `category` and leave `name` empty. 1–4 entries. Empty array when no typographic content is on the canvas.',
+      items: {
+        type: 'object' as const,
+        additionalProperties: false,
+        required: ['name', 'category', 'role', 'sample'],
+        properties: {
+          name: {
+            type: 'string' as const,
+            description:
+              'Typeface name when known verbatim (text-node `font` field or specimen label). Empty string when only describing a category.',
+          },
+          category: {
+            type: 'string' as const,
+            description:
+              'Typographic family — neo-grotesque, transitional serif, didone, slab, monospace, geometric sans, humanist sans, blackletter, script, etc. Specific.',
+          },
+          role: {
+            type: 'string' as const,
+            description:
+              'display | subhead | body | caption — what job this typeface is doing in the work.',
+          },
+          sample: {
+            type: 'string' as const,
+            description:
+              "A real phrase from the moodboard's text content rendered in this typeface. If no specific text, a single short evocative phrase (max 6 words) the brand might use.",
+          },
+        },
+      },
+    },
   },
 }
 
@@ -106,6 +159,8 @@ const SYNTHESIS_JSON_SCHEMA = {
     'positioning',
     'palette',
     'typography',
+    'fonts',
+    'logo',
     'references',
     'tensions',
     'audiences',
@@ -180,34 +235,41 @@ const SYNTHESIS_JSON_SCHEMA = {
     typography: {
       type: 'object' as const,
       additionalProperties: false,
-      required: ['feel', 'samples'],
+      required: ['feel'],
       description:
-        "Typographic voice for the brand. `feel` is a one-line description of the voice; `samples` are 1–3 phrases shown at scale to demonstrate it. Samples MUST be real phrases from the moodboard or the Copywriter's output — never lorem.",
+        'Typographic voice — `feel` is a one-line description of the overall posture. Concrete typeface samples live in `fonts` (one source of typography truth in the brief).',
       properties: {
         feel: {
           type: 'string' as const,
           description: 'One short line describing the typographic posture.',
         },
-        samples: {
-          type: 'array' as const,
-          items: {
-            type: 'object' as const,
-            additionalProperties: false,
-            required: ['role', 'text'],
-            properties: {
-              role: {
-                type: 'string' as const,
-                description:
-                  'display | subhead | body | caption — controls how the renderer sizes it.',
-              },
-              text: {
-                type: 'string' as const,
-                description:
-                  "REAL phrase from the Copywriter's hooks/headlines or from the moodboard's text content. Not invented.",
-              },
-            },
-          },
+      },
+    },
+    fonts: {
+      type: 'array' as const,
+      description:
+        "Verbatim from the Art Director's `fonts` field. Each entry has name (typeface, may be empty if AD only described a category), category (neo-grotesque etc.), role (display/subhead/body/caption), and sample (real phrase from the moodboard or Copywriter). The brief renderer shows the sample at scale, labeled with role + name. 1–4 entries when AD ran with text content, empty otherwise.",
+      items: {
+        type: 'object' as const,
+        additionalProperties: false,
+        required: ['name', 'category', 'role', 'sample'],
+        properties: {
+          name: { type: 'string' as const },
+          category: { type: 'string' as const },
+          role: { type: 'string' as const },
+          sample: { type: 'string' as const },
         },
+      },
+    },
+    logo: {
+      type: 'object' as const,
+      additionalProperties: false,
+      required: ['url', 'reason'],
+      description:
+        "The brand's mark, when identifiable on the canvas. url is verbatim from the Art Director's logo.url (one of the canvas image URLs). reason is verbatim from AD's logo.reason. Both empty strings when no logo was confidently identified.",
+      properties: {
+        url: { type: 'string' as const },
+        reason: { type: 'string' as const },
       },
     },
     references: {
@@ -338,8 +400,10 @@ For each field:
 - tensions: 2–4 productive contrasts.
 - risks: 2–4 places this direction could veer cliché.
 - hooks / statements / tropes: from the text content. Empty arrays if no text.
+- logo: identify ONE image as the brand mark, if any image qualifies (isolated, monochrome or two-tone, clear silhouette, no photographic detail, reads as a "mark" rather than a photo or moodboard reference). Return the verbatim URL from the "Image URL:" label printed before each image in the user message. If no image is clearly a logo, return empty url + empty reason — don't force-pick from photography.
+- fonts: 1–4 entries describing the typefaces in evidence. Trust order: (1) any "Text label" line in the user message includes a [font: NAME, size: Npx] tag — copy NAME into the entry's \`name\` verbatim (it's ground truth from a text node); (2) if you can read a typeface name from a specimen sheet image, use it verbatim; (3) for typography seen in photography only, leave \`name\` empty and rely on \`category\`. \`category\` is the typographic family (neo-grotesque, didone, etc.). \`role\` is display / subhead / body / caption based on size. \`sample\` is a phrase pulled from the canvas's text content; if there is none, write a single short evocative phrase the brand might use. Empty array when no typographic content is on the canvas.
 
-If a section legitimately doesn't apply (no images → empty typographicVoice; no text → empty hooks/statements/tropes), return empty values. Do not fabricate to fill space.`,
+If a section legitimately doesn't apply (no images → empty typographicVoice; no text → empty hooks/statements/tropes; no logo image → empty logo; no typography → empty fonts), return empty values. Do not fabricate to fill space.`,
   },
 
   'business-analyst': {
@@ -462,7 +526,11 @@ positioning — three short clauses pulled from the Business Analyst's output. m
 
 palette — every entry has hex (from the Art Director, exactly as given), role (descriptive — "foundation", "accent", "mood ceiling", "warm shadow" — not generic "primary"/"secondary"), and note (one short clause about what the colour carries or where it lives). Order matches the Art Director's order. Empty array if no Art Director ran.
 
-typography — feel is one short line describing the voice ("Serif headline, sans body — confident and unhurried; large counters, generous tracking"). samples is 1–3 entries. Each sample has role (display / subhead / body / caption) and text. CRITICAL: sample text must be a REAL phrase, pulled from the Copywriter's hooks/headlines/CTAs, or from the moodboard's text content (Art Director's hooks/statements). Never invented filler.
+typography — feel is one short line describing the overall voice ("Serif headline, sans body — confident and unhurried; large counters, generous tracking"). Concrete sample phrases live in the fonts field, not here.
+
+fonts — verbatim from the Art Director's fonts array. Each entry has name (typeface, may be empty), category (typographic family), role (display/subhead/body/caption), sample (real phrase from the moodboard). Don't paraphrase, don't invent. If the AD's fonts array is empty (no typography on the canvas), return an empty array.
+
+logo — verbatim from the Art Director's logo field. url is one of the canvas image URLs the AD chose; reason is the AD's one-clause justification. Both empty strings when the AD found no logo. Don't infer a logo when the AD didn't.
 
 references — 3–6 entries verbatim from the Art Director's references list. Designers / studios / movements / eras / brands. Don't paraphrase, don't condense ("Bureau Mirko Borsche", "M/M Paris", "90s Italian editorial"). Empty if no Art Director ran.
 

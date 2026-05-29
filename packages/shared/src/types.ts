@@ -44,6 +44,20 @@ export type AIAnalysis = {
   hooks: string[]
   statements: string[]
   tropes: string[]
+
+  // Brand artifacts the AD identified from canvas content. `url` is empty
+  // when no confident logo was found; `fonts` is empty when no typographic
+  // ground truth (text nodes, font specimens) was present.
+  logo: {
+    url: string // /api/files/... matching one of the images on the canvas
+    reason: string // one short clause on why this reads as the mark
+  }
+  fonts: {
+    name: string // typeface name from a text node's `.font` or a specimen
+    category: string // 'neo-grotesque', 'transitional serif', etc.
+    role: string // 'display' | 'body' | 'caption'
+    sample: string // verbatim phrase from the moodboard rendered at scale
+  }[]
 }
 
 // Generic output shape used by every agent except the Art Director. A short
@@ -59,11 +73,12 @@ export type SectionedParagraphs = {
 // run, the block's values stay empty and the block self-skips.
 //
 // CONTRIBUTOR MAP (add new agents by extending this):
-//   Art Director       → palette, typography(feel), references, tensions, watchFors
+//   Art Director       → palette, typography(feel), fonts, logo, references,
+//                        tensions, watchFors
 //   Business Analyst   → positioning
 //   Audience Profiler  → audiences
 //   Channel Strategist → channels
-//   Copywriter         → hooks, statements, bodyCopy, typography(samples)
+//   Copywriter         → hooks, statements, bodyCopy, fonts(sample text source)
 //   (cross-agent)      → throughline, notes
 export type SynthesisBrief = {
   // The single concrete sentence the brief hangs on. May be a phrase pulled
@@ -82,11 +97,27 @@ export type SynthesisBrief = {
   // Colours pulled from the Art Director's palette, ordered.
   palette: { hex: string; role: string; note: string }[]
 
-  // Typographic voice — feel + 1-3 sample phrases (REAL copy from the
-  // moodboard or copywriter, not lorem).
+  // Typographic voice — one-line description of the overall feel.
+  // Concrete typeface samples live in `fonts` (Move A consolidation).
   typography: {
     feel: string
-    samples: { role: string; text: string }[]
+  }
+
+  // Typefaces in use — name + category + role + sample phrase. The single
+  // source of structured typography in the brief: TypographyBlock renders
+  // the feel line, FontsBlock renders these samples at scale.
+  fonts: {
+    name: string // typeface name when known, '' if descriptive only
+    category: string
+    role: string // 'display' | 'subhead' | 'body' | 'caption'
+    sample: string // real phrase from the moodboard
+  }[]
+
+  // The brand's mark, when one is identifiable on the canvas. `url` empty
+  // means no confident logo found; renderer skips the block.
+  logo: {
+    url: string
+    reason: string
   }
 
   // Designers / studios / movements / eras / brands this work is in

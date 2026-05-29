@@ -144,18 +144,18 @@ describe('proximityGroups', () => {
     expect(proximityGroups([square('a', 0, 0)], 24)).toEqual([])
   })
 
-  it('exposes a canonical proximity threshold (72px world space)', () => {
+  it('exposes a canonical proximity threshold (48px world space)', () => {
     // CLAUDE.md documents this number — if the constant changes, update
     // CLAUDE.md and the rule callouts at the same time.
-    expect(GROUP_PROXIMITY_PX).toBe(72)
+    expect(GROUP_PROXIMITY_PX).toBe(48)
   })
 
   it('uses the canonical threshold when no explicit value is passed', () => {
-    // 100×100 square at (0,0); second square at (172,0) leaves a 72-px
+    // 100×100 square at (0,0); second square at (148,0) leaves a 48-px
     // gap — exactly at the threshold, should group.
-    expect(proximityGroups([square('a', 0, 0), square('b', 172, 0)])).toEqual([['a', 'b']])
-    // 173-px offset = 73-px gap, just past the threshold, should NOT group.
-    expect(proximityGroups([square('a', 0, 0), square('b', 173, 0)])).toEqual([])
+    expect(proximityGroups([square('a', 0, 0), square('b', 148, 0)])).toEqual([['a', 'b']])
+    // 149-px offset = 49-px gap, just past the threshold, should NOT group.
+    expect(proximityGroups([square('a', 0, 0), square('b', 149, 0)])).toEqual([])
   })
 
   it('groups two items within 24px', () => {

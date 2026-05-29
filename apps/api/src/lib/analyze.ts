@@ -117,6 +117,15 @@ type ContentBlock = ImageBlock | { type: 'text'; text: string }
 async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[]> {
   const content: ContentBlock[] = []
 
+  // Collect font specimens up front so we can emit them as their own
+  // dedicated block at the top of the message. When they were buried
+  // inside the regular text-lines section, the AD often ignored them
+  // in favour of typography it inferred from PDF excerpts.
+  const fonts: FontData[] = []
+  for (const o of objects) {
+    if (o.type === 'font' && isFontData(o.data)) fonts.push(o.data)
+  }
+
   let imageCount = 0
   let pdfCount = 0
   for (const o of objects) {
@@ -148,7 +157,6 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const PDF_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
-  let fontCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -163,23 +171,6 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       textLines.push(
         `- Text label: "${t}" [font: ${o.data.font}, size: ${Math.round(o.data.fontSize)}px]`,
       )
-    } else if (o.type === 'font' && isFontData(o.data)) {
-      fontCount += 1
-      // Font specimen object — the user uploaded this font file and
-      // dropped it on the canvas. The family name is the user's explicit
-      // declaration of which typeface this brand uses. Treat it as the
-      // highest-trust source for the AD's `fonts` field.
-      textLines.push(
-        `- Font specimen on canvas: family "${o.data.family}" (user-uploaded ${
-          o.data.url.endsWith('.woff2')
-            ? 'woff2'
-            : o.data.url.endsWith('.woff')
-              ? 'woff'
-              : o.data.url.endsWith('.otf')
-                ? 'otf'
-                : 'ttf'
-        }). Treat this as a deliberately-chosen brand typeface.`,
-      )
     } else if (o.type === 'pdf' && isPdfData(o.data)) {
       const raw = o.data.extractedText.trim()
       if (raw) {
@@ -189,8 +180,35 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     }
   }
 
+  // BRAND FONTS — emitted before any other text content. This is the
+  // highest-trust signal for the AD's `fonts` field: the user
+  // physically uploaded a font file and dropped it on the moodboard.
+  // PDFs and photography are secondary; uploaded fonts dictate.
+  if (fonts.length > 0) {
+    const lines = fonts
+      .map((f, i) => {
+        const fmt = f.url.endsWith('.woff2')
+          ? 'woff2'
+          : f.url.endsWith('.woff')
+            ? 'woff'
+            : f.url.endsWith('.otf')
+              ? 'otf'
+              : 'ttf'
+        return `  ${i + 1}. "${f.family}" (uploaded ${fmt})`
+      })
+      .join('\n')
+    content.push({
+      type: 'text',
+      text:
+        '=== BRAND FONTS — UPLOADED BY THE USER ===\n' +
+        "The user has uploaded the following typeface file(s) and placed them on the moodboard. These are the brand's deliberately-chosen typefaces. Each of these MUST appear as an entry in your `fonts` output field, with `name` copied verbatim. Do not skip an uploaded font in favour of typography you inferred from a PDF excerpt or an image — uploaded fonts override every other source.\n\n" +
+        lines +
+        '\n=== END BRAND FONTS ===',
+    })
+  }
+
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fontCount} font specimen(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0
@@ -203,7 +221,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     content.push({
       type: 'text',
       text:
-        'PDF contents (treat as documents being referenced, not the final design — read for ideas, voice, subject matter):\n\n' +
+        "PDF contents (treat as reference material, not the final design — read for subject matter, voice, and visual references). PDF typography is incidental and does NOT dictate the brand's chosen fonts; only uploaded font specimens and text-node font tags do.\n\n" +
         pdfExcerpts.join('\n\n'),
     })
   }
@@ -274,7 +292,11 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      changed (image URL labels, text-node font metadata).
   // v5 = font specimen objects emit ground-truth family name in the
   //      content builder; group header gained a font-count line.
-  const v = 'v5'
+  // v6 = uploaded fonts emitted as a dedicated top-of-prompt BRAND
+  //      FONTS block with MUST-INCLUDE instructions; PDF excerpt
+  //      preamble explicitly notes typography in PDFs is incidental;
+  //      AD prompt restructured to enforce strict trust hierarchy.
+  const v = 'v6'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -285,7 +307,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //      font metadata) also affect synth inputs, so bumping here too.
   // v5 — font specimen objects emit ground-truth family in the AD
   //      content; downstream synthesis input changes too.
-  const v = 'v5'
+  // v6 — uploaded fonts now in a dedicated BRAND FONTS block at the
+  //      top of the AD prompt; downstream synth inputs change.
+  const v = 'v6'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

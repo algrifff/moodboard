@@ -6,7 +6,7 @@ Operational rules for working on this codebase. The product brief and phased pla
 
 ## What this app is
 
-Infinite-canvas mood board. Users drop images, sticky notes, text, and PDFs onto a canvas. When two or more items come within 72px of each other in world space they auto-group; a coloured outline appears, a palette widget extracts colours, and Claude analyses the group's mood/tone/themes. The "feel" of the grouping moment is the whole product.
+Infinite-canvas mood board. Users drop images, sticky notes, text, and PDFs onto a canvas. When two or more items come within 48px of each other in world space they auto-group; a coloured outline appears, a palette widget extracts colours, and Claude analyses the group's mood/tone/themes. The "feel" of the grouping moment is the whole product.
 
 ---
 
@@ -41,13 +41,13 @@ These are load-bearing. Don't drift from them without an explicit conversation.
 
 Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, paste, autocomplete for free.
 
-### Grouping rule (72px world-space proximity)
+### Grouping rule (48px world-space proximity)
 
-- Two items belong to the same group when their bounding boxes are within **72px in world space** — overlapping, touching edges, or with a gap ≤ 72px all count.
-- Group computation: build a proximity graph (nodes = items, edges = pairs within 72px), then connected components = groups.
+- Two items belong to the same group when their bounding boxes are within **48px in world space** — overlapping, touching edges, or with a gap ≤ 48px all count.
+- Group computation: build a proximity graph (nodes = items, edges = pairs within 48px), then connected components = groups.
 - A group requires **≥ 2 items**. Isolated items are not groups.
 - Live during drag: recompute throttled to ~30Hz. Show preview outline immediately when proximity is entered.
-- Item drops below 72px to all other group members → leaves the group. Group drops below 2 items → dissolves.
+- Item drops below 48px to all other group members → leaves the group. Group drops below 2 items → dissolves.
 
 ### Group outline visuals (canonical)
 

@@ -37,10 +37,11 @@ export function aabbDistance(a: Rect, b: Rect): number {
 }
 
 // Canonical world-space proximity for auto-grouping. CLAUDE.md is the
-// other source of truth — keep them in sync. Bumped to 72 (from the
-// original 24) so the grouping feels generous: a user doesn't have to
-// nudge items pixel-close before the outline forms.
-export const GROUP_PROXIMITY_PX = 72
+// other source of truth — keep them in sync. Sits at 48 (2× the
+// original 24): generous enough that users don't have to nudge items
+// pixel-close, tight enough that unrelated neighbours don't accidentally
+// merge into a group.
+export const GROUP_PROXIMITY_PX = 48
 
 export function proximityGroups(
   objects: CanvasObject[],

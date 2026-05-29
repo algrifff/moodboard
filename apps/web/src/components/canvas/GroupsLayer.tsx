@@ -138,36 +138,39 @@ export function GroupsLayer({
     setAiPaletteByGroup(nextPalette)
   }, [boardId])
 
-  // Save to localStorage whenever any of the persisted fields change.
-  // Debounced 200ms so a flurry of state updates writes once. Skipped
-  // until hydration completes for this boardId so we don't overwrite the
-  // stored state with an empty initial in-memory state on first mount.
+  // Save to localStorage on every persisted-field change. Synchronous, no
+  // debounce — none of these fields change at high frequency (selection
+  // toggles, run start/end, palette push) so the cost is microseconds per
+  // write. The earlier debounced version cancelled its pending save in
+  // the cleanup, which meant navigating away before the 200ms elapsed
+  // dropped the most recent state on the floor.
+  //
+  // Skipped until hydration completes for this boardId so we don't
+  // overwrite the stored state with an empty initial in-memory state on
+  // first mount.
   useEffect(() => {
     if (!boardId) return
     if (hydratedForBoardRef.current !== boardId) return
-    const id = setTimeout(() => {
-      const state: PersistedBoard = {}
-      const allKeys = new Set<string>([
-        ...Object.keys(displayByGroup),
-        ...Object.keys(lastRunSelectionByGroup),
-        ...Object.keys(selectedByGroup),
-        ...Object.keys(aiPaletteByGroup),
-      ])
-      for (const key of allKeys) {
-        const display = displayByGroup[key] ?? IDLE_SLOT
-        // Don't persist the loading state — it would deadlock the panel
-        // if the user closes the tab mid-run.
-        if (display.kind === 'loading') continue
-        state[key] = {
-          display,
-          lastRunSelection: lastRunSelectionByGroup[key] ?? [],
-          currentSelection: selectedByGroup[key] ?? [],
-          aiPalette: aiPaletteByGroup[key] ?? [],
-        }
+    const state: PersistedBoard = {}
+    const allKeys = new Set<string>([
+      ...Object.keys(displayByGroup),
+      ...Object.keys(lastRunSelectionByGroup),
+      ...Object.keys(selectedByGroup),
+      ...Object.keys(aiPaletteByGroup),
+    ])
+    for (const key of allKeys) {
+      const display = displayByGroup[key] ?? IDLE_SLOT
+      // Don't persist the loading state — it would deadlock the panel
+      // if the user closes the tab mid-run.
+      if (display.kind === 'loading') continue
+      state[key] = {
+        display,
+        lastRunSelection: lastRunSelectionByGroup[key] ?? [],
+        currentSelection: selectedByGroup[key] ?? [],
+        aiPalette: aiPaletteByGroup[key] ?? [],
       }
-      saveBoardState(boardId, state)
-    }, 200)
-    return () => clearTimeout(id)
+    }
+    saveBoardState(boardId, state)
   }, [boardId, displayByGroup, lastRunSelectionByGroup, selectedByGroup, aiPaletteByGroup])
 
   // Purge state for groups that no longer exist on the canvas. The save

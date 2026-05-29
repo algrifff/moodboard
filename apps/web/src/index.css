@@ -197,6 +197,84 @@
   border-width: 2px;
 }
 
+/* Markdown styling for notes. Sizes are em-based so when useFitText
+   scales the root font-size, headings/lists scale proportionally. Margins
+   are tight so a small note doesn't get sucked dry of useful space by
+   default browser spacing. */
+.note-markdown h1,
+.note-markdown h2,
+.note-markdown h3,
+.note-markdown h4 {
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.4em 0 0.2em;
+}
+.note-markdown h1 {
+  font-size: 1.5em;
+}
+.note-markdown h2 {
+  font-size: 1.25em;
+}
+.note-markdown h3 {
+  font-size: 1.1em;
+}
+.note-markdown h4 {
+  font-size: 1em;
+}
+.note-markdown p {
+  margin: 0.3em 0;
+}
+.note-markdown ul,
+.note-markdown ol {
+  margin: 0.3em 0;
+  padding-left: 1.2em;
+}
+.note-markdown li {
+  margin: 0.1em 0;
+}
+.note-markdown strong {
+  font-weight: 700;
+}
+.note-markdown em {
+  font-style: italic;
+}
+.note-markdown blockquote {
+  border-left: 2px solid currentColor;
+  padding-left: 0.6em;
+  margin: 0.3em 0;
+  opacity: 0.85;
+}
+.note-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0.05em 0.3em;
+  background-color: rgba(0, 0, 0, 0.08);
+  border-radius: 3px;
+}
+.note-markdown pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0.5em;
+  background-color: rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  overflow: auto;
+  margin: 0.3em 0;
+}
+.note-markdown pre code {
+  background: none;
+  padding: 0;
+}
+.note-markdown a {
+  color: currentColor;
+  text-decoration: underline;
+}
+.note-markdown :first-child {
+  margin-top: 0;
+}
+.note-markdown :last-child {
+  margin-bottom: 0;
+}
+
 /* Loading shimmer — exception to the gradient-text ban in CLAUDE.md.
    This is functional state indication (motion conveying "we're working"),
    not decoration. A bright peak sweeps through the muted text, masked to

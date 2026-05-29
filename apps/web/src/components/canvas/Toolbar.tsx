@@ -7,7 +7,6 @@ import {
   NoteBlank,
   Sun,
   TextAa,
-  TextT,
   Trash,
   type Icon,
 } from '@phosphor-icons/react'
@@ -16,7 +15,7 @@ import { useRef } from 'react'
 import { uploadFile } from '@/lib/api'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { TOOLBAR_PRESS_DURATION } from '@/lib/motion'
-import { createFont, createSticky, createText } from '@/lib/objectFactory'
+import { createFont, createSticky } from '@/lib/objectFactory'
 import { useTheme, type ThemePref } from '@/lib/theme'
 import { screenToWorld } from '@/lib/transform'
 import { useCanvasStore } from '@/store/canvas'
@@ -39,14 +38,11 @@ export function Toolbar() {
     )
   }
 
-  const handleAddSticky = () => {
+  const handleAddNote = () => {
     commit()
+    // Note is still stored as type 'sticky' internally — the rename is
+    // purely a UI relabel so existing boards keep their object types.
     addObject(createSticky(viewCenterWorld(), objectsCount))
-  }
-
-  const handleAddText = () => {
-    commit()
-    addObject(createText(viewCenterWorld(), objectsCount))
   }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,8 +145,7 @@ export function Toolbar() {
       />
       <ToolbarButton icon={ImageIcon} label="Image" onClick={() => fileInputRef.current?.click()} />
       <ToolbarButton icon={FilePdf} label="PDF" onClick={() => pdfInputRef.current?.click()} />
-      <ToolbarButton icon={NoteBlank} label="Sticky" onClick={handleAddSticky} />
-      <ToolbarButton icon={TextT} label="Text" onClick={handleAddText} />
+      <ToolbarButton icon={NoteBlank} label="Note" onClick={handleAddNote} />
       <ToolbarButton icon={TextAa} label="Font" onClick={() => fontInputRef.current?.click()} />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />
       <ThemeToggle />

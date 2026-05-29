@@ -1,5 +1,5 @@
 export type ImageData = { url: string; thumbnailUrl?: string }
-export type StickyData = { text: string; color: string }
+export type StickyData = { text: string; color: string; transparent?: boolean }
 export type TextData = { text: string; font: string; fontSize: number }
 export type PDFData = {
   url: string

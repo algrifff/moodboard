@@ -8,6 +8,10 @@ export const imageDataSchema = z.object({
 export const stickyDataSchema = z.object({
   text: z.string(),
   color: z.string(),
+  // When true, the note renders without its background colour — just the
+  // markdown text on the canvas. Toggleable per-note via the floating
+  // toolbar that appears when the note is selected.
+  transparent: z.boolean().optional(),
 })
 
 export const textDataSchema = z.object({

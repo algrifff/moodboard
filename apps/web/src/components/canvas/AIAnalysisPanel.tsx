@@ -36,7 +36,7 @@ export function AIAnalysisPanel({
   selectedAgentIds,
   selectionMatchesDisplay,
   logoOverrideOptions,
-  onChangeLogo,
+  onChangeLogos,
   onAddAgent,
   onRemoveAgent,
   onRun,
@@ -55,7 +55,7 @@ export function AIAnalysisPanel({
   // Images in this group the user could pin as the logo (overrides the
   // AD's pick). Empty when the group has no images.
   logoOverrideOptions: { url: string }[]
-  onChangeLogo: (url: string) => void
+  onChangeLogos: (urls: string[]) => void
   onAddAgent: (id: AgentId) => void
   onRemoveAgent: (id: AgentId) => void
   onRun: () => void
@@ -165,7 +165,7 @@ export function AIAnalysisPanel({
           empty={selectedAgentIds.length === 0 && activeState.kind === 'idle'}
           onFullscreen={() => setIsFullscreen(true)}
           logoOverrideOptions={logoOverrideOptions}
-          onChangeLogo={onChangeLogo}
+          onChangeLogos={onChangeLogos}
         />
         <ResizeHandle onMouseDown={onResizeStart} />
       </motion.div>
@@ -196,7 +196,7 @@ export function AIAnalysisPanel({
                 state={activeState}
                 onClose={() => setIsFullscreen(false)}
                 logoOverrideOptions={logoOverrideOptions}
-                onChangeLogo={onChangeLogo}
+                onChangeLogos={onChangeLogos}
               />
             )}
           </AnimatePresence>,
@@ -251,13 +251,13 @@ function SummaryCard({
   empty,
   onFullscreen,
   logoOverrideOptions,
-  onChangeLogo,
+  onChangeLogos,
 }: {
   state: SlotState
   empty: boolean
   onFullscreen: () => void
   logoOverrideOptions: { url: string }[]
-  onChangeLogo: (url: string) => void
+  onChangeLogos: (urls: string[]) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDone =
@@ -353,7 +353,7 @@ function SummaryCard({
             <BriefReadout
               data={state.data}
               logoOverrideOptions={logoOverrideOptions}
-              onChangeLogo={onChangeLogo}
+              onChangeLogos={onChangeLogos}
             />
           ) : (
             <BriefGlance data={state.data} />
@@ -628,12 +628,12 @@ function FullscreenDrawer({
   state,
   onClose,
   logoOverrideOptions,
-  onChangeLogo,
+  onChangeLogos,
 }: {
   state: SlotState
   onClose: () => void
   logoOverrideOptions: { url: string }[]
-  onChangeLogo: (url: string) => void
+  onChangeLogos: (urls: string[]) => void
 }) {
   return (
     <motion.div
@@ -693,7 +693,7 @@ function FullscreenDrawer({
           <BriefReadout
             data={state.data}
             logoOverrideOptions={logoOverrideOptions}
-            onChangeLogo={onChangeLogo}
+            onChangeLogos={onChangeLogos}
           />
         )}
         {state.kind === 'error' && (
@@ -721,11 +721,11 @@ function FullscreenDrawer({
 function BriefReadout({
   data,
   logoOverrideOptions,
-  onChangeLogo,
+  onChangeLogos,
 }: {
   data: SynthesisBrief
   logoOverrideOptions: { url: string }[]
-  onChangeLogo: (url: string) => void
+  onChangeLogos: (urls: string[]) => void
 }) {
   const hasPositioning =
     data.positioning.model.trim().length > 0 ||
@@ -737,12 +737,11 @@ function BriefReadout({
         <ThroughlineBlock text={data.throughline} source={data.throughlineSource} />
       )}
       {hasPositioning && <PositioningBlock data={data.positioning} />}
-      {data.logo.url.trim().length > 0 && (
+      {data.logo.length > 0 && (
         <LogoBlock
-          url={data.logo.url}
-          reason={data.logo.reason}
+          logos={data.logo}
           overrideOptions={logoOverrideOptions}
-          onChange={onChangeLogo}
+          onChange={onChangeLogos}
         />
       )}
       {data.palette.length > 0 && <PaletteBlock items={data.palette} />}
@@ -965,16 +964,19 @@ function FontsBlock({
 // popover with thumbnails of every image in the group so the user can
 // override the AD's pick; useful when the model misses or grabs a
 // photographic reference instead of the mark.
+// Brand-mark variants. A brand usually has more than one — primary
+// wordmark, icon, monogram, white-on-dark, etc. Renders all logos
+// side-by-side with their AD-written variant label underneath each.
+// Clicking the block opens a multi-select picker over every image in
+// the group; each click toggles a thumbnail in/out of the logo set.
 function LogoBlock({
-  url,
-  reason,
+  logos,
   overrideOptions,
   onChange,
 }: {
-  url: string
-  reason: string
+  logos: { url: string; reason: string }[]
   overrideOptions: { url: string }[]
-  onChange: (url: string) => void
+  onChange: (urls: string[]) => void
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -998,13 +1000,20 @@ function LogoBlock({
   }, [pickerOpen])
 
   // Only show the override hint when there's something to pick from.
-  const canOverride = overrideOptions.length > 1
+  const canOverride = overrideOptions.length > 0
+  const currentUrls = new Set(logos.map((l) => l.url))
+  const togglePick = (url: string) => {
+    const next = currentUrls.has(url)
+      ? logos.filter((l) => l.url !== url).map((l) => l.url)
+      : [...logos.map((l) => l.url), url]
+    onChange(next)
+  }
 
   return (
     <div>
-      <BlockHeading>Logo</BlockHeading>
+      <BlockHeading>{logos.length > 1 ? 'Logo variants' : 'Logo'}</BlockHeading>
       <div
-        className="mt-2 flex flex-col items-center gap-3"
+        className="mt-2"
         style={{
           position: 'relative',
           padding: '20px 16px',
@@ -1015,33 +1024,52 @@ function LogoBlock({
         <button
           type="button"
           onClick={() => canOverride && setPickerOpen((v) => !v)}
-          aria-label={canOverride ? 'Choose a different logo image' : 'Logo'}
-          title={canOverride ? 'Click to choose a different image' : undefined}
+          aria-label={canOverride ? 'Edit logo variants' : 'Logo'}
+          title={canOverride ? 'Click to add or remove logo variants' : undefined}
           style={{
+            display: 'block',
+            width: '100%',
             background: 'transparent',
             border: 'none',
             padding: 0,
             cursor: canOverride ? 'pointer' : 'default',
-            display: 'block',
           }}
         >
-          <img
-            src={url}
-            alt="Brand mark"
-            loading="lazy"
-            style={{
-              maxWidth: 220,
-              maxHeight: 120,
-              objectFit: 'contain',
-              display: 'block',
-            }}
-          />
-        </button>
-        {reason.trim().length > 0 && (
-          <div className="text-[11.5px] text-[var(--text-mute)] italic leading-snug text-center">
-            {reason}
+          <div
+            className="flex flex-wrap items-end justify-center"
+            style={{ columnGap: 20, rowGap: 16 }}
+          >
+            {logos.map((logo, i) => (
+              <div
+                key={`${logo.url}-${i}`}
+                className="flex flex-col items-center"
+                style={{ maxWidth: 220, gap: 6 }}
+              >
+                <img
+                  src={logo.url}
+                  alt={logo.reason || `Brand mark ${i + 1}`}
+                  loading="lazy"
+                  style={{
+                    // Single-logo case gets a bigger display; multi-logo
+                    // shrinks each one so they fit side by side.
+                    maxWidth: logos.length === 1 ? 220 : 140,
+                    maxHeight: logos.length === 1 ? 120 : 90,
+                    objectFit: 'contain',
+                    display: 'block',
+                  }}
+                />
+                {logo.reason.trim().length > 0 && (
+                  <div
+                    className="text-[11px] text-[var(--text-mute)] italic leading-snug text-center"
+                    style={{ maxWidth: 180 }}
+                  >
+                    {logo.reason}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        )}
+        </button>
 
         {pickerOpen && canOverride && (
           <div
@@ -1052,7 +1080,7 @@ function LogoBlock({
               left: '50%',
               transform: 'translateX(-50%)',
               minWidth: 240,
-              maxWidth: 320,
+              maxWidth: 360,
               backgroundColor: 'var(--bg-card)',
               borderRadius: 'var(--radius-lg)',
               boxShadow: 'var(--shadow-popover)',
@@ -1062,19 +1090,16 @@ function LogoBlock({
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold mb-2">
-              Pin a different image
+              Toggle logo variants
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               {overrideOptions.map((opt, i) => {
-                const isCurrent = opt.url === url
+                const isCurrent = currentUrls.has(opt.url)
                 return (
                   <button
                     key={`${opt.url}-${i}`}
                     type="button"
-                    onClick={() => {
-                      onChange(opt.url)
-                      setPickerOpen(false)
-                    }}
+                    onClick={() => togglePick(opt.url)}
                     style={{
                       padding: 0,
                       borderRadius: 'var(--radius)',
@@ -1085,8 +1110,11 @@ function LogoBlock({
                       outline: isCurrent ? '2px solid var(--accent)' : 'none',
                       outlineOffset: -2,
                       border: 'none',
+                      opacity: isCurrent ? 1 : 0.7,
+                      transition: 'opacity 120ms',
                     }}
-                    aria-label={isCurrent ? 'Current logo' : 'Use as logo'}
+                    aria-pressed={isCurrent}
+                    aria-label={isCurrent ? 'Remove from logo set' : 'Add to logo set'}
                   >
                     <img
                       src={opt.url}

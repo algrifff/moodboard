@@ -62,21 +62,23 @@ const ART_DIRECTOR_JSON_SCHEMA = {
     statements: { type: 'array' as const, items: { type: 'string' as const } },
     tropes: { type: 'array' as const, items: { type: 'string' as const } },
     logo: {
-      type: 'object' as const,
-      additionalProperties: false,
-      required: ['url', 'reason'],
+      type: 'array' as const,
       description:
-        "The image on the canvas that reads as the brand mark, if one is identifiable. Empty url + empty reason when no image qualifies (don't force-pick from photographic refs).",
-      properties: {
-        url: {
-          type: 'string' as const,
-          description:
-            'Verbatim URL from the "Image URL:" label preceding the chosen image. Empty string if no logo identified.',
-        },
-        reason: {
-          type: 'string' as const,
-          description:
-            'One short clause on why this reads as the mark (isolation, monochrome, mark character, etc.). Empty string if no logo.',
+        "Every image on the canvas that reads as a brand mark or mark variant — the primary wordmark, the icon/monogram, alternate colour variants (white-on-dark, single-colour stamp), alternate layouts (horizontal vs stacked). Each variant gets its own entry. Empty array when no image qualifies; don't force-pick from photographic refs.",
+      items: {
+        type: 'object' as const,
+        additionalProperties: false,
+        required: ['url', 'reason'],
+        properties: {
+          url: {
+            type: 'string' as const,
+            description: 'Verbatim URL from the "Image URL:" label preceding the chosen image.',
+          },
+          reason: {
+            type: 'string' as const,
+            description:
+              'Short clause naming this variant: "Primary wordmark", "Monogram icon — single colour", "Inverted on dark", etc. Two or three words is fine.',
+          },
         },
       },
     },
@@ -262,14 +264,17 @@ const SYNTHESIS_JSON_SCHEMA = {
       },
     },
     logo: {
-      type: 'object' as const,
-      additionalProperties: false,
-      required: ['url', 'reason'],
+      type: 'array' as const,
       description:
-        "The brand's mark, when identifiable on the canvas. url is verbatim from the Art Director's logo.url (one of the canvas image URLs). reason is verbatim from AD's logo.reason. Both empty strings when no logo was confidently identified.",
-      properties: {
-        url: { type: 'string' as const },
-        reason: { type: 'string' as const },
+        "Brand mark variants, verbatim from the Art Director's logo array. Each entry has url (a canvas image URL) and reason (the variant label). Empty array when AD found no logo. Pass through as-is — don't invent variants the AD didn't identify.",
+      items: {
+        type: 'object' as const,
+        additionalProperties: false,
+        required: ['url', 'reason'],
+        properties: {
+          url: { type: 'string' as const },
+          reason: { type: 'string' as const },
+        },
       },
     },
     references: {
@@ -400,7 +405,7 @@ For each field:
 - tensions: 2–4 productive contrasts.
 - risks: 2–4 places this direction could veer cliché.
 - hooks / statements / tropes: from the text content. Empty arrays if no text.
-- logo: identify ONE image as the brand mark, if any image qualifies (isolated, monochrome or two-tone, clear silhouette, no photographic detail, reads as a "mark" rather than a photo or moodboard reference). Return the verbatim URL from the "Image URL:" label printed before each image in the user message. If no image is clearly a logo, return empty url + empty reason — don't force-pick from photography.
+- logo: identify EVERY image on the canvas that reads as a brand mark or mark variant. Brands typically have multiple — the primary wordmark plus an icon/monogram, plus colour variants (white-on-dark, single-colour stamp, two-colour version) and layout variants (horizontal vs stacked). Each variant gets its own entry with the verbatim URL from the "Image URL:" label and a short reason naming what KIND of variant it is ("Primary wordmark", "Monogram icon — single colour", "Inverted on dark", "Horizontal lockup"). Look for: isolated marks, monochrome or two-tone treatment, clear silhouette, no photographic detail, reads as a "mark" rather than a moodboard reference. If multiple images of the SAME mark in different treatments appear, return ALL of them as separate entries. If no image qualifies, return an empty array — don't force-pick from photography.
 - fonts: 1–4 entries describing the typefaces this brand will use. Trust order, applied STRICTLY in this priority:
   (1) HIGHEST PRIORITY — Uploaded brand fonts. If the user message contains a "=== BRAND FONTS — UPLOADED BY THE USER ===" block, EVERY family listed there MUST appear in your fonts[] output. Copy the family name verbatim into \`name\`. These come first in the array. Never substitute a font you saw in a PDF or photograph for one of these — they are the user's explicit declaration of the brand's typography.
   (2) Typography visible in canvas images — specimen sheets, type posters, photographed designed work where you can see typography in use. Read the typeface name verbatim if a specimen label shows it; if no label but you can identify the typeface in designed work confidently, name it. This is high-value visual taste evidence — designers put fonts in photographs deliberately.
@@ -540,7 +545,7 @@ typography — feel is one short line describing the overall voice ("Serif headl
 
 fonts — verbatim from the Art Director's fonts array. Each entry has name (typeface, may be empty), category (typographic family), role (display/subhead/body/caption), sample (real phrase from the moodboard). Don't paraphrase, don't invent. If the AD's fonts array is empty (no typography on the canvas), return an empty array.
 
-logo — verbatim from the Art Director's logo field. url is one of the canvas image URLs the AD chose; reason is the AD's one-clause justification. Both empty strings when the AD found no logo. Don't infer a logo when the AD didn't.
+logo — verbatim from the Art Director's logo array. Each entry has url (a canvas image URL the AD selected) and reason (the AD's variant label). Pass through every entry. Empty array when the AD found no logo. Don't invent variants the AD didn't identify.
 
 references — 3–6 entries verbatim from the Art Director's references list. Designers / studios / movements / eras / brands. Don't paraphrase, don't condense ("Bureau Mirko Borsche", "M/M Paris", "90s Italian editorial"). Empty if no Art Director ran.
 

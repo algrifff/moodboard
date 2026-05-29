@@ -54,13 +54,15 @@ export type AIAnalysis = {
   statements: string[]
   tropes: string[]
 
-  // Brand artifacts the AD identified from canvas content. `url` is empty
-  // when no confident logo was found; `fonts` is empty when no typographic
-  // ground truth (text nodes, font specimens) was present.
+  // Brand mark variants the AD identified from canvas content. A brand
+  // typically has several — primary wordmark, icon, monogram, white/dark
+  // colour variants. Each entry stands on its own. Empty array when no
+  // image qualifies.
   logo: {
     url: string // /api/files/... matching one of the images on the canvas
-    reason: string // one short clause on why this reads as the mark
-  }
+    reason: string // one short clause naming the variant (e.g. "Primary
+    // wordmark", "Monogram icon — single colour", "Inverted on dark")
+  }[]
   fonts: {
     name: string // typeface name from a text node's `.font` or a specimen
     category: string // 'neo-grotesque', 'transitional serif', etc.
@@ -122,12 +124,13 @@ export type SynthesisBrief = {
     sample: string // real phrase from the moodboard
   }[]
 
-  // The brand's mark, when one is identifiable on the canvas. `url` empty
-  // means no confident logo found; renderer skips the block.
+  // The brand's mark variants, when any are identifiable on the canvas.
+  // Mirrors AIAnalysis.logo — same shape, same semantics. Empty array
+  // means no confident logo was found and the renderer skips the block.
   logo: {
     url: string
     reason: string
-  }
+  }[]
 
   // Designers / studios / movements / eras / brands this work is in
   // conversation with — verbatim from the Art Director's references.

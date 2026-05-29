@@ -300,7 +300,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      node and PDF content, which only count when they explicitly
   //      name a typeface. CSS-fallback-stack text-node font tags are
   //      now explicitly in the IGNORE list.
-  const v = 'v7'
+  // v8 = logo schema changed from single object to array — AD now
+  //      returns every mark variant (wordmark, icon, colour variants).
+  const v = 'v8'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -316,7 +318,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   // v7 — font priority hierarchy re-ordered (photos > text/PDF unless
   //      explicit naming); AD output shape unchanged but content
   //      shifts noticeably, so downstream synth needs to re-run.
-  const v = 'v7'
+  // v8 — logo schema is now an array; downstream synth output shape
+  //      changed to match.
+  const v = 'v8'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

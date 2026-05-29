@@ -59,10 +59,12 @@ export const aiAnalysisSchema = z.object({
   hooks: z.array(z.string()),
   statements: z.array(z.string()),
   tropes: z.array(z.string()),
-  logo: z.object({
-    url: z.string(),
-    reason: z.string(),
-  }),
+  logo: z.array(
+    z.object({
+      url: z.string(),
+      reason: z.string(),
+    }),
+  ),
   fonts: z.array(
     z.object({
       name: z.string(),
@@ -114,10 +116,12 @@ export const synthesisBriefSchema = z.object({
       sample: z.string(),
     }),
   ),
-  logo: z.object({
-    url: z.string(),
-    reason: z.string(),
-  }),
+  logo: z.array(
+    z.object({
+      url: z.string(),
+      reason: z.string(),
+    }),
+  ),
   references: z.array(z.string()),
   tensions: z.array(z.string()),
   audiences: z.array(z.object({ label: z.string(), insight: z.string() })),

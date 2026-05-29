@@ -383,19 +383,23 @@ export function GroupsLayer({
 
         // Patches the brief's logo URL in place. Persists via the existing
         // localStorage save effect. Only applies when the displayed slot
-        // is a ready-brief (synthesis output).
-        const handleChangeLogo = (newUrl: string) => {
+        // is a ready-brief (synthesis output). Preserves the AD's
+        // `reason` for URLs that were already in the logo set; new URLs
+        // (user-added overrides) get an empty reason.
+        const handleChangeLogos = (newUrls: string[]) => {
           setDisplayByGroup((prev) => {
             const slot = prev[g.key]
             if (!slot || slot.kind !== 'ready-brief') return prev
+            const reasonByUrl = new Map(slot.data.logo.map((l) => [l.url, l.reason]))
+            const nextLogo = newUrls.map((url) => ({
+              url,
+              reason: reasonByUrl.get(url) ?? '',
+            }))
             return {
               ...prev,
               [g.key]: {
                 ...slot,
-                data: {
-                  ...slot.data,
-                  logo: { ...slot.data.logo, url: newUrl },
-                },
+                data: { ...slot.data, logo: nextLogo },
               },
             }
           })
@@ -435,7 +439,7 @@ export function GroupsLayer({
             selectedAgentIds={selectedAgentIds}
             selectionMatchesDisplay={selectionMatchesDisplay}
             logoOverrideOptions={groupImageOptions}
-            onChangeLogo={handleChangeLogo}
+            onChangeLogos={handleChangeLogos}
             onAddAgent={(id) =>
               setSelectedByGroup((prev) => {
                 const current = prev[g.key] ?? []

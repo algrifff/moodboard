@@ -200,37 +200,56 @@
 /* Markdown styling for notes. Sizes are em-based so when useFitText
    scales the root font-size, headings/lists scale proportionally. Margins
    are tight so a small note doesn't get sucked dry of useful space by
-   default browser spacing. */
+   default browser spacing.
+
+   Tailwind's Preflight strips default styling from h1–h6, ul/ol (incl.
+   list-style), strong, em, blockquote, code, and pre — every native
+   distinction is gone unless we put it back. The rules below are the
+   full set, not a polish layer. */
 .note-markdown h1,
 .note-markdown h2,
 .note-markdown h3,
 .note-markdown h4 {
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.2;
-  margin: 0.4em 0 0.2em;
+  margin: 0.5em 0 0.25em;
 }
 .note-markdown h1 {
-  font-size: 1.5em;
+  font-size: 1.6em;
 }
 .note-markdown h2 {
-  font-size: 1.25em;
+  font-size: 1.35em;
 }
 .note-markdown h3 {
-  font-size: 1.1em;
+  font-size: 1.15em;
 }
 .note-markdown h4 {
   font-size: 1em;
+  font-weight: 600;
 }
 .note-markdown p {
-  margin: 0.3em 0;
+  margin: 0.35em 0;
 }
 .note-markdown ul,
 .note-markdown ol {
-  margin: 0.3em 0;
-  padding-left: 1.2em;
+  margin: 0.35em 0;
+  padding-left: 1.4em;
+}
+/* list-style is the bit Preflight kills; explicit re-enable. `outside`
+   puts the marker in the padding-left gutter so it doesn't push content. */
+.note-markdown ul {
+  list-style: disc outside;
+}
+.note-markdown ol {
+  list-style: decimal outside;
 }
 .note-markdown li {
-  margin: 0.1em 0;
+  margin: 0.15em 0;
+}
+.note-markdown li > p {
+  /* Tighten paragraphs inside list items — react-markdown wraps each li
+     in a <p> by default which would otherwise add a full line of space. */
+  margin: 0;
 }
 .note-markdown strong {
   font-weight: 700;
@@ -239,26 +258,27 @@
   font-style: italic;
 }
 .note-markdown blockquote {
-  border-left: 2px solid currentColor;
-  padding-left: 0.6em;
-  margin: 0.3em 0;
-  opacity: 0.85;
+  border-left: 3px solid currentColor;
+  padding-left: 0.7em;
+  margin: 0.4em 0;
+  opacity: 0.8;
+  font-style: italic;
 }
 .note-markdown code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
-  padding: 0.05em 0.3em;
+  padding: 0.08em 0.35em;
   background-color: rgba(0, 0, 0, 0.08);
   border-radius: 3px;
 }
 .note-markdown pre {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
-  padding: 0.5em;
+  padding: 0.6em 0.8em;
   background-color: rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   overflow: auto;
-  margin: 0.3em 0;
+  margin: 0.4em 0;
 }
 .note-markdown pre code {
   background: none;
@@ -267,6 +287,12 @@
 .note-markdown a {
   color: currentColor;
   text-decoration: underline;
+}
+.note-markdown hr {
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.3;
+  margin: 0.6em 0;
 }
 .note-markdown :first-child {
   margin-top: 0;

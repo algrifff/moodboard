@@ -49,9 +49,54 @@ export function StickyNote({
   const refit = useFitText(textRef, {
     width: object.size.width,
     height: object.size.height,
-    min: 14,
+    // 12-px floor instead of 14 — gives auto-fit some extra headroom
+    // before content overflows. For genuine "I just pasted an essay"
+    // cases the paste handler below grows the box instead of letting
+    // the font shrink past readability.
+    min: 12,
     max: 96,
   })
+
+  // Auto-grow the note when a large body of text is pasted. Default
+  // useFitText behaviour would shrink the font to fit the existing box,
+  // which makes a pasted document microscopic. Instead, on paste we
+  // measure the new content and resize the box so the text lands at a
+  // comfortable reading size (~14 px). The fit step then refines the
+  // exact font size to fill the new dimensions.
+  const handlePaste = () => {
+    requestAnimationFrame(() => {
+      if (!textRef.current) return
+      const text = textRef.current.innerText
+      const fontPx = 14
+      // Rough average character width for proportional sans at the
+      // target font size. The exact number doesn't matter — close enough
+      // gets the box into the right ballpark and useFitText handles the
+      // final layout.
+      const charWidth = fontPx * 0.55
+      const lineHeight = fontPx * 1.5
+      const horizontalPadding = 32 // 16-px each side from the note card
+      const verticalPadding = 36 // includes the outline + outlineOffset
+      // Keep current width unless it's too narrow to read in (< 360);
+      // grow height to fit. If the user wants narrower, they can drag
+      // the resize handle after — but a 100-px wide note isn't useful
+      // for a paragraph.
+      const targetWidth = Math.max(object.size.width, 360)
+      const innerWidth = targetWidth - horizontalPadding
+      const charsPerLine = Math.max(1, Math.floor(innerWidth / charWidth))
+      const explicitLines = text.split('\n').length
+      const softLines = Math.max(explicitLines, Math.ceil(text.length / charsPerLine))
+      const targetHeight = Math.max(
+        object.size.height,
+        Math.ceil(softLines * lineHeight + verticalPadding),
+      )
+      if (targetWidth !== object.size.width || targetHeight !== object.size.height) {
+        useCanvasStore.getState().commitBeforeAction()
+        updateObject(object.id, {
+          size: { width: targetWidth, height: targetHeight },
+        })
+      }
+    })
+  }
 
   // When entering view mode after an edit, sync innerText so the markdown
   // renderer receives the latest source. In view mode the contentEditable
@@ -173,6 +218,7 @@ export function StickyNote({
             suppressContentEditableWarning
             onBlur={commit}
             onInput={refit}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
                 e.preventDefault()

@@ -58,6 +58,12 @@
     --shadow-toast: 0 6px 24px -12px rgba(0, 0, 0, 0.6);
     --shadow-modal: 0 24px 64px -24px rgba(0, 0, 0, 0.7);
     --shadow-drawer: -12px 0 48px -12px rgba(0, 0, 0, 0.7);
+    /* Scrim — the dim layer behind modal-like surfaces (fullscreen drawer,
+       future dialogs). Always a darkening colour regardless of theme,
+       since its job is to push the canvas into the background. Heavier in
+       dark mode (the surface is already dark, scrim has to bite more);
+       lighter in light mode (don't crush the white canvas to grey). */
+    --scrim: rgba(0, 0, 0, 0.55);
     /* Inset hairline applied to filled discs (swatches, agent avatars).
        In dark mode a white inset reads as light catching the edge; in
        light mode that would be invisible — drops to transparent. */
@@ -132,6 +138,10 @@
     --shadow-toast: 0 4px 16px -8px rgba(20, 16, 40, 0.12);
     --shadow-modal: 0 20px 48px -16px rgba(20, 16, 40, 0.2);
     --shadow-drawer: -10px 0 36px -10px rgba(20, 16, 40, 0.15);
+    /* Lighter scrim in light mode — at 0.55 (the dark value) the canvas
+       would crush to mid-grey, killing the lightness; 0.30 darkens enough
+       to put focus on the drawer without flattening everything. */
+    --scrim: rgba(0, 0, 0, 0.3);
     --swatch-inset: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 
     /* Soft lavender at the 285° hue. Lower chroma than --accent so it

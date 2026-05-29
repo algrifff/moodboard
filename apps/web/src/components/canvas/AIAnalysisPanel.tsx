@@ -165,7 +165,29 @@ export function AIAnalysisPanel({
         createPortal(
           <AnimatePresence>
             {isFullscreen && (
-              <FullscreenDrawer state={activeState} onClose={() => setIsFullscreen(false)} />
+              <motion.div
+                key="fullscreen-scrim"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.22, ease: EASE_OUT_STANDARD }}
+                onClick={() => setIsFullscreen(false)}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  backgroundColor: 'var(--scrim)',
+                  zIndex: 79,
+                  pointerEvents: 'auto',
+                }}
+                aria-hidden
+              />
+            )}
+            {isFullscreen && (
+              <FullscreenDrawer
+                key="fullscreen-drawer"
+                state={activeState}
+                onClose={() => setIsFullscreen(false)}
+              />
             )}
           </AnimatePresence>,
           document.body,

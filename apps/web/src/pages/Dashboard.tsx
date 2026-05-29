@@ -220,6 +220,37 @@ function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
   if (o.type === 'sticky') {
     return <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={o.color ?? '#fde68a'} />
   }
+  if (o.type === 'font') {
+    // Card with a big serif "Aa" — the dashboard doesn't load the actual
+    // family (would be wasteful for thumbnails), so we render a generic
+    // typographic marker that communicates "font specimen here" at a glance.
+    const aaSize = Math.min(o.w * 0.42, o.h * 0.62)
+    return (
+      <g>
+        <rect
+          x={o.x}
+          y={o.y}
+          width={o.w}
+          height={o.h}
+          fill="var(--bg-card)"
+          stroke="var(--border-soft)"
+          strokeWidth={1}
+        />
+        <text
+          x={o.x + o.w / 2}
+          y={o.y + o.h / 2}
+          fontFamily='ui-serif, Georgia, "Iowan Old Style", serif'
+          fontSize={aaSize}
+          fontWeight={500}
+          fill="var(--text)"
+          textAnchor="middle"
+          dominantBaseline="central"
+        >
+          Aa
+        </text>
+      </g>
+    )
+  }
   // Text — render as a faint underline at the baseline. No content, no
   // height ratios; just enough to communicate "text is here".
   return (

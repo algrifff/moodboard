@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type {
   AgentId,
   CanvasObject,
+  FontData,
   ImageData,
   PDFData,
   StickyData,
@@ -42,6 +43,9 @@ function isPdfData(d: CanvasObject['data']): d is PDFData {
   return (
     'extractedText' in d && 'thumbnailUrl' in d && typeof (d as PDFData).thumbnailUrl === 'string'
   )
+}
+function isFontData(d: CanvasObject['data']): d is FontData {
+  return 'family' in d && typeof (d as FontData).family === 'string'
 }
 
 function urlToFilename(url: string): string | null {
@@ -144,6 +148,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const PDF_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
+  let fontCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -158,6 +163,23 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       textLines.push(
         `- Text label: "${t}" [font: ${o.data.font}, size: ${Math.round(o.data.fontSize)}px]`,
       )
+    } else if (o.type === 'font' && isFontData(o.data)) {
+      fontCount += 1
+      // Font specimen object — the user uploaded this font file and
+      // dropped it on the canvas. The family name is the user's explicit
+      // declaration of which typeface this brand uses. Treat it as the
+      // highest-trust source for the AD's `fonts` field.
+      textLines.push(
+        `- Font specimen on canvas: family "${o.data.family}" (user-uploaded ${
+          o.data.url.endsWith('.woff2')
+            ? 'woff2'
+            : o.data.url.endsWith('.woff')
+              ? 'woff'
+              : o.data.url.endsWith('.otf')
+                ? 'otf'
+                : 'ttf'
+        }). Treat this as a deliberately-chosen brand typeface.`,
+      )
     } else if (o.type === 'pdf' && isPdfData(o.data)) {
       const raw = o.data.extractedText.trim()
       if (raw) {
@@ -168,7 +190,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fontCount} font specimen(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0
@@ -250,7 +272,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   // v3 = agent registry introduction (different cache bucket per agent).
   // v4 = AIAnalysis gained logo + fonts fields; prompt + content builder
   //      changed (image URL labels, text-node font metadata).
-  const v = 'v4'
+  // v5 = font specimen objects emit ground-truth family name in the
+  //      content builder; group header gained a font-count line.
+  const v = 'v5'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -259,7 +283,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   // v4 — added logo + fonts; dropped typography.samples (consolidated
   //      into fonts). AD prompt changes (image URL labels, text-node
   //      font metadata) also affect synth inputs, so bumping here too.
-  const v = 'v4'
+  // v5 — font specimen objects emit ground-truth family in the AD
+  //      content; downstream synthesis input changes too.
+  const v = 'v5'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

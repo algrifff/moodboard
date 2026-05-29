@@ -1,10 +1,11 @@
-import type { CanvasObject, StickyData, TextData } from '@moodboard/shared'
+import type { CanvasObject, FontData, StickyData, TextData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
 const STICKY_DEFAULT_SIZE = { width: 200, height: 200 }
 const STICKY_DEFAULT_COLOR = '#FEF3C7'
 const TEXT_DEFAULT_FONT = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont'
 const TEXT_DEFAULT_FONT_SIZE = 18
+const FONT_DEFAULT_SIZE = { width: 320, height: 200 }
 
 export function createSticky(worldCenter: { x: number; y: number }, zIndex: number): CanvasObject {
   const data: StickyData = { text: '', color: STICKY_DEFAULT_COLOR }
@@ -57,4 +58,25 @@ function sizeForText(text: string): { width: number; height: number } {
   const width = Math.max(240, Math.min(480, longestLine * 9 + 40))
   const height = Math.max(56, Math.min(420, softWrappedLines * 26 + 24))
   return { width, height }
+}
+
+export function createFont(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  url: string,
+  family: string,
+): CanvasObject {
+  const data: FontData = { url, family }
+  return {
+    id: nanoid(),
+    type: 'font',
+    position: {
+      x: worldCenter.x - FONT_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - FONT_DEFAULT_SIZE.height / 2,
+    },
+    size: FONT_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
 }

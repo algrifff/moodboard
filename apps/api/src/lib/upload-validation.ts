@@ -4,10 +4,36 @@ import { promises as dns } from 'node:dns'
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 export const MAX_PDF_BYTES = 20 * 1024 * 1024
 export const MAX_PDF_PAGES = 50
+// Fonts are typically 30–200 KB (woff2) or 1–5 MB (full ttf/otf). Cap
+// at 5 MB so a heavy-weight family doesn't push past.
+export const MAX_FONT_BYTES = 5 * 1024 * 1024
 
 export const PDF_MIME = 'application/pdf'
 
 export const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+// Font MIME landscape is messy — browsers and OSes report several
+// equivalents per format. Accept all the common ones; we re-validate by
+// extension fallback when type is application/octet-stream.
+export const ALLOWED_FONT_MIME = new Set([
+  'font/ttf',
+  'font/otf',
+  'font/woff',
+  'font/woff2',
+  'application/font-woff',
+  'application/font-woff2',
+  'application/x-font-ttf',
+  'application/x-font-otf',
+])
+
+const FONT_EXTS = new Set(['ttf', 'otf', 'woff', 'woff2'])
+
+/** True when filename has a recognised font extension. Used as a fallback
+ *  when the browser reports application/octet-stream for the upload. */
+export function isFontFilename(name: string): boolean {
+  const dot = name.lastIndexOf('.')
+  if (dot < 0) return false
+  return FONT_EXTS.has(name.slice(dot + 1).toLowerCase())
+}
 
 export function extFromMime(mime: string): string | null {
   switch (mime) {
@@ -19,6 +45,18 @@ export function extFromMime(mime: string): string | null {
       return 'webp'
     case 'image/gif':
       return 'gif'
+    case 'font/ttf':
+    case 'application/x-font-ttf':
+      return 'ttf'
+    case 'font/otf':
+    case 'application/x-font-otf':
+      return 'otf'
+    case 'font/woff':
+    case 'application/font-woff':
+      return 'woff'
+    case 'font/woff2':
+    case 'application/font-woff2':
+      return 'woff2'
     default:
       return null
   }
@@ -35,6 +73,14 @@ export function mimeFromExt(ext: string): string {
       return 'image/webp'
     case 'gif':
       return 'image/gif'
+    case 'ttf':
+      return 'font/ttf'
+    case 'otf':
+      return 'font/otf'
+    case 'woff':
+      return 'font/woff'
+    case 'woff2':
+      return 'font/woff2'
     default:
       return 'application/octet-stream'
   }

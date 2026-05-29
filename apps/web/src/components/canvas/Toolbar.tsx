@@ -6,6 +6,7 @@ import {
   Moon,
   NoteBlank,
   Sun,
+  TextAa,
   TextT,
   Trash,
   type Icon,
@@ -15,7 +16,7 @@ import { useRef } from 'react'
 import { uploadFile } from '@/lib/api'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { TOOLBAR_PRESS_DURATION } from '@/lib/motion'
-import { createSticky, createText } from '@/lib/objectFactory'
+import { createFont, createSticky, createText } from '@/lib/objectFactory'
 import { useTheme, type ThemePref } from '@/lib/theme'
 import { screenToWorld } from '@/lib/transform'
 import { useCanvasStore } from '@/store/canvas'
@@ -24,6 +25,7 @@ import { nanoid } from 'nanoid'
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pdfInputRef = useRef<HTMLInputElement>(null)
+  const fontInputRef = useRef<HTMLInputElement>(null)
   const addObject = useCanvasStore((s) => s.addObject)
   const clearBoard = useCanvasStore((s) => s.clearBoard)
   const commit = useCanvasStore((s) => s.commitBeforeAction)
@@ -68,6 +70,23 @@ export function Toolbar() {
       zIndex: objectsCount,
       data: { url: upload.url },
     })
+  }
+
+  const handleFontChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    // Server validates the actual MIME / extension; this check is just a
+    // friendly bail-out for obvious wrong types (e.g. user picked a .png).
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+    if (!['ttf', 'otf', 'woff', 'woff2'].includes(ext)) {
+      return
+    }
+    const upload = await uploadFile(file)
+    if (!upload.fontFamily) return
+    const center = viewCenterWorld()
+    commit()
+    addObject(createFont(center, objectsCount, upload.url, upload.fontFamily))
   }
 
   const handlePdfChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,10 +140,18 @@ export function Toolbar() {
         className="hidden"
         onChange={handlePdfChange}
       />
+      <input
+        ref={fontInputRef}
+        type="file"
+        accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2"
+        className="hidden"
+        onChange={handleFontChange}
+      />
       <ToolbarButton icon={ImageIcon} label="Image" onClick={() => fileInputRef.current?.click()} />
       <ToolbarButton icon={FilePdf} label="PDF" onClick={() => pdfInputRef.current?.click()} />
       <ToolbarButton icon={NoteBlank} label="Sticky" onClick={handleAddSticky} />
       <ToolbarButton icon={TextT} label="Text" onClick={handleAddText} />
+      <ToolbarButton icon={TextAa} label="Font" onClick={() => fontInputRef.current?.click()} />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />
       <ThemeToggle />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />

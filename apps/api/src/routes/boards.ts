@@ -19,7 +19,7 @@ const PREVIEW_OBJECT_CAP = 12
 // historical board snapshots may have minor shape drift, and the dashboard
 // preview shouldn't fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf'
+  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
@@ -28,7 +28,7 @@ function isStoredObject(o: unknown): o is StoredObject {
   if (!o || typeof o !== 'object') return false
   const obj = o as Record<string, unknown>
   if (typeof obj.type !== 'string') return false
-  if (!['image', 'sticky', 'text', 'pdf'].includes(obj.type as string)) return false
+  if (!['image', 'sticky', 'text', 'pdf', 'font'].includes(obj.type as string)) return false
   const pos = obj.position as Record<string, unknown> | undefined
   const size = obj.size as Record<string, unknown> | undefined
   if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return false
@@ -77,6 +77,9 @@ function buildPreview(data: unknown): BoardPreview {
       const url =
         typeof d.thumbnailUrl === 'string' ? d.thumbnailUrl : (d.url as string | undefined)
       if (typeof url === 'string') base.thumbnailUrl = url
+    }
+    if (o.type === 'font' && d && typeof d.family === 'string') {
+      base.family = d.family
     }
     return base
   })

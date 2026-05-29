@@ -8,8 +8,17 @@ export type PDFData = {
   // Total page count; the canvas widget shows page-flip buttons when > 1.
   pageCount?: number
 }
+// A user-uploaded font file as a first-class canvas object. The browser
+// registers `family` as a FontFace pointing at `url`; the FontNode renders
+// the family name in the loaded typeface at display size, with optional
+// sampleText override.
+export type FontData = {
+  url: string
+  family: string
+  sampleText?: string
+}
 
-export type CanvasObjectType = 'image' | 'sticky' | 'text' | 'pdf'
+export type CanvasObjectType = 'image' | 'sticky' | 'text' | 'pdf' | 'font'
 
 export type CanvasObject = {
   id: string
@@ -18,7 +27,7 @@ export type CanvasObject = {
   size: { width: number; height: number }
   rotation: number
   zIndex: number
-  data: ImageData | StickyData | TextData | PDFData
+  data: ImageData | StickyData | TextData | PDFData | FontData
 }
 
 export type AIAnalysis = {

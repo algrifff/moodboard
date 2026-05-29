@@ -611,7 +611,9 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       <GroupsLayer objects={objects} scale={scale} offset={offset} boardId={boardId} />
 
       <CanvasOverlayLayer
-        objects={objects.filter((o) => o.type === 'sticky' || o.type === 'text')}
+        objects={objects.filter(
+          (o) => o.type === 'sticky' || o.type === 'text' || o.type === 'font',
+        )}
         scale={scale}
         offset={offset}
         panMode={panMode}

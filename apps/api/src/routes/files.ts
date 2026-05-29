@@ -20,11 +20,14 @@ import {
   uploadPath,
 } from '../lib/storage'
 import {
+  ALLOWED_FONT_MIME,
   ALLOWED_IMAGE_MIME,
+  MAX_FONT_BYTES,
   MAX_PDF_BYTES,
   MAX_UPLOAD_BYTES,
   PDF_MIME,
   extFromMime,
+  isFontFilename,
   mimeFromExt,
   resolveAndCheckHost,
 } from '../lib/upload-validation'
@@ -118,6 +121,42 @@ files.post(
       })
     }
 
+    // Fonts. Detected by MIME OR by extension when the browser sends
+    // application/octet-stream (Safari likes to do this for .ttf/.otf).
+    const looksLikeFont =
+      ALLOWED_FONT_MIME.has(incoming.type) || isFontFilename(incoming.name ?? '')
+    if (looksLikeFont) {
+      if (incoming.size > MAX_FONT_BYTES) {
+        return c.json({ error: 'Font too large' }, 413)
+      }
+      // Resolve the on-disk extension. Prefer the MIME map; if missing,
+      // pull from the filename (we already know it ends in a font ext).
+      let ext = extFromMime(incoming.type)
+      if (!ext) {
+        const dot = (incoming.name ?? '').lastIndexOf('.')
+        ext = dot >= 0 ? (incoming.name ?? '').slice(dot + 1).toLowerCase() : null
+      }
+      if (!ext) return c.json({ error: 'Unsupported font type' }, 415)
+      const id = nanoid()
+      const buffer = Buffer.from(await incoming.arrayBuffer())
+      const mimeType = mimeFromExt(ext)
+      const saved = await saveUpload(buffer, id, ext, mimeType)
+      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload')
+      // Derive a family name from the original filename — strip extension
+      // and any common weight/style decorators so "AktivGrotesk-Bold.woff2"
+      // becomes "AktivGrotesk Bold". Good enough as a default; user can
+      // edit later when we add per-object inspection.
+      const fontFamily = deriveFontFamily(incoming.name ?? saved.filename)
+      return c.json({
+        id: saved.id,
+        filename: saved.filename,
+        url: `/api/files/${saved.filename}`,
+        size: saved.size,
+        mimeType: saved.mimeType,
+        fontFamily,
+      })
+    }
+
     if (incoming.size > MAX_UPLOAD_BYTES) {
       return c.json({ error: 'File too large' }, 413)
     }
@@ -140,6 +179,18 @@ files.post(
     })
   },
 )
+
+// "AktivGrotesk-Bold.woff2" → "AktivGrotesk Bold". Strip extension,
+// replace dashes/underscores with spaces. Camel-case is left alone so
+// "AktivGrotesk" stays joined — users who care about presentation can
+// rename later. The CSS @font-face uses this as its family identifier.
+function deriveFontFamily(filename: string): string {
+  const lastSlash = Math.max(filename.lastIndexOf('/'), filename.lastIndexOf('\\'))
+  const base = lastSlash >= 0 ? filename.slice(lastSlash + 1) : filename
+  const dot = base.lastIndexOf('.')
+  const stem = dot >= 0 ? base.slice(0, dot) : base
+  return stem.replace(/[-_]+/g, ' ').trim() || 'Custom Font'
+}
 
 async function fetchUpstreamSafely(initialUrl: URL, maxHops = 3): Promise<Response> {
   let current = initialUrl

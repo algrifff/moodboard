@@ -23,14 +23,20 @@ export const pdfDataSchema = z.object({
   pageCount: z.number().optional(),
 })
 
+export const fontDataSchema = z.object({
+  url: z.string().url(),
+  family: z.string(),
+  sampleText: z.string().optional(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf']),
+  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font']),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
   rotation: z.number(),
   zIndex: z.number(),
-  data: z.union([imageDataSchema, stickyDataSchema, textDataSchema, pdfDataSchema]),
+  data: z.union([imageDataSchema, stickyDataSchema, textDataSchema, pdfDataSchema, fontDataSchema]),
 })
 
 export const aiAnalysisSchema = z.object({
@@ -204,6 +210,9 @@ export const uploadResponseSchema = z.object({
   thumbnailUrl: z.string().optional(),
   extractedText: z.string().optional(),
   pageCount: z.number().optional(),
+  // Font-specific. Server derives from the original filename so the client
+  // doesn't have to parse the font binary.
+  fontFamily: z.string().optional(),
 })
 
 export type UploadResponse = z.infer<typeof uploadResponseSchema>
@@ -218,9 +227,13 @@ export const boardPreviewObjectSchema = z.object({
   y: z.number(),
   w: z.number(),
   h: z.number(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf']),
+  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font']),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
+  // For font specimens — the family name. Lets the dashboard render a
+  // tiny "Aa" placeholder labelled with the family, without needing to
+  // load the actual font in the dashboard.
+  family: z.string().optional(),
 })
 export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
 

@@ -1,4 +1,5 @@
 import type { CanvasObject } from '@moodboard/shared'
+import { FontNode } from './FontNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
 
@@ -43,6 +44,17 @@ export function CanvasOverlayLayer({
           if (o.type === 'text') {
             return (
               <TextObject
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+              />
+            )
+          }
+          if (o.type === 'font') {
+            return (
+              <FontNode
                 key={o.id}
                 object={o}
                 scale={scale}

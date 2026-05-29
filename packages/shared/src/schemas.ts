@@ -190,11 +190,39 @@ export const uploadResponseSchema = z.object({
 
 export type UploadResponse = z.infer<typeof uploadResponseSchema>
 
+// Lightweight projection of a single canvas object — enough for a dashboard
+// thumbnail (position, size, type, and visual hint like a sticky colour or
+// image thumbnail URL) without shipping the full ImageData / TextData
+// payloads. Text content is intentionally omitted to avoid leaking
+// user-written content into the dashboard.
+export const boardPreviewObjectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+  type: z.enum(['image', 'sticky', 'text', 'pdf']),
+  color: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
+})
+export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
+
+// What the dashboard renders as a board's thumbnail. `bounds` is `null`
+// for empty boards (no objects yet) — the renderer falls back to the
+// placeholder swatch in that case. `objects` is capped server-side to
+// the largest N by area so a 200-image board doesn't dump 200 SVG
+// elements per card.
+export const boardPreviewSchema = z.object({
+  bounds: z.object({ x: z.number(), y: z.number(), w: z.number(), h: z.number() }).nullable(),
+  objects: z.array(boardPreviewObjectSchema),
+})
+export type BoardPreview = z.infer<typeof boardPreviewSchema>
+
 export const boardSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  preview: boardPreviewSchema.optional(),
 })
 export type BoardSummary = z.infer<typeof boardSummarySchema>
 

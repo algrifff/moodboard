@@ -1,4 +1,4 @@
-import type { BoardSummary } from '@moodboard/shared'
+import type { BoardPreview, BoardSummary } from '@moodboard/shared'
 import { Plus, SignOut, Trash } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
@@ -135,10 +135,7 @@ export function DashboardPage() {
                   className="block bg-card p-4 hover:bg-[var(--bg-elevated)] transition-colors"
                   style={{ borderRadius: 'var(--radius-lg)' }}
                 >
-                  <div
-                    className="aspect-[4/3] mb-3 bg-[var(--bg-muted)]"
-                    style={{ borderRadius: 'var(--radius)' }}
-                  />
+                  <BoardPreviewCard preview={b.preview} />
                   <p className="text-sm font-medium text-foreground truncate">{b.name}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Edited {formatWhen(b.updatedAt)}
@@ -160,6 +157,80 @@ export function DashboardPage() {
         )}
       </main>
     </div>
+  )
+}
+
+// Mini representation of a board's canvas. SVG so the viewBox handles the
+// world-space → thumbnail-space scaling automatically. Empty boards fall
+// back to the muted swatch (same look the dashboard had before previews).
+function BoardPreviewCard({ preview }: { preview?: BoardPreview }) {
+  if (!preview || !preview.bounds || preview.objects.length === 0) {
+    return (
+      <div
+        className="aspect-[4/3] mb-3 bg-[var(--bg-muted)]"
+        style={{ borderRadius: 'var(--radius)' }}
+      />
+    )
+  }
+  const { bounds, objects } = preview
+  // Small breathing room around the bounding box so objects don't kiss the
+  // card edge. 5% of the longest side.
+  const pad = Math.max(bounds.w, bounds.h) * 0.05
+  const vbX = bounds.x - pad
+  const vbY = bounds.y - pad
+  const vbW = bounds.w + pad * 2
+  const vbH = bounds.h + pad * 2
+  return (
+    <div
+      className="aspect-[4/3] mb-3 bg-[var(--bg-muted)] overflow-hidden"
+      style={{ borderRadius: 'var(--radius)' }}
+    >
+      <svg
+        viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`}
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-full block"
+        aria-hidden
+      >
+        {objects.map((o, i) => (
+          <PreviewObject key={i} o={o} />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
+  if (o.type === 'image' || o.type === 'pdf') {
+    if (!o.thumbnailUrl) {
+      // Image/PDF that hasn't finished uploading yet — fall back to a
+      // neutral filled rect so the layout still reads.
+      return <rect x={o.x} y={o.y} width={o.w} height={o.h} fill="var(--bg-elevated)" />
+    }
+    return (
+      <image
+        href={o.thumbnailUrl}
+        x={o.x}
+        y={o.y}
+        width={o.w}
+        height={o.h}
+        preserveAspectRatio="xMidYMid slice"
+      />
+    )
+  }
+  if (o.type === 'sticky') {
+    return <rect x={o.x} y={o.y} width={o.w} height={o.h} fill={o.color ?? '#fde68a'} />
+  }
+  // Text — render as a faint underline at the baseline. No content, no
+  // height ratios; just enough to communicate "text is here".
+  return (
+    <rect
+      x={o.x}
+      y={o.y + o.h * 0.75}
+      width={o.w * 0.85}
+      height={Math.max(2, o.h * 0.06)}
+      fill="var(--text-mute)"
+      opacity={0.6}
+    />
   )
 }
 

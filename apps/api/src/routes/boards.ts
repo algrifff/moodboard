@@ -1,3 +1,4 @@
+import type { BoardPreview, BoardPreviewObject } from '@moodboard/shared'
 import { createBoardRequestSchema, updateBoardRequestSchema } from '@moodboard/shared'
 import { and, desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -8,6 +9,83 @@ import { db, schema } from '../db'
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 
 export const boards = new Hono<{ Variables: Variables }>()
+
+// Cap the per-board preview at the largest N by area. Beyond this the
+// thumbnail is just visual noise; the bounding box still uses every object
+// so the framing is correct even if some are dropped from the render list.
+const PREVIEW_OBJECT_CAP = 12
+
+// Type guard for a canvas object in stored board data. Loose on purpose —
+// historical board snapshots may have minor shape drift, and the dashboard
+// preview shouldn't fall over on a missing field.
+type StoredObject = {
+  type: 'image' | 'sticky' | 'text' | 'pdf'
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  data?: Record<string, unknown>
+}
+function isStoredObject(o: unknown): o is StoredObject {
+  if (!o || typeof o !== 'object') return false
+  const obj = o as Record<string, unknown>
+  if (typeof obj.type !== 'string') return false
+  if (!['image', 'sticky', 'text', 'pdf'].includes(obj.type as string)) return false
+  const pos = obj.position as Record<string, unknown> | undefined
+  const size = obj.size as Record<string, unknown> | undefined
+  if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return false
+  if (!size || typeof size.width !== 'number' || typeof size.height !== 'number') return false
+  return true
+}
+
+/** Project a stored board's `data` blob into a small render hint for the dashboard. */
+function buildPreview(data: unknown): BoardPreview {
+  if (!data || typeof data !== 'object') return { bounds: null, objects: [] }
+  const objs = (data as { objects?: unknown[] }).objects
+  if (!Array.isArray(objs)) return { bounds: null, objects: [] }
+  const stored = objs.filter(isStoredObject)
+  if (stored.length === 0) return { bounds: null, objects: [] }
+
+  // Bounding box uses every object so framing matches what the user sees
+  // on the real canvas, even when some objects are dropped from the render
+  // list below.
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const o of stored) {
+    minX = Math.min(minX, o.position.x)
+    minY = Math.min(minY, o.position.y)
+    maxX = Math.max(maxX, o.position.x + o.size.width)
+    maxY = Math.max(maxY, o.position.y + o.size.height)
+  }
+
+  // Top N by area. Sticky-note text content is never sent — only colour.
+  const ranked = [...stored]
+    .sort((a, b) => b.size.width * b.size.height - a.size.width * a.size.height)
+    .slice(0, PREVIEW_OBJECT_CAP)
+
+  const projected: BoardPreviewObject[] = ranked.map((o) => {
+    const base: BoardPreviewObject = {
+      x: o.position.x,
+      y: o.position.y,
+      w: o.size.width,
+      h: o.size.height,
+      type: o.type,
+    }
+    const d = o.data
+    if (o.type === 'sticky' && d && typeof d.color === 'string') base.color = d.color
+    if ((o.type === 'image' || o.type === 'pdf') && d) {
+      const url =
+        typeof d.thumbnailUrl === 'string' ? d.thumbnailUrl : (d.url as string | undefined)
+      if (typeof url === 'string') base.thumbnailUrl = url
+    }
+    return base
+  })
+
+  return {
+    bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
+    objects: projected,
+  }
+}
 
 boards.use('*', async (c, next) => {
   const user = c.get('user')
@@ -23,6 +101,7 @@ boards.get('/', async (c) => {
       name: schema.board.name,
       createdAt: schema.board.createdAt,
       updatedAt: schema.board.updatedAt,
+      data: schema.board.data,
     })
     .from(schema.board)
     .where(eq(schema.board.userId, user.id))
@@ -33,6 +112,7 @@ boards.get('/', async (c) => {
       name: r.name,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
+      preview: buildPreview(r.data),
     })),
   })
 })

@@ -63,10 +63,13 @@
        light mode that would be invisible — drops to transparent. */
     --swatch-inset: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 
-    /* Konva dot grid colour. Kept as a raw RGB triple so the layer can
-       compose `rgba(${--dot-rgb}, alpha)` at frame time without parsing
-       a full colour. White on dark; near-black on light. */
+    /* Konva dot grid colour + base opacity. Kept as raw values so the
+       layer can compose `rgba(${--dot-rgb}, alpha)` at frame time without
+       parsing a full colour. Base alpha is theme-scoped because the
+       same opacity that reads as a faint white dot on dark is invisible
+       as a faint dark dot on white — light mode needs more presence. */
     --dot-rgb: 255, 255, 255;
+    --dot-base-alpha: 0.18;
 
     /* Geometry */
     --radius: 2px; /* sharp by default; cards & buttons share this */
@@ -131,7 +134,11 @@
     --shadow-drawer: -10px 0 36px -10px rgba(20, 16, 40, 0.15);
     --swatch-inset: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 
-    --dot-rgb: 30, 25, 55;
+    /* Soft lavender at the 285° hue. Lower chroma than --accent so it
+       sits quietly under the foreground. Base alpha bumped — at 0.18 the
+       dots disappear into the near-white surface. */
+    --dot-rgb: 110, 90, 190;
+    --dot-base-alpha: 0.3;
   }
 
   body {

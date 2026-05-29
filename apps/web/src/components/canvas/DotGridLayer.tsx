@@ -29,9 +29,11 @@ export function setDragHalo(id: string, active: boolean) {
 // spacing.
 const DOT_SPACING = 24
 
-// Base look. Tuned for the dark background.
+// Base look. Radius is theme-agnostic. Base alpha is theme-scoped — read
+// from --dot-base-alpha at the top of each frame (cached, only re-reads
+// on data-theme attribute changes).
 const DOT_BASE_RADIUS = 0.9
-const DOT_BASE_ALPHA = 0.18
+const DOT_BASE_ALPHA_FALLBACK = 0.18
 
 // Cursor "magnetism" — dots within FALLOFF world-px brighten + grow.
 // Softer than before; the drag halo is now the louder of the two.
@@ -73,10 +75,11 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
   const layerRef = useRef<Konva.Layer>(null)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
   // Konva paints to a 2D canvas, so it can't read CSS variables directly.
-  // We cache the `--dot-rgb` triple (e.g. "255, 255, 255") and re-read it
-  // whenever the document's data-theme attribute flips. The sceneFunc
-  // composes `rgba(${dotRgb}, alpha)` at frame time.
+  // We cache the `--dot-rgb` triple and `--dot-base-alpha` and re-read
+  // both whenever the document's data-theme attribute flips. The
+  // sceneFunc composes `rgba(${dotRgb}, alpha)` at frame time.
   const dotRgbRef = useRef<string>('255, 255, 255')
+  const dotBaseAlphaRef = useRef<number>(DOT_BASE_ALPHA_FALLBACK)
 
   // 60fps redraw. The callback is a no-op — Konva.Animation forces a layer
   // batchDraw each frame so the sceneFunc re-runs.
@@ -90,15 +93,19 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
     }
   }, [])
 
-  // Read the --dot-rgb token from CSS, and re-read whenever the document's
+  // Read the dot grid tokens from CSS, and re-read whenever the document's
   // data-theme attribute flips. Avoids a per-frame getComputedStyle call.
   useEffect(() => {
-    const readDot = () => {
-      const v = getComputedStyle(document.documentElement).getPropertyValue('--dot-rgb').trim()
-      if (v) dotRgbRef.current = v
+    const readTokens = () => {
+      const styles = getComputedStyle(document.documentElement)
+      const rgb = styles.getPropertyValue('--dot-rgb').trim()
+      if (rgb) dotRgbRef.current = rgb
+      const alphaStr = styles.getPropertyValue('--dot-base-alpha').trim()
+      const parsed = parseFloat(alphaStr)
+      if (!Number.isNaN(parsed)) dotBaseAlphaRef.current = parsed
     }
-    readDot()
-    const observer = new MutationObserver(readDot)
+    readTokens()
+    const observer = new MutationObserver(readTokens)
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
@@ -187,6 +194,13 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
           const phase = ((now % PULSE_PERIOD_MS) / PULSE_PERIOD_MS) * Math.PI * 2
           const pulse = Math.sin(phase) * PULSE_AMPLITUDE
 
+          // Theme-scoped base alpha. Cursor / drag / ripple peak math
+          // stays anchored to DOT_PEAK_ALPHA so the brighten amount scales
+          // inversely with the base — at higher base the relative boost
+          // shrinks, which preserves the "calm baseline, loud peak" feel
+          // in light mode without retuning every constant.
+          const baseAlpha = dotBaseAlphaRef.current
+
           // Prune expired ripples in place. The list is module-scope so
           // imperative callers can push into it from anywhere.
           for (let i = ripples.length - 1; i >= 0; i--) {
@@ -233,7 +247,7 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
 
           for (let gx = startX; gx <= endX; gx += DOT_SPACING) {
             for (let gy = startY; gy <= endY; gy += DOT_SPACING) {
-              let alpha = DOT_BASE_ALPHA + pulse
+              let alpha = baseAlpha + pulse
               let dotR = DOT_BASE_RADIUS
               let drawX = gx
               let drawY = gy
@@ -290,7 +304,7 @@ export function DotGridLayer({ scale, offset, viewportSize }: Props) {
                 if (dSq < falloffSq) {
                   const t = 1 - Math.sqrt(dSq) / CURSOR_FALLOFF_WORLD
                   const gauss = t * t
-                  alpha += (DOT_PEAK_ALPHA - DOT_BASE_ALPHA) * gauss
+                  alpha += (DOT_PEAK_ALPHA - baseAlpha) * gauss
                   dotR += (DOT_PEAK_RADIUS - DOT_BASE_RADIUS) * gauss
                 }
               }

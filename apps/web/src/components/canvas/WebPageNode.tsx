@@ -265,7 +265,11 @@ function firstSentences(text: string, maxChars: number): string {
   const trimmed = text.replace(/\s+/g, ' ').trim()
   if (trimmed.length <= maxChars) return trimmed
   const slice = trimmed.slice(0, maxChars)
-  const lastStop = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('! '), slice.lastIndexOf('? '))
+  const lastStop = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+  )
   if (lastStop > maxChars * 0.5) return slice.slice(0, lastStop + 1)
   return slice + '…'
 }

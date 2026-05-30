@@ -25,9 +25,7 @@ describe('extractWebUrl', () => {
 
   it('returns null for provider-claimed URLs so the right adapter runs', () => {
     // Notion
-    expect(
-      extractWebUrl('https://www.notion.so/Title-12345678abcdef1234567890abcdef12'),
-    ).toBe(null)
+    expect(extractWebUrl('https://www.notion.so/Title-12345678abcdef1234567890abcdef12')).toBe(null)
     expect(extractWebUrl('https://notion.so/page')).toBe(null)
     // Drive
     expect(extractWebUrl('https://docs.google.com/document/d/abc/edit')).toBe(null)

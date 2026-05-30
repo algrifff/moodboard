@@ -438,7 +438,10 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       showToast(`Pulling colours from ${host}…`)
       try {
         const result = await importWebUrl(url)
-        console.log(`[web-paste] ${host}: card + ${result.logoImages.length} logo(s)`, result.logoImages)
+        console.log(
+          `[web-paste] ${host}: card + ${result.logoImages.length} logo(s)`,
+          result.logoImages,
+        )
         const state = useCanvasStore.getState()
         state.commitBeforeAction()
         addObject(createWebPage(point, state.objects.length, result.page))
@@ -779,39 +782,44 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
           container size, which is the only state where Konva's internal
           buffers are valid. */}
       {size.width > 0 && size.height > 0 && (
-      <Stage
-        ref={stageRef}
-        width={size.width}
-        height={size.height}
-        scaleX={scale}
-        scaleY={scale}
-        x={offset.x}
-        y={offset.y}
-        onMouseDown={handleStageMouseDown}
-      >
-        <DotGridLayer scale={scale} offset={offset} viewportSize={size} />
-        <Layer>
-          {objects
-            .filter((o) => o.type === 'image')
-            .map((o) => (
-              <ImageNode key={o.id} object={o} panMode={panMode} selected={selectedSet.has(o.id)} />
-            ))}
-          {objects
-            .filter((o) => o.type === 'pdf')
-            .map((o) => (
-              <PDFNode
-                key={o.id}
-                object={o}
-                panMode={panMode}
-                selected={selectedSet.has(o.id)}
-                onOpen={(obj) => {
-                  const d = obj.data as PDFData
-                  setPreviewPdf({ url: d.url, name: 'PDF' })
-                }}
-              />
-            ))}
-        </Layer>
-      </Stage>
+        <Stage
+          ref={stageRef}
+          width={size.width}
+          height={size.height}
+          scaleX={scale}
+          scaleY={scale}
+          x={offset.x}
+          y={offset.y}
+          onMouseDown={handleStageMouseDown}
+        >
+          <DotGridLayer scale={scale} offset={offset} viewportSize={size} />
+          <Layer>
+            {objects
+              .filter((o) => o.type === 'image')
+              .map((o) => (
+                <ImageNode
+                  key={o.id}
+                  object={o}
+                  panMode={panMode}
+                  selected={selectedSet.has(o.id)}
+                />
+              ))}
+            {objects
+              .filter((o) => o.type === 'pdf')
+              .map((o) => (
+                <PDFNode
+                  key={o.id}
+                  object={o}
+                  panMode={panMode}
+                  selected={selectedSet.has(o.id)}
+                  onOpen={(obj) => {
+                    const d = obj.data as PDFData
+                    setPreviewPdf({ url: d.url, name: 'PDF' })
+                  }}
+                />
+              ))}
+          </Layer>
+        </Stage>
       )}
 
       <GroupsLayer objects={objects} scale={scale} offset={offset} boardId={boardId} />

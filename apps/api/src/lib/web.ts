@@ -63,13 +63,7 @@ export type WebExtractResult = {
 
 export class WebExtractError extends Error {
   constructor(
-    public code:
-      | 'BAD_URL'
-      | 'PRIVATE_HOST'
-      | 'TIMEOUT'
-      | 'TOO_LARGE'
-      | 'FETCH_FAILED'
-      | 'NOT_HTML',
+    public code: 'BAD_URL' | 'PRIVATE_HOST' | 'TIMEOUT' | 'TOO_LARGE' | 'FETCH_FAILED' | 'NOT_HTML',
     message: string,
   ) {
     super(message)
@@ -81,10 +75,7 @@ export class WebExtractError extends Error {
 // Public entry point
 // ---------------------------------------------------------------------------
 
-export async function extractWebPage(
-  input: string,
-  userId: string,
-): Promise<WebExtractResult> {
+export async function extractWebPage(input: string, userId: string): Promise<WebExtractResult> {
   const parsed = parseUrlOrThrow(input)
   if (isPrivateHost(parsed.hostname)) {
     throw new WebExtractError('PRIVATE_HOST', `Refusing to fetch private host ${parsed.hostname}`)
@@ -101,7 +92,10 @@ export async function extractWebPage(
   // and saved to /data/uploads/ so it lives on the canvas as a regular
   // image object.
   const candidates = collectLogoCandidates(html, baseUrl, meta)
-  console.log(`[web] ${baseUrl.host}: ${candidates.length} logo candidate(s)`, candidates.map(c => `${c.kind}:${c.url}`))
+  console.log(
+    `[web] ${baseUrl.host}: ${candidates.length} logo candidate(s)`,
+    candidates.map((c) => `${c.kind}:${c.url}`),
+  )
   const logoImages: ImageData[] = []
   for (const candidate of candidates.slice(0, MAX_LOGOS)) {
     try {
@@ -115,7 +109,9 @@ export async function extractWebPage(
     } catch (e) {
       // Best-effort — a single 404 / wrong mime shouldn't fail the whole
       // import. Drop the candidate and keep going. Log so we can see why.
-      console.log(`[web] ✗ failed ${candidate.kind} logo: ${candidate.url} — ${e instanceof Error ? e.message : 'unknown'}`)
+      console.log(
+        `[web] ✗ failed ${candidate.kind} logo: ${candidate.url} — ${e instanceof Error ? e.message : 'unknown'}`,
+      )
     }
   }
   console.log(`[web] ${baseUrl.host}: ${logoImages.length} logo(s) saved`)
@@ -226,7 +222,10 @@ async function fetchWithCaps(
     const finalUrl = res.url || url
     const finalParsed = new URL(finalUrl)
     if (isPrivateHost(finalParsed.hostname)) {
-      throw new WebExtractError('PRIVATE_HOST', `Redirected to private host ${finalParsed.hostname}`)
+      throw new WebExtractError(
+        'PRIVATE_HOST',
+        `Redirected to private host ${finalParsed.hostname}`,
+      )
     }
     // Stream into a buffer with the byte cap enforced — defends against
     // misreported content-length / chunked responses larger than declared.
@@ -489,7 +488,9 @@ async function downloadAndSaveImage(
   // Accept image/* primarily, but also any response whose URL clearly
   // points at an image file by extension. Magic-byte sniff catches the
   // remaining cases.
-  const urlExt = parsed.pathname.toLowerCase().match(/\.(png|jpe?g|webp|gif|svg|avif|ico|bmp)(?:$|\?)/)
+  const urlExt = parsed.pathname
+    .toLowerCase()
+    .match(/\.(png|jpe?g|webp|gif|svg|avif|ico|bmp)(?:$|\?)/)
   const acceptPrefixes = urlExt ? [] : ['image/']
   const blob = await fetchWithCaps(candidate.url, IMAGE_MAX_BYTES, acceptPrefixes)
   const sniffedMime = sniffImageMime(blob.body) ?? blob.mimeType
@@ -541,10 +542,12 @@ function sniffImageMime(buf: Buffer): string | null {
   )
     return 'image/webp'
   // ICO: 00 00 01 00
-  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01 && buf[3] === 0x00) return 'image/x-icon'
+  if (buf[0] === 0x00 && buf[1] === 0x00 && buf[2] === 0x01 && buf[3] === 0x00)
+    return 'image/x-icon'
   // SVG (text-based) — look for "<svg" or "<?xml" within the first 200 bytes.
   const head = buf.slice(0, 200).toString('utf8').toLowerCase()
-  if (head.includes('<svg') || (head.includes('<?xml') && head.includes('svg'))) return 'image/svg+xml'
+  if (head.includes('<svg') || (head.includes('<?xml') && head.includes('svg')))
+    return 'image/svg+xml'
   // AVIF / HEIC: ftypavif / ftypheic at byte 4
   if (buf.slice(4, 8).toString() === 'ftyp') {
     const brand = buf.slice(8, 12).toString().toLowerCase()
@@ -586,10 +589,7 @@ function extForMime(mime: string): string | null {
 // Palette sampling
 // ---------------------------------------------------------------------------
 
-function pickPaletteSource(
-  candidates: LogoCandidate[],
-  saved: ImageData[],
-): LogoCandidate | null {
+function pickPaletteSource(candidates: LogoCandidate[], saved: ImageData[]): LogoCandidate | null {
   // Prefer the OG image (full-bleed hero) for palette — favicons are
   // usually too small / monochrome to give a real read. Fall back to any
   // saved image so we still get a swatch row.

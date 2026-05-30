@@ -90,9 +90,7 @@ async function main() {
     }
     if (allUrls.size === 0) continue
 
-    const filenames = [...allUrls]
-      .map(filenameFromApiFilesUrl)
-      .filter((f): f is string => !!f)
+    const filenames = [...allUrls].map(filenameFromApiFilesUrl).filter((f): f is string => !!f)
     if (filenames.length === 0) continue
 
     const rows = await db
@@ -129,7 +127,9 @@ async function main() {
 
     if (removed.length === 0) continue
 
-    console.log(`\nboard ${row.id} (user ${row.userId}): removing ${removed.length} orphan object(s)`)
+    console.log(
+      `\nboard ${row.id} (user ${row.userId}): removing ${removed.length} orphan object(s)`,
+    )
     for (const r of removed) {
       console.log(`  - ${r.type} ${r.id} → ${r.urls.join(', ')}`)
     }

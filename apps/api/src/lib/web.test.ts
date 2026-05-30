@@ -100,8 +100,7 @@ describe('extractReadable', () => {
   })
 
   it('drops nav, header, footer, aside', () => {
-    const html =
-      '<body><header>Logo</header><main>Real content</main><footer>©</footer></body>'
+    const html = '<body><header>Logo</header><main>Real content</main><footer>©</footer></body>'
     expect(extractReadable(html)).toContain('Real content')
     expect(extractReadable(html)).not.toContain('Logo')
     expect(extractReadable(html)).not.toContain('©')

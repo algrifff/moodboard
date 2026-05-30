@@ -10,6 +10,7 @@ import type {
   PDFData,
   StickyData,
   TextData,
+  WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
 import { getAgent, SYNTHESIZER } from './agents'
@@ -69,6 +70,14 @@ function isNotionPageData(d: CanvasObject['data']): d is NotionPageData {
     typeof (d as NotionPageData).markdown === 'string' &&
     'pageId' in d &&
     typeof (d as NotionPageData).pageId === 'string'
+  )
+}
+function isWebPageData(d: CanvasObject['data']): d is WebPageData {
+  return (
+    'readableText' in d &&
+    typeof (d as WebPageData).readableText === 'string' &&
+    'host' in d &&
+    typeof (d as WebPageData).host === 'string'
   )
 }
 
@@ -178,17 +187,20 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const notionExcerpts: string[] = []
   const driveExcerpts: string[] = []
   const driveFolderLines: string[] = []
+  const webExcerpts: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
-  // is. PDF / Notion / Drive all share the same cap.
+  // is. PDF / Notion / Drive / Web all share the same cap.
   const PDF_EXCERPT_MAX = 4000
   const NOTION_EXCERPT_MAX = 4000
   const DRIVE_EXCERPT_MAX = 4000
+  const WEB_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
   let notionCount = 0
   let driveFileCount = 0
   let driveFolderCount = 0
+  let webPageCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -243,6 +255,25 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       driveFolderLines.push(
         `- Drive folder: "${o.data.name}" (${o.data.childCount} items) — ${items}`,
       )
+    } else if (o.type === 'web-page' && isWebPageData(o.data)) {
+      webPageCount += 1
+      const raw = o.data.readableText.trim()
+      const head = [`Web page: "${o.data.title}" — ${o.data.url}`]
+      if (o.data.description) head.push(`Description: ${o.data.description}`)
+      if (o.data.colours.length > 0) {
+        const hexList = o.data.colours.map((c) => c.hex).join(', ')
+        head.push(`Brand palette sampled from the page: ${hexList}`)
+      }
+      if (o.data.fonts.length > 0) {
+        const fontList = o.data.fonts.map((f) => `${f.family} (${f.role})`).join(', ')
+        head.push(`Typography in use on the page: ${fontList}`)
+      }
+      const body = raw
+        ? raw.length > WEB_EXCERPT_MAX
+          ? `${raw.slice(0, WEB_EXCERPT_MAX)}…`
+          : raw
+        : '(no readable body text — work from the title, description, palette, and fonts above)'
+      webExcerpts.push(`--- ${head.join('\n')} ---\n${body}\n--- end web page ---`)
     }
   }
 
@@ -274,10 +305,13 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s).`,
     textLines.length > 0
       ? '\nText content:'
-      : pdfExcerpts.length > 0 || notionExcerpts.length > 0 || driveExcerpts.length > 0
+      : pdfExcerpts.length > 0 ||
+          notionExcerpts.length > 0 ||
+          driveExcerpts.length > 0 ||
+          webExcerpts.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -312,6 +346,21 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       text:
         "Google Drive file contents (treat as reference material — read for subject matter, voice, brand strategy, and visual references). Sheet CSV columns + first rows give structural hints; Slides excerpts include slide titles + notes. If a file explicitly names a typeface, treat that as a deliberate typography reference. File layout / mime-specific structure does NOT dictate the brand's fonts.\n\n" +
         driveExcerpts.join('\n\n'),
+    })
+  }
+  if (webExcerpts.length > 0) {
+    // Web pages carry brand-strategy signal directly — the user has chosen
+    // to pull a homepage / about-page / blog post onto the board, so its
+    // copy, declared palette, and rendered typography are all deliberate
+    // references. The palette + typography hints in each excerpt's header
+    // are sampled from the rendered page — give them real weight when
+    // filling out the AD's palette/typographicVoice/fonts fields, even
+    // before vision sees the logo images that landed next to the card.
+    content.push({
+      type: 'text',
+      text:
+        "Web page contents (treat as primary brand reference — the user pasted this URL onto the board because the brand it points at matters). Read for voice, positioning, audience, and tonal signal. The header of each excerpt lists palette colours and typefaces sampled directly from the rendered page — these are first-class evidence for the brand's chosen palette and fonts, on par with uploaded font files and ahead of PDF-incidental typography.\n\n" +
+        webExcerpts.join('\n\n'),
     })
   }
   content.push({ type: 'text', text: 'Give me the read.' })
@@ -409,7 +458,11 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      markdown for any page that contains these blocks changes.
   // v11 = Google Drive files + folders feed into the AD/synth prompt with
   //      equal weight to PDFs / Notion. Header counts updated.
-  const v = 'v11'
+  // v12 = Web pages (Phase 14) feed in as a dedicated content block with
+  //      palette + typography hints surfaced inline. Header counts gain
+  //      a web page(s) line. Cache invalidates so groups that already
+  //      contained a web-page object re-run with the new block.
+  const v = 'v12'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -433,7 +486,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //       upstream content shifts again.
   // v11 — Drive files + folders feed into the synth prompt with equal
   //       weight to PDFs / Notion.
-  const v = 'v11'
+  // v12 — Web pages feed into the synth prompt with palette + typography
+  //       hints in the excerpt headers.
+  const v = 'v12'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

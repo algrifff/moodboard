@@ -7,8 +7,9 @@ import { cubicBezier } from 'framer-motion'
 import { groupBoundingBox, objectsInMarquee } from '@/lib/aabb'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
-import { importDriveFile, importNotionPage } from '@/lib/connectionsApi'
+import { importDriveFile, importNotionPage, importWebUrl } from '@/lib/connectionsApi'
 import { extractDriveFileId } from '@/lib/driveUrl'
+import { extractWebUrl } from '@/lib/webUrl'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { extractNotionPageId } from '@/lib/notionUrl'
 import {
@@ -16,6 +17,7 @@ import {
   createDriveFolder,
   createNotionPage,
   createText,
+  createWebPage,
 } from '@/lib/objectFactory'
 import {
   EASE_OUT_STANDARD,
@@ -48,6 +50,20 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable) return true
   const tag = target.tagName
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+}
+
+// Heuristic for "this URL points at an image file" — used to keep the
+// legacy paste-an-image-URL flow working without intercepting brand
+// homepages. The path-only check ignores query strings (so signed S3
+// URLs still match) but doesn't try to resolve content-type.
+function hasImageExtension(url: string): boolean {
+  try {
+    const u = new URL(url)
+    const path = u.pathname.toLowerCase()
+    return /\.(png|jpe?g|webp|gif|svg|avif|bmp|ico)$/i.test(path)
+  } catch {
+    return false
+  }
 }
 
 export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
@@ -407,6 +423,57 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
+  // Generic web URL paste — no OAuth, no connection. Server fetches the page
+  // with SSRF guards, extracts brand-relevant signal, downloads up to 3
+  // logo candidates. The card spawns at the click point; logo images stack
+  // to its right with a 16px gap so the user sees them all immediately.
+  const handleWebPasteUrl = useCallback(
+    async (url: string, point: Point) => {
+      let host = url
+      try {
+        host = new URL(url).host
+      } catch {
+        // already a stringly URL — host fallback is fine
+      }
+      showToast(`Pulling colours from ${host}…`)
+      try {
+        const result = await importWebUrl(url)
+        console.log(
+          `[web-paste] ${host}: card + ${result.logoImages.length} logo(s)`,
+          result.logoImages,
+        )
+        const state = useCanvasStore.getState()
+        state.commitBeforeAction()
+        addObject(createWebPage(point, state.objects.length, result.page))
+        // Stack logos to the right of the card. Each logo is 96×96 and
+        // sits at a 16px gap; small enough to read as a row of marks
+        // without dominating the canvas. Matches the bumped card width.
+        const LOGO_SIZE = 96
+        const GAP = 16
+        const cardWidth = 320 // matches WEB_DEFAULT_SIZE.width in objectFactory
+        const startX = point.x + cardWidth / 2 + GAP
+        const y = point.y - LOGO_SIZE / 2
+        result.logoImages.forEach((logo, i) => {
+          addObject({
+            id: nanoid(),
+            type: 'image',
+            position: { x: startX + i * (LOGO_SIZE + GAP), y },
+            size: { width: LOGO_SIZE, height: LOGO_SIZE },
+            rotation: 0,
+            zIndex: state.objects.length + i + 1,
+            data: logo,
+          })
+        })
+        if (result.logoImages.length === 0) {
+          showToast(`No brand logos found on ${host} — card only`)
+        }
+      } catch (err) {
+        showToast(`Web import failed: ${err instanceof Error ? err.message : 'unknown'}`)
+      }
+    },
+    [addObject],
+  )
+
   // Same shape as the Notion paste handler, dispatched by the import's `kind`
   // discriminator so PDFs land as PDFNode and images as ImageNode.
   const handleDrivePasteUrl = useCallback(
@@ -529,9 +596,14 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
           }
         }
 
+        // 4b. data:image and URLs whose path obviously points at an image
+        // file → land as ImageNode. We narrow the legacy "any http URL is
+        // an image" branch to URLs with a clear image extension so a brand
+        // homepage URL flows through to the web-page handler below
+        // instead of getting downgraded to a single image.
         if (
           trimmed.length > 0 &&
-          (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/'))
+          (trimmed.startsWith('data:image/') || hasImageExtension(trimmed))
         ) {
           const hit = await urlToImageHit(trimmed)
           if (hit) {
@@ -546,6 +618,18 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             } catch {
               // Image fetch failed — fall through to a text node instead.
             }
+          }
+        }
+
+        // 4c. Any other http(s) URL → fetch the page, sample its brand
+        // signal, spawn a web-page card + adjacent logo images. This is
+        // the catch-all for "user pasted a brand homepage".
+        if (trimmed.length > 0) {
+          const webUrl = extractWebUrl(trimmed)
+          if (webUrl) {
+            e.preventDefault()
+            await handleWebPasteUrl(webUrl, viewportCenterWorld())
+            return
           }
         }
 
@@ -567,6 +651,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     addPdfFromBlob,
     handleDrivePasteUrl,
     handleNotionPasteUrl,
+    handleWebPasteUrl,
     viewportCenterWorld,
   ])
 
@@ -684,39 +769,58 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
-      <Stage
-        ref={stageRef}
-        width={size.width}
-        height={size.height}
-        scaleX={scale}
-        scaleY={scale}
-        x={offset.x}
-        y={offset.y}
-        onMouseDown={handleStageMouseDown}
-      >
-        <DotGridLayer scale={scale} offset={offset} viewportSize={size} />
-        <Layer>
-          {objects
-            .filter((o) => o.type === 'image')
-            .map((o) => (
-              <ImageNode key={o.id} object={o} panMode={panMode} selected={selectedSet.has(o.id)} />
-            ))}
-          {objects
-            .filter((o) => o.type === 'pdf')
-            .map((o) => (
-              <PDFNode
-                key={o.id}
-                object={o}
-                panMode={panMode}
-                selected={selectedSet.has(o.id)}
-                onOpen={(obj) => {
-                  const d = obj.data as PDFData
-                  setPreviewPdf({ url: d.url, name: 'PDF' })
-                }}
-              />
-            ))}
-        </Layer>
-      </Stage>
+      {/* Defer Stage mount until the container has been measured. Konva
+          eagerly draws its inner cache canvases at construction time — if
+          we instantiate the Stage at width:0/height:0, the first
+          `drawImage(cacheCanvas, ...)` of any child Rect throws
+          `InvalidStateError: image argument is a canvas element with a
+          width or height of 0`. The error fires inside React's commit
+          layout-effects, so it cascades through every nested fiber and
+          produces the huge stack we used to see on every reload.
+          Gating on `size.width > 0 && size.height > 0` makes the first
+          mount happen after the ResizeObserver has reported the real
+          container size, which is the only state where Konva's internal
+          buffers are valid. */}
+      {size.width > 0 && size.height > 0 && (
+        <Stage
+          ref={stageRef}
+          width={size.width}
+          height={size.height}
+          scaleX={scale}
+          scaleY={scale}
+          x={offset.x}
+          y={offset.y}
+          onMouseDown={handleStageMouseDown}
+        >
+          <DotGridLayer scale={scale} offset={offset} viewportSize={size} />
+          <Layer>
+            {objects
+              .filter((o) => o.type === 'image')
+              .map((o) => (
+                <ImageNode
+                  key={o.id}
+                  object={o}
+                  panMode={panMode}
+                  selected={selectedSet.has(o.id)}
+                />
+              ))}
+            {objects
+              .filter((o) => o.type === 'pdf')
+              .map((o) => (
+                <PDFNode
+                  key={o.id}
+                  object={o}
+                  panMode={panMode}
+                  selected={selectedSet.has(o.id)}
+                  onOpen={(obj) => {
+                    const d = obj.data as PDFData
+                    setPreviewPdf({ url: d.url, name: 'PDF' })
+                  }}
+                />
+              ))}
+          </Layer>
+        </Stage>
+      )}
 
       <GroupsLayer objects={objects} scale={scale} offset={offset} boardId={boardId} />
 
@@ -728,7 +832,8 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'font' ||
             o.type === 'notion-page' ||
             o.type === 'drive-file' ||
-            o.type === 'drive-folder',
+            o.type === 'drive-folder' ||
+            o.type === 'web-page',
         )}
         scale={scale}
         offset={offset}

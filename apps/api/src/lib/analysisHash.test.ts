@@ -160,6 +160,71 @@ describe('analysisHash', () => {
     )
   })
 
+  it('changes when a web page readable text changes', () => {
+    const webPage = (id: string, readableText: string): CanvasObject => ({
+      id,
+      type: 'web-page',
+      position: { x: 0, y: 0 },
+      size: { width: 300, height: 168 },
+      rotation: 0,
+      zIndex: 0,
+      data: {
+        url: 'https://stripe.com',
+        host: 'stripe.com',
+        title: 'Stripe',
+        description: 'Payments infrastructure',
+        readableText,
+        colours: [{ hex: '#635BFF', role: 'primary' }],
+        fonts: [{ family: 'Inter', role: 'display' }],
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    })
+    expect(analysisHash([webPage('a', 'Pay as you build')], 'm1')).not.toBe(
+      analysisHash([webPage('a', 'Payments infrastructure for the internet')], 'm1'),
+    )
+  })
+
+  it('does not invalidate when only web-page colours/fonts change', () => {
+    // The hash is content-driven — palette and fonts are inline hints
+    // for the AD prompt. A stylesheet tweak that shifts a swatch
+    // shouldn't burn the cache.
+    const base = {
+      id: 'a',
+      type: 'web-page' as const,
+      position: { x: 0, y: 0 },
+      size: { width: 300, height: 168 },
+      rotation: 0,
+      zIndex: 0,
+    }
+    const a: CanvasObject = {
+      ...base,
+      data: {
+        url: 'https://acme.com',
+        host: 'acme.com',
+        title: 'Acme',
+        description: '',
+        readableText: 'Hello world',
+        colours: [{ hex: '#FF0000', role: 'primary' }],
+        fonts: [{ family: 'Inter', role: 'display' }],
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    }
+    const b: CanvasObject = {
+      ...base,
+      data: {
+        url: 'https://acme.com',
+        host: 'acme.com',
+        title: 'Acme',
+        description: '',
+        readableText: 'Hello world',
+        colours: [{ hex: '#00FF00', role: 'primary' }],
+        fonts: [{ family: 'Roboto', role: 'display' }],
+        fetchedAt: '2026-06-30T00:00:00Z',
+      },
+    }
+    expect(analysisHash([a], 'm1')).toBe(analysisHash([b], 'm1'))
+  })
+
   it('changes when a drive folder gains a child', () => {
     const folder = (id: string, children: { name: string; mimeType: string }[]): CanvasObject => ({
       id,

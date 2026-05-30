@@ -6,6 +6,7 @@ import type {
   NotionPageData,
   StickyData,
   TextData,
+  WebPageData,
 } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
@@ -150,6 +151,29 @@ export function createDriveFolder(
       y: worldCenter.y - DRIVE_DEFAULT_SIZE.height / 2,
     },
     size: DRIVE_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// Taller than Notion/Drive so the description paragraph + swatch row each
+// get their own band without crowding the favicon + title above.
+const WEB_DEFAULT_SIZE = { width: 320, height: 240 }
+
+export function createWebPage(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: WebPageData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'web-page',
+    position: {
+      x: worldCenter.x - WEB_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - WEB_DEFAULT_SIZE.height / 2,
+    },
+    size: WEB_DEFAULT_SIZE,
     rotation: 0,
     zIndex,
     data,

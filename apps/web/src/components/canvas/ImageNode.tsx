@@ -3,6 +3,7 @@ import type Konva from 'konva'
 import { useEffect, useRef, useState } from 'react'
 import { Image as KonvaImage } from 'react-konva'
 import { useSpawnOpacity } from '@/hooks/useSpawnAnim'
+import { isImageDead, markImageDead } from '@/lib/imageHealth'
 import { useCanvasStore } from '@/store/canvas'
 import { emitDotRipple, setDragHalo } from './DotGridLayer'
 
@@ -58,11 +59,27 @@ export function ImageNode({
       setImage(null)
       return
     }
+    // Cross-session orphans (board state references /api/files/<id> but
+    // the file was wiped or the asset row never landed) get a single 404
+    // on first load; without an `onerror` handler the failure is silent
+    // for React (image state stays null forever) but the browser still
+    // logs a network error. The shared imageHealth cache (also consulted
+    // by palette.ts) means the first component to observe a dead URL
+    // prevents every other component from re-issuing the same fetch.
+    if (isImageDead(url)) {
+      setImage(null)
+      return
+    }
     const img = new Image()
     img.crossOrigin = 'anonymous'
     let cancelled = false
     img.onload = () => {
       if (!cancelled) setImage(img)
+    }
+    img.onerror = () => {
+      if (cancelled) return
+      markImageDead(url)
+      setImage(null)
     }
     img.src = url
     return () => {

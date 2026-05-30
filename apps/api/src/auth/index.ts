@@ -36,6 +36,16 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // refresh once per day of activity
     cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
+  // better-auth's built-in rate limiter defaults to 100 requests / 10s per
+  // IP across *every* path when NODE_ENV=production. That fires on
+  // /api/files/* image loads (a brand-page import spawns 1–3 logo image
+  // nodes which the browser pulls in parallel alongside any existing
+  // canvas images), and the client sees 429s. We already apply per-scope
+  // rate limits in lib/rateLimit.ts where they matter (auth, upload,
+  // proxy, external-search/import, analyze), so disable the global one.
+  rateLimit: {
+    enabled: false,
+  },
   advanced: {
     crossSubDomainCookies: { enabled: false },
     defaultCookieAttributes: {

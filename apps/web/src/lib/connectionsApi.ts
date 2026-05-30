@@ -2,6 +2,7 @@ import {
   connectionsListResponseSchema,
   importDriveResponseSchema,
   importNotionResponseSchema,
+  importWebResponseSchema,
   pickerChildrenResponseSchema,
   pickerRecentsResponseSchema,
   pickerSearchResponseSchema,
@@ -12,6 +13,7 @@ import {
   type NotionPageData,
   type PDFData,
   type PickerTile,
+  type WebPageData,
 } from '@moodboard/shared'
 
 // Thin wrapper around the Phase 12+ connection / external endpoints.
@@ -112,6 +114,28 @@ export async function importDriveFile(
   return importDriveResponseSchema.parse(await jsonOrThrow(res)) as DriveImportResult
 }
 
+export type WebImportResult = {
+  page: WebPageData
+  logoImages: ImageData[]
+}
+
+/**
+ * Snapshot a public web page by URL. No connection required — the server
+ * fetches directly with SSRF guards. Returns the page card data plus 0–3
+ * brand logo images saved to /data/uploads so they mount as regular
+ * image objects next to the card.
+ */
+export async function importWebUrl(url: string): Promise<WebImportResult> {
+  const res = await fetch('/api/external/web/import', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  const body = importWebResponseSchema.parse(await jsonOrThrow(res))
+  return { page: body.page, logoImages: body.logoImages }
+}
+
 /**
  * Refresh an existing canvas object's snapshot from its source. Returns a
  * discriminated union — Notion pages stay as 'notion-page' kind for
@@ -123,6 +147,7 @@ export type RefreshResult =
   | { kind: 'folder'; data: DriveFolderData }
   | { kind: 'pdf'; data: PDFData }
   | { kind: 'image'; data: ImageData }
+  | { kind: 'web-page'; data: WebPageData }
 
 export async function refreshExternal(boardId: string, objectId: string): Promise<RefreshResult> {
   const res = await fetch('/api/external/refresh', {
@@ -132,7 +157,8 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
     body: JSON.stringify({ boardId, objectId }),
   })
   const body = (await jsonOrThrow(res)) as { kind?: string; data?: unknown }
-  // The server returns either { data } (notion) or { kind, data } (drive).
+  // The server returns either { data } (notion), { kind, data } (drive), or
+  // { kind: 'web-page', data, logoImages } for web pages.
   if (body.kind === 'file' || body.kind === 'folder') {
     const parsed = importDriveResponseSchema.parse(body) as DriveImportResult
     return parsed as RefreshResult
@@ -140,6 +166,14 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
   if (body.kind === 'pdf' || body.kind === 'image') {
     const parsed = importDriveResponseSchema.parse(body) as DriveImportResult
     return parsed as RefreshResult
+  }
+  if (body.kind === 'web-page') {
+    // The /refresh response uses { kind, data, logoImages } so it slots
+    // into the discriminated union here. We only swap the card data —
+    // logo images keep their identity across refresh.
+    const b = body as { kind: 'web-page'; data: unknown }
+    const page = importWebResponseSchema.shape.page.parse(b.data)
+    return { kind: 'web-page', data: page }
   }
   const notion = importNotionResponseSchema.parse(body)
   return { kind: 'notion-page', data: notion.data }

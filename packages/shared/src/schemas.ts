@@ -79,6 +79,18 @@ export const driveFolderDataSchema = z.object({
   modifiedTime: z.string().optional(),
 })
 
+export const webPageDataSchema = z.object({
+  url: z.string(),
+  host: z.string(),
+  title: z.string(),
+  description: z.string(),
+  faviconUrl: z.string().optional(),
+  readableText: z.string(),
+  colours: z.array(z.object({ hex: z.string(), role: z.string() })),
+  fonts: z.array(z.object({ family: z.string(), role: z.enum(['display', 'body']) })),
+  fetchedAt: z.string(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
   type: z.enum([
@@ -90,6 +102,7 @@ export const canvasObjectSchema = z.object({
     'notion-page',
     'drive-file',
     'drive-folder',
+    'web-page',
   ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
@@ -104,6 +117,7 @@ export const canvasObjectSchema = z.object({
     notionPageDataSchema,
     driveFileDataSchema,
     driveFolderDataSchema,
+    webPageDataSchema,
   ]),
 })
 
@@ -308,6 +322,7 @@ export const boardPreviewObjectSchema = z.object({
     'notion-page',
     'drive-file',
     'drive-folder',
+    'web-page',
   ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -321,6 +336,8 @@ export const boardPreviewObjectSchema = z.object({
   iconEmoji: z.string().optional(),
   // For drive files — mime type so the dashboard can render the right glyph.
   mimeType: z.string().optional(),
+  // For web pages — favicon + host string for the dashboard chip.
+  host: z.string().optional(),
 })
 export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
 
@@ -431,6 +448,26 @@ export const importNotionResponseSchema = z.object({
 export const importDriveResponseSchema = z.object({
   kind: z.enum(['file', 'folder', 'pdf', 'image']),
   data: z.union([driveFileDataSchema, driveFolderDataSchema, pdfDataSchema, imageDataSchema]),
+})
+
+// Web import returns the page card data + 0–3 logo images saved to /data/
+// uploads. The client mounts the card at the cursor and stacks the logos
+// adjacent to it. The /refresh path returns the same shape so a stale card
+// can be re-extracted; logo images aren't auto-replaced (they live as their
+// own canvas objects after the initial import).
+//
+// Note: the logo image urls are server-relative `/api/files/...` paths, not
+// absolute URLs, so we relax `z.string().url()` to plain `z.string()` here.
+// Matches how UploadResponse types url at the boundary — only the runtime
+// validator is loosened; the structural type stays ImageData-compatible.
+export const importWebResponseSchema = z.object({
+  page: webPageDataSchema,
+  logoImages: z.array(
+    z.object({
+      url: z.string(),
+      thumbnailUrl: z.string().optional(),
+    }),
+  ),
 })
 
 export const updateBoardRequestSchema = z.object({

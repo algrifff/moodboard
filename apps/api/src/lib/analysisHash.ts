@@ -7,6 +7,7 @@ import type {
   NotionPageData,
   StickyData,
   TextData,
+  WebPageData,
 } from '@moodboard/shared'
 import { createHash } from 'node:crypto'
 
@@ -59,6 +60,14 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
           .map((c) => `${c.name}::${c.mimeType}`)
           .join(',')}`,
       )
+    } else if (o.type === 'web-page') {
+      // The AD reads url + title + readableText. Colours/fonts feed the
+      // prompt as hints but aren't load-bearing — keep them out of the
+      // hash so refetching a stylesheet-tweaked site doesn't bust the
+      // cache. fetchedAt is also intentionally excluded; a manual refresh
+      // that returns identical readableText should reuse the cache.
+      const d = o.data as WebPageData
+      parts.push(`${o.id}|web-page|${d.url}|${d.title}|${d.readableText}`)
     }
   }
   return createHash('sha256')

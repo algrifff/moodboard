@@ -4,6 +4,7 @@ import { FontNode } from './FontNode'
 import { NotionPageNode } from './NotionPageNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
+import { WebPageNode } from './WebPageNode'
 
 export function CanvasOverlayLayer({
   objects,
@@ -85,6 +86,18 @@ export function CanvasOverlayLayer({
           if ((o.type === 'drive-file' || o.type === 'drive-folder') && boardId) {
             return (
               <DriveNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
+              />
+            )
+          }
+          if (o.type === 'web-page' && boardId) {
+            return (
+              <WebPageNode
                 key={o.id}
                 object={o}
                 scale={scale}

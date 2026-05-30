@@ -1,10 +1,17 @@
 import type { CanvasObject, ImageData, PDFData, StickyData } from '@moodboard/shared'
 import { Vibrant } from 'node-vibrant/browser'
+import { isImageDead, markImageDead } from './imageHealth'
 
 export type Swatch = { hex: string; population: number }
 
 // Cache the per-image extraction so we don't re-decode the same image on
 // every re-analysis. Key = image URL.
+//
+// Failures are handled via the shared imageHealth module — when Vibrant
+// can't fetch the URL we mark it dead, and ImageNode (Konva render path)
+// reads the same flag so it doesn't re-issue the same 404. The previous
+// implementation only cached *successes*, so a board with an orphaned
+// image would retry the 404 every time the palette widget re-rendered.
 const imagePaletteCache = new Map<string, Swatch[]>()
 
 // Skip the "Muted" / "DarkMuted" / "LightMuted" variants — they're the
@@ -27,15 +34,24 @@ function isPdfData(data: CanvasObject['data']): data is PDFData {
 async function paletteFromImage(url: string): Promise<Swatch[]> {
   const cached = imagePaletteCache.get(url)
   if (cached) return cached
-  const palette = await Vibrant.from(url).getPalette()
-  const swatches: Swatch[] = []
-  for (const key of Object.keys(palette)) {
-    if (!ALLOWED_VIBRANT_KEYS.has(key)) continue
-    const s = palette[key]
-    if (s) swatches.push({ hex: s.hex, population: s.population })
+  // Short-circuit known-dead URLs — see lib/imageHealth for the rationale.
+  // Returning [] means the URL contributes nothing to the group palette,
+  // exactly like a successful-but-unsaturated image.
+  if (isImageDead(url)) return []
+  try {
+    const palette = await Vibrant.from(url).getPalette()
+    const swatches: Swatch[] = []
+    for (const key of Object.keys(palette)) {
+      if (!ALLOWED_VIBRANT_KEYS.has(key)) continue
+      const s = palette[key]
+      if (s) swatches.push({ hex: s.hex, population: s.population })
+    }
+    imagePaletteCache.set(url, swatches)
+    return swatches
+  } catch {
+    markImageDead(url)
+    return []
   }
-  imagePaletteCache.set(url, swatches)
-  return swatches
 }
 
 function dedupe(swatches: Swatch[]): Swatch[] {

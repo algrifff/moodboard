@@ -31,7 +31,11 @@ analyze.use('*', async (c, next) => {
 })
 
 // Tighter than the 30/min on upload — Claude calls cost real money. Per IP.
-analyze.use('*', rateLimit({ scope: 'analyze', limit: 20, windowMs: 60_000 }))
+// Applied per-route below (not as wildcard) because the analyze router is
+// mounted at the api root via `api.route('/', analyze)`; a wildcard rate
+// limit would leak onto /api/files/* image streams and 429 the browser's
+// parallel logo loads after a paste.
+const analyzeRateLimit = rateLimit({ scope: 'analyze', limit: 20, windowMs: 60_000 })
 
 // Shared: load the board and resolve the requested object subset.
 async function loadGroupObjects(
@@ -86,9 +90,9 @@ async function getAgentResult(
   return { data, cached: false, cacheKey, tag }
 }
 
-analyze.post('/boards/:boardId/analyze', async (c) => {
+analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
   const user = c.get('user')!
-  const boardId = c.req.param('boardId')
+  const boardId = c.req.param('boardId') as string
 
   const body = await c.req.json().catch(() => null)
   const parsed = analyzeRequestSchema.safeParse(body)
@@ -113,9 +117,9 @@ analyze.post('/boards/:boardId/analyze', async (c) => {
   }
 })
 
-analyze.post('/boards/:boardId/synthesize', async (c) => {
+analyze.post('/boards/:boardId/synthesize', analyzeRateLimit, async (c) => {
   const user = c.get('user')!
-  const boardId = c.req.param('boardId')
+  const boardId = c.req.param('boardId') as string
 
   const body = await c.req.json().catch(() => null)
   const parsed = synthesizeRequestSchema.safeParse(body)

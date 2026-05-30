@@ -80,6 +80,28 @@ export type DriveFolderData = {
   modifiedTime?: string
 }
 
+// A web page imported by URL (Phase 14). No OAuth — the server fetches the
+// page with a headless browser, extracts the brand-relevant signal, and
+// snapshots it onto the canvas object. Brand logos discovered on the page
+// land as separate `image` objects adjacent to the card so they're vision-
+// readable by the AD the same way an uploaded image is.
+//
+// `readableText` is the AD's input — Mozilla Readability over the static
+// HTML, capped to ~4000 chars. `colours` and `fonts` are computed-style
+// reads from the rendered page so they reflect what the user actually sees,
+// not what's declared in CSS sources.
+export type WebPageData = {
+  url: string
+  host: string
+  title: string
+  description: string
+  faviconUrl?: string
+  readableText: string
+  colours: { hex: string; role: string }[]
+  fonts: { family: string; role: 'display' | 'body' }[]
+  fetchedAt: string
+}
+
 export type CanvasObjectType =
   | 'image'
   | 'sticky'
@@ -89,6 +111,7 @@ export type CanvasObjectType =
   | 'notion-page'
   | 'drive-file'
   | 'drive-folder'
+  | 'web-page'
 
 export type CanvasObject = {
   id: string
@@ -106,6 +129,7 @@ export type CanvasObject = {
     | NotionPageData
     | DriveFileData
     | DriveFolderData
+    | WebPageData
 }
 
 export type AIAnalysis = {

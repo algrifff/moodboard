@@ -4,6 +4,7 @@ import type {
   ImageData,
   NotionPageData,
   PDFData,
+  WebPageData,
 } from '@moodboard/shared'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -21,6 +22,7 @@ import { blocksToMarkdown, getPage, getPageBlocks } from '../lib/notion'
 import { processPdf } from '../lib/pdfProcessing'
 import { rateLimit } from '../lib/rateLimit'
 import { savePdf, savePdfThumbnail, saveUpload } from '../lib/storage'
+import { extractWebPage, WebExtractError } from '../lib/web'
 import { loadConnection } from './connections'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
@@ -91,6 +93,42 @@ external.post('/notion/import', externalImportLimit, async (c) => {
 // up indistinguishable from manually uploaded files. The DriveFileNode is
 // only for Google-native types and arbitrary non-routable mimes.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// POST /api/external/web/import
+//
+// Public-URL importer. No connection required — the server fetches the
+// page directly with SSRF guards (scheme allowlist + private-IP block +
+// response cap). Returns the page card data plus 0–3 logo image objects;
+// the client mounts the card at the cursor and stacks the logos adjacent.
+// ---------------------------------------------------------------------------
+external.post('/web/import', externalImportLimit, async (c) => {
+  const user = c.get('user')!
+  const body = (await c.req.json().catch(() => ({}))) as { url?: unknown }
+  const url = typeof body.url === 'string' ? body.url : null
+  if (!url) {
+    return c.json({ error: 'url is required' }, 400)
+  }
+  try {
+    const result = await extractWebPage(url, user.id)
+    return c.json({ page: result.page, logoImages: result.logoImages })
+  } catch (e) {
+    if (e instanceof WebExtractError) {
+      const status =
+        e.code === 'BAD_URL' || e.code === 'PRIVATE_HOST'
+          ? 400
+          : e.code === 'TIMEOUT'
+            ? 504
+            : e.code === 'TOO_LARGE'
+              ? 413
+              : e.code === 'NOT_HTML'
+                ? 415
+                : 502
+      return c.json({ error: e.message, code: e.code }, status)
+    }
+    throw e
+  }
+})
+
 external.post('/drive/import', externalImportLimit, async (c) => {
   const user = c.get('user')!
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -195,6 +233,26 @@ external.post('/refresh', externalImportLimit, async (c) => {
     } catch (e) {
       if (e instanceof TokenDecryptError) {
         return c.json({ error: 'Connection unavailable' }, 503)
+      }
+      throw e
+    }
+  }
+
+  if (object.type === 'web-page') {
+    const d = object.data as Partial<WebPageData>
+    if (!d.url) {
+      return c.json({ error: 'Object has no source URL' }, 400)
+    }
+    try {
+      const result = await extractWebPage(d.url, user.id)
+      // The logo images on a refresh are returned for completeness, but
+      // the client only swaps the card data — the original logo image
+      // objects on the canvas keep their identity. A user who wants the
+      // fresh logos can delete + re-paste.
+      return c.json({ kind: 'web-page', data: result.page, logoImages: result.logoImages })
+    } catch (e) {
+      if (e instanceof WebExtractError) {
+        return c.json({ error: e.message, code: e.code }, 502)
       }
       throw e
     }

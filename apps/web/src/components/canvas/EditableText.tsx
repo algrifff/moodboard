@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties, type ElementType } from 'react'
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ElementType } from 'react'
 
-// Inline-editable text. Double-click enters edit mode (contentEditable);
-// Enter or blur commits; Escape cancels. Empty/whitespace-only values
-// commit as empty string — caller can ignore or react. Tag is configurable
-// so the same component works for block-level fields (div, p) and inline
-// fields embedded inside a sentence or chip (span).
+// Inline-editable text. Single-click enters edit mode (contentEditable);
+// Enter or blur commits; Escape cancels. Multi-line bodies skip the
+// Enter-commits-on-press behaviour.
 //
-// The component manages its own innerText via a ref to avoid React
-// re-rendering contentEditable contents under the cursor (which would
-// reset selection); it only sync-writes innerText when the external
-// `value` changes and the user isn't actively editing.
+// View vs edit are rendered as two different JSX branches, so React
+// owns the children in view mode (no innerText hacks). When the user
+// enters edit mode, a fresh contentEditable element mounts and
+// useLayoutEffect seeds it with the current value + selects all,
+// before the browser paints — so the cursor lands at the right place
+// without a flash of empty.
 export function EditableText({
   value,
   onCommit,
@@ -17,7 +17,7 @@ export function EditableText({
   className,
   style,
   as = 'div',
-  title = 'Double-click to edit',
+  title = 'Click to edit',
 }: {
   value: string
   onCommit: (next: string) => void
@@ -28,21 +28,15 @@ export function EditableText({
   title?: string
 }) {
   const [editing, setEditing] = useState(false)
+  const [hover, setHover] = useState(false)
   const ref = useRef<HTMLElement>(null)
 
-  // Keep innerText in sync with the external value when the user isn't
-  // editing. While editing, we don't touch innerText — that would yank
-  // the cursor out.
-  useEffect(() => {
-    if (!editing && ref.current && ref.current.innerText !== value) {
-      ref.current.innerText = value
-    }
-  }, [value, editing])
-
-  // On entering edit: focus + select all so a quick "double-click → type"
-  // replaces the value, not appends to it.
-  useEffect(() => {
+  // When entering edit mode: write the current value into the freshly-
+  // mounted contentEditable, focus, and select all. useLayoutEffect
+  // runs before paint so the user never sees the pre-seeded empty box.
+  useLayoutEffect(() => {
     if (editing && ref.current) {
+      ref.current.innerText = value
       ref.current.focus()
       const range = document.createRange()
       range.selectNodeContents(ref.current)
@@ -50,6 +44,9 @@ export function EditableText({
       sel?.removeAllRanges()
       sel?.addRange(range)
     }
+    // Intentionally only on edit transitions — during editing the
+    // DOM is the source of truth and we don't want to yank the cursor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing])
 
   const commit = () => {
@@ -59,49 +56,77 @@ export function EditableText({
     setEditing(false)
   }
 
-  const cancel = () => {
-    // Restore visible text to the prop value, drop unsaved edits.
-    if (ref.current) ref.current.innerText = value
-    setEditing(false)
-  }
+  const cancel = () => setEditing(false)
 
   const Tag = as
 
+  if (editing) {
+    return (
+      <Tag
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={commit}
+        onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            cancel()
+          } else if (e.key === 'Enter' && !multiline) {
+            e.preventDefault()
+            commit()
+          }
+        }}
+        onPointerDown={(e: React.PointerEvent) => {
+          // Don't bubble drag/click events to the panel or canvas
+          // while typing — the drawer scrim close handler and the
+          // resize handle would otherwise interfere.
+          e.stopPropagation()
+        }}
+        style={{
+          outline: '1.5px solid var(--accent)',
+          outlineOffset: 2,
+          borderRadius: 2,
+          cursor: 'text',
+          whiteSpace: multiline ? 'pre-wrap' : 'normal',
+          minWidth: 12,
+          minHeight: '1em',
+          ...style,
+        }}
+        className={className}
+      />
+    )
+  }
+
+  // View mode — React-owned children, click to edit.
   return (
     <Tag
-      ref={ref}
-      contentEditable={editing}
-      suppressContentEditableWarning
-      onDoubleClick={(e: React.MouseEvent) => {
+      onClick={(e: React.MouseEvent) => {
+        // Don't bubble — clicking the throughline text shouldn't trigger
+        // the LogoBlock picker or the drawer scrim close.
         e.stopPropagation()
-        e.preventDefault()
         setEditing(true)
       }}
-      onBlur={commit}
-      onKeyDown={(e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          cancel()
-        } else if (e.key === 'Enter' && !multiline) {
-          e.preventDefault()
-          commit()
-        }
-      }}
-      // Stop pointer-down so dragging inside text doesn't pull the
-      // surrounding panel/canvas drag handlers.
-      onPointerDown={(e: React.PointerEvent) => {
-        if (editing) e.stopPropagation()
-      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       style={{
-        outline: editing ? '1.5px solid var(--accent)' : 'none',
-        outlineOffset: 2,
+        // Subtle hover hint so the user sees this is editable — tinted
+        // accent fill that matches the brief's accent identity.
+        backgroundColor: hover ? 'var(--accent-fade)' : 'transparent',
+        transition: 'background-color 120ms',
+        cursor: 'text',
         borderRadius: 2,
-        cursor: editing ? 'text' : 'pointer',
         whiteSpace: multiline ? 'pre-wrap' : 'normal',
+        minHeight: '1em',
         ...style,
       }}
       className={className}
-      title={editing ? undefined : title}
-    />
+      title={title}
+    >
+      {value.length > 0 ? (
+        value
+      ) : (
+        <span style={{ opacity: 0.4, fontStyle: 'italic' }}>Click to add</span>
+      )}
+    </Tag>
   )
 }

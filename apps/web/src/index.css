@@ -341,6 +341,30 @@
   }
 }
 
+/* Bg-level shimmer for skeleton loaders (source picker tiles, etc).
+   Subtle pulse on opacity — not a moving gradient, keeps the eye calm
+   while loading. Honors reduced-motion. */
+@keyframes mb-shimmer {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@keyframes mb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *[style*='mb-shimmer'],
+  *[style*='mb-spin'] {
+    animation: none !important;
+  }
+}
+
 @layer utilities {
   /* Tailwind generates these rules with the legacy `hsl(var(--…))` wrapper
      from when the shadcn config was first scaffolded. Our tokens are now

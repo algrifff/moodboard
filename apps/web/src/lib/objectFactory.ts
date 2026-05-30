@@ -1,4 +1,10 @@
-import type { CanvasObject, FontData, StickyData, TextData } from '@moodboard/shared'
+import type {
+  CanvasObject,
+  FontData,
+  NotionPageData,
+  StickyData,
+  TextData,
+} from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
 const STICKY_DEFAULT_SIZE = { width: 200, height: 200 }
@@ -75,6 +81,34 @@ export function createFont(
       y: worldCenter.y - FONT_DEFAULT_SIZE.height / 2,
     },
     size: FONT_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// Compact card — title + provider line + Open pill is roughly 100px of
+// content; 140 gives a little breathing room without an empty void below
+// the pill. User can resize from any edge for a chunkier card.
+const NOTION_DEFAULT_SIZE = { width: 280, height: 140 }
+
+// External-source factory. The full data snapshot comes from the import
+// endpoint and is stored verbatim on the canvas object — the board owns
+// the markdown, so future renders / AI runs don't need to refetch from
+// Notion until the user explicitly refreshes.
+export function createNotionPage(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: NotionPageData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'notion-page',
+    position: {
+      x: worldCenter.x - NOTION_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - NOTION_DEFAULT_SIZE.height / 2,
+    },
+    size: NOTION_DEFAULT_SIZE,
     rotation: 0,
     zIndex,
     data,

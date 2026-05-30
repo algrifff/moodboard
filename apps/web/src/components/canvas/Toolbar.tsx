@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Moon,
   NoteBlank,
+  Plug,
   Sun,
   TextAa,
   Trash,
@@ -19,6 +20,7 @@ import { createFont, createSticky } from '@/lib/objectFactory'
 import { useTheme, type ThemePref } from '@/lib/theme'
 import { screenToWorld } from '@/lib/transform'
 import { useCanvasStore } from '@/store/canvas'
+import { useSourcePickerStore } from '@/store/sourcePicker'
 import { nanoid } from 'nanoid'
 
 export function Toolbar() {
@@ -29,6 +31,7 @@ export function Toolbar() {
   const clearBoard = useCanvasStore((s) => s.clearBoard)
   const commit = useCanvasStore((s) => s.commitBeforeAction)
   const objectsCount = useCanvasStore((s) => s.objects.length)
+  const togglePicker = useSourcePickerStore((s) => s.togglePicker)
 
   const viewCenterWorld = () => {
     const { scale, offset, viewportSize } = useCanvasStore.getState()
@@ -147,6 +150,7 @@ export function Toolbar() {
       <ToolbarButton icon={FilePdf} label="PDF" onClick={() => pdfInputRef.current?.click()} />
       <ToolbarButton icon={NoteBlank} label="Note" onClick={handleAddNote} />
       <ToolbarButton icon={TextAa} label="Font" onClick={() => fontInputRef.current?.click()} />
+      <ToolbarButton icon={Plug} label="Source" onClick={togglePicker} />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />
       <ThemeToggle />
       <div className="mx-1 h-5 w-px bg-[var(--border-soft)]" />

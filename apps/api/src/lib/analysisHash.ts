@@ -1,8 +1,29 @@
-import type { CanvasObject, ImageData, StickyData, TextData } from '@moodboard/shared'
+import type {
+  CanvasObject,
+  FontData,
+  ImageData,
+  NotionPageData,
+  StickyData,
+  TextData,
+} from '@moodboard/shared'
 import { createHash } from 'node:crypto'
 
 // Per CLAUDE.md: cache key = stable hash of
 // (sorted object IDs + per-object content hash + model version tag).
+//
+// Per-type content hash rules:
+//   image   — URL (content lives on the volume; URL is its content identity)
+//   sticky  — text + colour (both feed the analysis)
+//   text    — body (font/size are presentation, not content)
+//   pdf     — full data blob; PDFs are immutable post-upload so fetchedAt drift
+//             isn't a concern
+//   font    — family + url; the AD lists uploaded fonts as ground truth so a
+//             family change must bust the cache. (Was previously omitted —
+//             see 12a regression test.)
+//   notion  — markdown + lastEditedAt; the cached snapshot IS the content the
+//             AD reads, so hashing the markdown directly is what we want.
+//             Refresh-with-no-change reuses the cache; refresh-with-new-content
+//             invalidates.
 export function analysisHash(objects: CanvasObject[], modelTag: string): string {
   const sorted = [...objects].sort((a, b) => a.id.localeCompare(b.id))
   const parts: string[] = []
@@ -18,6 +39,12 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       parts.push(`${o.id}|text|${d.text}`)
     } else if (o.type === 'pdf') {
       parts.push(`${o.id}|pdf|${JSON.stringify(o.data)}`)
+    } else if (o.type === 'font') {
+      const d = o.data as FontData
+      parts.push(`${o.id}|font|${d.family}|${d.url}`)
+    } else if (o.type === 'notion-page') {
+      const d = o.data as NotionPageData
+      parts.push(`${o.id}|notion-page|${d.lastEditedAt ?? ''}|${d.markdown}`)
     }
   }
   return createHash('sha256')

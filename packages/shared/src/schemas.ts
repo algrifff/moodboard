@@ -33,14 +33,39 @@ export const fontDataSchema = z.object({
   sampleText: z.string().optional(),
 })
 
+// External-source nodes. See types.ts for the rationale; this is the wire
+// shape the API + frontend agree on. Icon/cover URLs are optional because not
+// every Notion page sets them; `markdown` is required so the renderer never
+// has to deal with a partially-imported page.
+export const notionPageDataSchema = z.object({
+  connectionId: z.string(),
+  pageId: z.string(),
+  workspaceId: z.string(),
+  title: z.string(),
+  iconEmoji: z.string().optional(),
+  iconUrl: z.string().optional(),
+  coverUrl: z.string().optional(),
+  url: z.string(),
+  markdown: z.string(),
+  fetchedAt: z.string(),
+  lastEditedAt: z.string().optional(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font']),
+  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font', 'notion-page']),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
   rotation: z.number(),
   zIndex: z.number(),
-  data: z.union([imageDataSchema, stickyDataSchema, textDataSchema, pdfDataSchema, fontDataSchema]),
+  data: z.union([
+    imageDataSchema,
+    stickyDataSchema,
+    textDataSchema,
+    pdfDataSchema,
+    fontDataSchema,
+    notionPageDataSchema,
+  ]),
 })
 
 export const aiAnalysisSchema = z.object({
@@ -235,13 +260,17 @@ export const boardPreviewObjectSchema = z.object({
   y: z.number(),
   w: z.number(),
   h: z.number(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font']),
+  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font', 'notion-page']),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   // For font specimens — family + url so the dashboard can register the
   // FontFace and render the "Aa" badge in the actual uploaded typeface.
   family: z.string().optional(),
   url: z.string().optional(),
+  // For external nodes — used by the dashboard to render a small provider
+  // chip + title without shipping the full markdown body.
+  title: z.string().optional(),
+  iconEmoji: z.string().optional(),
 })
 export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
 
@@ -287,6 +316,63 @@ export const createBoardRequestSchema = z.object({
   name: z.string().min(1).max(120).optional(),
 })
 export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
+
+// ---------------------------------------------------------------------------
+// Phase 12 — external connections
+// ---------------------------------------------------------------------------
+
+// Summary returned by GET /api/connections — tokens stay server-side; the
+// client only sees what's needed to label the connection in the picker.
+export const connectionSummarySchema = z.object({
+  id: z.string(),
+  provider: z.enum(['notion', 'drive']),
+  accountEmail: z.string(),
+  workspaceName: z.string().nullable().optional(),
+  createdAt: z.string(),
+  lastUsedAt: z.string().nullable().optional(),
+})
+export type ConnectionSummary = z.infer<typeof connectionSummarySchema>
+
+export const connectionsListResponseSchema = z.object({
+  connections: z.array(connectionSummarySchema),
+})
+
+// Uniform tile shape across providers — what the picker drawer renders.
+// Optional fields populate per provider: Notion fills `iconEmoji` or
+// `iconUrl`; Drive fills `mimeType` + `thumbnailUrl`.
+export const pickerTileSchema = z.object({
+  id: z.string(),
+  connectionId: z.string(),
+  provider: z.enum(['notion', 'drive']),
+  kind: z.enum(['page', 'file', 'folder']),
+  title: z.string(),
+  iconUrl: z.string().optional(),
+  iconEmoji: z.string().optional(),
+  mimeType: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
+  lastEditedAt: z.string().optional(),
+})
+export type PickerTile = z.infer<typeof pickerTileSchema>
+
+export const pickerSearchResponseSchema = z.object({
+  tiles: z.array(pickerTileSchema),
+  nextCursor: z.string().optional(),
+})
+
+export const pickerRecentsResponseSchema = z.object({
+  tiles: z.array(pickerTileSchema),
+})
+
+export const pickerChildrenResponseSchema = z.object({
+  tiles: z.array(pickerTileSchema),
+})
+
+// Import / refresh return the on-canvas data wrapped under `data`. The
+// client takes this verbatim and stores it on a new (import) or existing
+// (refresh) CanvasObject.
+export const importNotionResponseSchema = z.object({
+  data: notionPageDataSchema,
+})
 
 export const updateBoardRequestSchema = z.object({
   name: z.string().min(1).max(120).optional(),

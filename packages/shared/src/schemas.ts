@@ -51,9 +51,46 @@ export const notionPageDataSchema = z.object({
   lastEditedAt: z.string().optional(),
 })
 
+export const driveFileDataSchema = z.object({
+  connectionId: z.string(),
+  fileId: z.string(),
+  mimeType: z.string(),
+  name: z.string(),
+  iconUrl: z.string().optional(),
+  webViewLink: z.string(),
+  excerpt: z.string(),
+  fetchedAt: z.string(),
+  modifiedTime: z.string().optional(),
+})
+
+export const driveFolderDataSchema = z.object({
+  connectionId: z.string(),
+  folderId: z.string(),
+  name: z.string(),
+  webViewLink: z.string(),
+  childCount: z.number(),
+  childPreview: z.array(
+    z.object({
+      name: z.string(),
+      mimeType: z.string(),
+    }),
+  ),
+  fetchedAt: z.string(),
+  modifiedTime: z.string().optional(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font', 'notion-page']),
+  type: z.enum([
+    'image',
+    'sticky',
+    'text',
+    'pdf',
+    'font',
+    'notion-page',
+    'drive-file',
+    'drive-folder',
+  ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
   rotation: z.number(),
@@ -65,6 +102,8 @@ export const canvasObjectSchema = z.object({
     pdfDataSchema,
     fontDataSchema,
     notionPageDataSchema,
+    driveFileDataSchema,
+    driveFolderDataSchema,
   ]),
 })
 
@@ -260,7 +299,16 @@ export const boardPreviewObjectSchema = z.object({
   y: z.number(),
   w: z.number(),
   h: z.number(),
-  type: z.enum(['image', 'sticky', 'text', 'pdf', 'font', 'notion-page']),
+  type: z.enum([
+    'image',
+    'sticky',
+    'text',
+    'pdf',
+    'font',
+    'notion-page',
+    'drive-file',
+    'drive-folder',
+  ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   // For font specimens — family + url so the dashboard can register the
@@ -271,6 +319,8 @@ export const boardPreviewObjectSchema = z.object({
   // chip + title without shipping the full markdown body.
   title: z.string().optional(),
   iconEmoji: z.string().optional(),
+  // For drive files — mime type so the dashboard can render the right glyph.
+  mimeType: z.string().optional(),
 })
 export type BoardPreviewObject = z.infer<typeof boardPreviewObjectSchema>
 
@@ -372,6 +422,15 @@ export const pickerChildrenResponseSchema = z.object({
 // (refresh) CanvasObject.
 export const importNotionResponseSchema = z.object({
   data: notionPageDataSchema,
+})
+
+// Drive import is a discriminated response — files come back as DriveFileData,
+// folders as DriveFolderData, and inline content types (PDF, image) come back
+// as their existing shape so the client can mount them as PDFNode / ImageNode
+// without dedicated Drive variants for those.
+export const importDriveResponseSchema = z.object({
+  kind: z.enum(['file', 'folder', 'pdf', 'image']),
+  data: z.union([driveFileDataSchema, driveFolderDataSchema, pdfDataSchema, imageDataSchema]),
 })
 
 export const updateBoardRequestSchema = z.object({

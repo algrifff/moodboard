@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import type {
   AgentId,
   CanvasObject,
+  DriveFileData,
+  DriveFolderData,
   FontData,
   ImageData,
   NotionPageData,
@@ -47,6 +49,19 @@ function isPdfData(d: CanvasObject['data']): d is PDFData {
 }
 function isFontData(d: CanvasObject['data']): d is FontData {
   return 'family' in d && typeof (d as FontData).family === 'string'
+}
+function isDriveFileData(d: CanvasObject['data']): d is DriveFileData {
+  return (
+    'fileId' in d &&
+    typeof (d as DriveFileData).fileId === 'string' &&
+    'mimeType' in d &&
+    typeof (d as DriveFileData).mimeType === 'string'
+  )
+}
+function isDriveFolderData(d: CanvasObject['data']): d is DriveFolderData {
+  return (
+    'folderId' in d && typeof (d as DriveFolderData).folderId === 'string' && 'childPreview' in d
+  )
 }
 function isNotionPageData(d: CanvasObject['data']): d is NotionPageData {
   return (
@@ -161,14 +176,19 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const textLines: string[] = []
   const pdfExcerpts: string[] = []
   const notionExcerpts: string[] = []
-  // Per-PDF excerpt cap — keeps the prompt bounded when several PDFs land
-  // in the same group. Whole-document analysis isn't the job; setting the
-  // tone is. Notion pages share the same cap.
+  const driveExcerpts: string[] = []
+  const driveFolderLines: string[] = []
+  // Per-source excerpt cap — keeps the prompt bounded when several land in
+  // the same group. Whole-document analysis isn't the job; setting the tone
+  // is. PDF / Notion / Drive all share the same cap.
   const PDF_EXCERPT_MAX = 4000
   const NOTION_EXCERPT_MAX = 4000
+  const DRIVE_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
   let notionCount = 0
+  let driveFileCount = 0
+  let driveFolderCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -200,6 +220,29 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
           `--- Notion page: "${title}" (last edited ${editedAt}) ---\n${excerpt}\n--- end Notion page ---`,
         )
       }
+    } else if (o.type === 'drive-file' && isDriveFileData(o.data)) {
+      driveFileCount += 1
+      const raw = o.data.excerpt.trim()
+      if (raw) {
+        const excerpt = raw.length > DRIVE_EXCERPT_MAX ? `${raw.slice(0, DRIVE_EXCERPT_MAX)}…` : raw
+        const label = driveKindLabel(o.data.mimeType)
+        const editedAt = o.data.modifiedTime ?? 'unknown'
+        driveExcerpts.push(
+          `--- Drive ${label}: "${o.data.name}" (modified ${editedAt}) ---\n${excerpt}\n--- end Drive ${label} ---`,
+        )
+      }
+    } else if (o.type === 'drive-folder' && isDriveFolderData(o.data)) {
+      driveFolderCount += 1
+      // Folders carry context, not content — the AD treats them as
+      // structural hints ("a folder called 'Brand Assets' containing
+      // logos and photos sits here"). Capped at the preview list.
+      const items =
+        o.data.childPreview.length === 0
+          ? '(no items)'
+          : o.data.childPreview.map((c) => `${c.name} (${c.mimeType})`).join(', ')
+      driveFolderLines.push(
+        `- Drive folder: "${o.data.name}" (${o.data.childCount} items) — ${items}`,
+      )
     }
   }
 
@@ -231,13 +274,14 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s).`,
     textLines.length > 0
       ? '\nText content:'
-      : pdfExcerpts.length > 0 || notionExcerpts.length > 0
+      : pdfExcerpts.length > 0 || notionExcerpts.length > 0 || driveExcerpts.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
+    ...driveFolderLines,
   ].join('\n')
   content.push({ type: 'text', text: header })
   if (pdfExcerpts.length > 0) {
@@ -260,8 +304,26 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
         notionExcerpts.join('\n\n'),
     })
   }
+  if (driveExcerpts.length > 0) {
+    // Same register as Notion + PDF blocks. Drive Docs / Sheets / Slides
+    // are first-class content the user pulled onto the board.
+    content.push({
+      type: 'text',
+      text:
+        "Google Drive file contents (treat as reference material — read for subject matter, voice, brand strategy, and visual references). Sheet CSV columns + first rows give structural hints; Slides excerpts include slide titles + notes. If a file explicitly names a typeface, treat that as a deliberate typography reference. File layout / mime-specific structure does NOT dictate the brand's fonts.\n\n" +
+        driveExcerpts.join('\n\n'),
+    })
+  }
   content.push({ type: 'text', text: 'Give me the read.' })
   return content
+}
+
+// Short label for the Drive excerpt header.
+function driveKindLabel(mimeType: string): string {
+  if (mimeType === 'application/vnd.google-apps.document') return 'Doc'
+  if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'Sheet'
+  if (mimeType === 'application/vnd.google-apps.presentation') return 'Slides'
+  return 'file'
 }
 
 /**
@@ -345,7 +407,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      now inline their children, tables flatten to pipe-tables, media
   //      blocks render as labelled links, per-block error isolation. The
   //      markdown for any page that contains these blocks changes.
-  const v = 'v10'
+  // v11 = Google Drive files + folders feed into the AD/synth prompt with
+  //      equal weight to PDFs / Notion. Header counts updated.
+  const v = 'v11'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -367,7 +431,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //      Synth output shape unchanged but the upstream content shifts.
   // v10 — Notion markdown converter expanded (columns, tables, media);
   //       upstream content shifts again.
-  const v = 'v10'
+  // v11 — Drive files + folders feed into the synth prompt with equal
+  //       weight to PDFs / Notion.
+  const v = 'v11'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

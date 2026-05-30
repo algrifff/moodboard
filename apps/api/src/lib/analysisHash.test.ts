@@ -135,4 +135,54 @@ describe('analysisHash', () => {
     }
     expect(analysisHash([a], 'm1')).toBe(analysisHash([b], 'm1'))
   })
+
+  it('changes when a drive file excerpt changes', () => {
+    const driveFile = (id: string, excerpt: string): CanvasObject => ({
+      id,
+      type: 'drive-file',
+      position: { x: 0, y: 0 },
+      size: { width: 280, height: 140 },
+      rotation: 0,
+      zIndex: 0,
+      data: {
+        connectionId: 'c1',
+        fileId: 'f1',
+        mimeType: 'application/vnd.google-apps.document',
+        name: 'Q4 Brief',
+        webViewLink: 'https://docs.google.com/document/d/f1',
+        excerpt,
+        fetchedAt: '2026-05-30T00:00:00Z',
+        modifiedTime: '2026-05-29T00:00:00Z',
+      },
+    })
+    expect(analysisHash([driveFile('a', 'first draft')], 'm1')).not.toBe(
+      analysisHash([driveFile('a', 'final draft')], 'm1'),
+    )
+  })
+
+  it('changes when a drive folder gains a child', () => {
+    const folder = (id: string, children: { name: string; mimeType: string }[]): CanvasObject => ({
+      id,
+      type: 'drive-folder',
+      position: { x: 0, y: 0 },
+      size: { width: 280, height: 140 },
+      rotation: 0,
+      zIndex: 0,
+      data: {
+        connectionId: 'c1',
+        folderId: 'fld1',
+        name: 'Brand assets',
+        webViewLink: 'https://drive.google.com/drive/folders/fld1',
+        childCount: children.length,
+        childPreview: children,
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    })
+    const a = folder('a', [{ name: 'logo.png', mimeType: 'image/png' }])
+    const b = folder('a', [
+      { name: 'logo.png', mimeType: 'image/png' },
+      { name: 'logo-dark.png', mimeType: 'image/png' },
+    ])
+    expect(analysisHash([a], 'm1')).not.toBe(analysisHash([b], 'm1'))
+  })
 })

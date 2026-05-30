@@ -7,6 +7,12 @@ import { randomBytes } from 'node:crypto'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
 import { decryptToken, encryptToken } from '../lib/cryptoTokens'
+import {
+  exchangeCode as driveExchangeCode,
+  getValidToken,
+  listFolderChildren as driveListFolderChildren,
+  searchFiles as driveSearchFiles,
+} from '../lib/drive'
 import { exchangeCode, getChildPages, searchPages } from '../lib/notion'
 import { rateLimit } from '../lib/rateLimit'
 
@@ -42,6 +48,25 @@ function notionEnv(): { clientId: string; clientSecret: string; redirectUri: str
   }
   return { clientId, clientSecret, redirectUri }
 }
+
+function googleEnv(): { clientId: string; clientSecret: string; redirectUri: string } {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Google OAuth env vars are not configured')
+  }
+  return { clientId, clientSecret, redirectUri }
+}
+
+// Drive scopes — readonly is enough for the picker + import. userinfo.email
+// + openid give us the account's email for the connection label (returned
+// via id_token, decoded server-side).
+const GOOGLE_SCOPES = [
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/userinfo.email',
+  'openid',
+].join(' ')
 
 // ---------------------------------------------------------------------------
 // Auth gate. Mirrors apps/api/src/routes/boards.ts:94 — same pattern, kept
@@ -187,6 +212,77 @@ connections.get('/notion/callback', async (c) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// GET /api/connections/drive/start
+//
+// Mirrors the notion start route — same CSRF cookie pattern, different
+// provider. Google needs `access_type=offline&prompt=consent` to issue a
+// refresh token even for returning users; otherwise we'd be re-prompting
+// every hour when the access token expires.
+// ---------------------------------------------------------------------------
+connections.get('/drive/start', async (c) => {
+  const { clientId, redirectUri } = googleEnv()
+  const state = randomBytes(24).toString('hex')
+  setCookie(c, STATE_COOKIE('drive'), state, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  })
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', GOOGLE_SCOPES)
+  url.searchParams.set('access_type', 'offline')
+  url.searchParams.set('prompt', 'consent')
+  url.searchParams.set('state', state)
+  return c.redirect(url.toString())
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/drive/callback
+//
+// Same state check + token exchange shape as notion/callback. Stores email
+// (pulled from the id_token claim by exchangeCode) as the connection label.
+// ---------------------------------------------------------------------------
+connections.get('/drive/callback', async (c) => {
+  const user = c.get('user')!
+  const code = c.req.query('code')
+  const stateParam = c.req.query('state')
+  const stateCookie = getCookie(c, STATE_COOKIE('drive'))
+  deleteCookie(c, STATE_COOKIE('drive'), { path: '/' })
+
+  if (!code) return callbackHtml(c, { kind: 'error', message: 'Missing code' })
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    return callbackHtml(c, { kind: 'error', message: 'Invalid state' })
+  }
+
+  try {
+    const { clientId, clientSecret, redirectUri } = googleEnv()
+    const token = await driveExchangeCode({ code, clientId, clientSecret, redirectUri })
+
+    const accountEmail = token.email ?? 'Google account'
+    const id = nanoid()
+    await db.insert(schema.connection).values({
+      id,
+      userId: user.id,
+      provider: 'drive',
+      accountEmail,
+      accessTokenEnc: encryptToken(token.accessToken),
+      refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
+      expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
+      scopes: token.scope ?? GOOGLE_SCOPES,
+    })
+
+    return callbackHtml(c, { kind: 'done', id })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return callbackHtml(c, { kind: 'error', message })
+  }
+})
+
 // Minimal HTML page that posts a message to its opener and closes. Inline
 // content is HTML-escaped via JSON.stringify to keep the message body safe;
 // the postMessage targetOrigin is hardcoded to WEB_ORIGIN.
@@ -241,8 +337,11 @@ type PickerTile = {
   title: string
   iconUrl?: string
   iconEmoji?: string
+  mimeType?: string
   lastEditedAt?: string
 }
+
+const MIME_FOLDER = 'application/vnd.google-apps.folder'
 
 // Decrypt token + ensure the connection belongs to the caller. Throws 404
 // (handled by caller) if missing.
@@ -295,6 +394,32 @@ connections.post('/:id/search', externalSearchLimit, async (c) => {
     return c.json({ tiles, nextCursor })
   }
 
+  if (row.provider === 'drive') {
+    let token: string
+    try {
+      token = await getValidToken(row)
+    } catch {
+      return c.json({ error: 'Connection unavailable' }, 503)
+    }
+    const searchArgs: { token: string; query: string; pageToken?: string } = { token, query }
+    if (cursor !== undefined) searchArgs.pageToken = cursor
+    const { files, nextPageToken } = await driveSearchFiles(searchArgs)
+    const tiles: PickerTile[] = files.map((f) => {
+      const tile: PickerTile = {
+        id: f.id,
+        connectionId: row.id,
+        provider: 'drive',
+        kind: f.mimeType === MIME_FOLDER ? 'folder' : 'file',
+        title: f.name,
+        mimeType: f.mimeType,
+      }
+      if (f.iconUrl) tile.iconUrl = f.iconUrl
+      if (f.modifiedTime) tile.lastEditedAt = f.modifiedTime
+      return tile
+    })
+    return c.json({ tiles, nextCursor: nextPageToken })
+  }
+
   return c.json({ error: 'Unsupported provider' }, 400)
 })
 
@@ -315,24 +440,49 @@ connections.post('/:id/children', externalSearchLimit, async (c) => {
   const parentId = typeof body.parentId === 'string' ? body.parentId : null
   if (!parentId) return c.json({ error: 'parentId is required' }, 400)
 
-  if (row.provider !== 'notion') {
-    return c.json({ error: 'Unsupported provider' }, 400)
+  if (row.provider === 'notion') {
+    let token: string
+    try {
+      token = decryptToken(row.accessTokenEnc)
+    } catch {
+      return c.json({ error: 'Connection unavailable' }, 503)
+    }
+    const children = await getChildPages({ token, parentId })
+    const tiles: PickerTile[] = children.map((p) => ({
+      id: p.id,
+      connectionId: row.id,
+      provider: 'notion',
+      kind: 'page',
+      title: p.title,
+    }))
+    return c.json({ tiles })
   }
-  let token: string
-  try {
-    token = decryptToken(row.accessTokenEnc)
-  } catch {
-    return c.json({ error: 'Connection unavailable' }, 503)
+
+  if (row.provider === 'drive') {
+    let token: string
+    try {
+      token = await getValidToken(row)
+    } catch {
+      return c.json({ error: 'Connection unavailable' }, 503)
+    }
+    const children = await driveListFolderChildren({ token, folderId: parentId })
+    const tiles: PickerTile[] = children.map((f) => {
+      const tile: PickerTile = {
+        id: f.id,
+        connectionId: row.id,
+        provider: 'drive',
+        kind: f.mimeType === MIME_FOLDER ? 'folder' : 'file',
+        title: f.name,
+        mimeType: f.mimeType,
+      }
+      if (f.iconUrl) tile.iconUrl = f.iconUrl
+      if (f.modifiedTime) tile.lastEditedAt = f.modifiedTime
+      return tile
+    })
+    return c.json({ tiles })
   }
-  const children = await getChildPages({ token, parentId })
-  const tiles: PickerTile[] = children.map((p) => ({
-    id: p.id,
-    connectionId: row.id,
-    provider: 'notion',
-    kind: 'page',
-    title: p.title,
-  }))
-  return c.json({ tiles })
+
+  return c.json({ error: 'Unsupported provider' }, 400)
 })
 
 connections.get('/:id/recents', async (c) => {

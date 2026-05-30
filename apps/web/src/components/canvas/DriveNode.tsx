@@ -1,5 +1,14 @@
-import type { CanvasObject, NotionPageData } from '@moodboard/shared'
-import { ArrowClockwise, ArrowSquareOut } from '@phosphor-icons/react'
+import type { CanvasObject, DriveFileData, DriveFolderData } from '@moodboard/shared'
+import {
+  ArrowClockwise,
+  ArrowSquareOut,
+  File,
+  FileDoc,
+  FilePpt,
+  FileXls,
+  Folder,
+  type Icon,
+} from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
@@ -8,30 +17,26 @@ import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
 import { SpawnRing } from './SpawnRing'
 
-// DOM overlay node for an imported Notion page. Mirrors FontNode's outer
-// shell pattern (motion.div with halo + useBoxInteraction).
+// DOM overlay node for a Google Drive file or folder. Same shell as
+// NotionPageNode — title link + provider line + Open in Drive pill +
+// refresh dot + spawn ring. Whole card is the drag surface; link
+// elements stop pointer-capture on themselves so native clicks fire.
 //
-// Design decision (12q): we do NOT render the page markdown inline. The
-// card surfaces title + provider chrome + a clear "Open in Notion ↗"
-// link; clicking the title or the chip opens the live page in a new tab.
-// The full markdown is still pulled and lives on the object's data so the
-// AD/synthesiser has the page content available when this node is in a
-// group — the canvas just doesn't try to render it.
+// Files-by-mime that route through dedicated nodes (PDFs → PDFNode,
+// images → ImageNode) never get here; the import response signals
+// `kind` and the picker / paste handler dispatch accordingly.
 //
-// Why: rendering complex markdown (columns, embeds, sub-pages) inline made
-// the card a hostile drop target — every body click opened the reader, no
-// area could be dragged. Stripping the body restores the card to a simple
-// "object you can move around" while keeping all the analysis-side value.
-//
-// Two affordances live on the card:
-//   1. Refresh dot — hollow when fetchedAt >= lastEditedAt, solid accent
-//      when the source is newer.
-//   2. Title + "Open" chip — both are <a> links to data.url. Browser
-//      native click-vs-drag semantics mean a drag from anywhere in the
-//      card (including over the link) drags; a clean release on the link
-//      navigates.
+// Folders carry a childCount chip + the first 30 child names as
+// `childPreview` so the AD can read folder context. The card itself
+// just shows "Drive · folder · {N} items".
 
-export function NotionPageNode({
+// Google-native mime types that get tailored icons. Anything else falls
+// back to the generic File glyph.
+const MIME_DOC = 'application/vnd.google-apps.document'
+const MIME_SHEET = 'application/vnd.google-apps.spreadsheet'
+const MIME_SLIDES = 'application/vnd.google-apps.presentation'
+
+export function DriveNode({
   object,
   scale,
   panMode,
@@ -44,7 +49,9 @@ export function NotionPageNode({
   selected: boolean
   boardId: string
 }) {
-  const data = object.data as NotionPageData
+  const isFolder = object.type === 'drive-folder'
+  const fileData = isFolder ? null : (object.data as DriveFileData)
+  const folderData = isFolder ? (object.data as DriveFolderData) : null
   const updateObject = useCanvasStore((s) => s.updateObject)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
@@ -58,19 +65,16 @@ export function NotionPageNode({
     haloPx: HALO,
   })
 
-  const stale = isStale(data)
+  const stale = isStale(object)
+  const name = folderData?.name ?? fileData?.name ?? 'Untitled'
+  const webViewLink = folderData?.webViewLink ?? fileData?.webViewLink ?? ''
+  const mimeType = folderData ? 'folder' : (fileData?.mimeType ?? '')
 
-  // useBoxInteraction calls setPointerCapture on the outer card on
-  // pointerdown — that captures the pointer to the card div and the
-  // browser fires click on the card (which has no handler) instead of
-  // on the <a> child. We block pointerdown on the link elements so
-  // capture never starts from them, and back up the native <a>
-  // navigation with an explicit window.open in onClick.
   const linkPointerDown = (e: React.PointerEvent) => e.stopPropagation()
-  const openInNotion = (e: React.MouseEvent) => {
+  const openInDrive = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    window.open(data.url, '_blank', 'noopener,noreferrer')
+    if (webViewLink) window.open(webViewLink, '_blank', 'noopener,noreferrer')
   }
 
   const onRefresh = async (e: React.MouseEvent) => {
@@ -81,11 +85,13 @@ export function NotionPageNode({
     setRefreshError(null)
     try {
       const fresh = await refreshExternal(boardId, object.id)
-      if (fresh.kind !== 'notion-page') {
-        throw new Error('Source changed type — refresh aborted')
-      }
       useCanvasStore.getState().commitBeforeAction()
-      updateObject(object.id, { data: fresh.data })
+      // refreshExternal returns the same shape as import — for drive that's
+      // a discriminated union. We expect 'file' or 'folder' here since
+      // PDFs / images shouldn't be mounted as DriveNode in the first place.
+      if (fresh.kind === 'file' || fresh.kind === 'folder') {
+        updateObject(object.id, { data: fresh.data })
+      }
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : 'Refresh failed')
     } finally {
@@ -135,22 +141,23 @@ export function NotionPageNode({
       >
         <SpawnRing />
         <div className="flex items-start gap-2.5" style={{ minWidth: 0 }}>
-          <Icon data={data} />
+          <MimeIcon mimeType={mimeType} />
           <a
-            href={data.url}
+            href={webViewLink}
             target="_blank"
             rel="noreferrer noopener"
             onPointerDown={linkPointerDown}
-            onClick={openInNotion}
-            // Link colour comes from the surrounding text — no underline
-            // until hover, so the title reads as a heading first and a
-            // link second. Drag is still possible from any non-link area
-            // of the card; the link itself is a click target only.
+            onClick={openInDrive}
             className="flex-1 min-w-0 text-[14px] font-semibold leading-snug hover:underline"
-            style={{ color: 'inherit', textDecoration: 'none', cursor: 'pointer' }}
-            title={`${data.title} — opens in Notion`}
+            style={{
+              color: 'inherit',
+              textDecoration: 'none',
+              cursor: 'pointer',
+              wordBreak: 'break-word',
+            }}
+            title={`${name} — opens in Drive`}
           >
-            {data.title || 'Untitled'}
+            {name}
           </a>
           <RefreshDot stale={stale} refreshing={refreshing} onClick={onRefresh} />
         </div>
@@ -158,15 +165,15 @@ export function NotionPageNode({
           className="text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-faint)] mt-1"
           style={{ marginLeft: 32 }}
         >
-          Notion{data.lastEditedAt ? ` · edited ${relativeTime(data.lastEditedAt)}` : ''}
+          {providerSubLine(folderData, fileData)}
         </div>
         <div style={{ flex: 1 }} />
         <a
-          href={data.url}
+          href={webViewLink}
           target="_blank"
           rel="noreferrer noopener"
           onPointerDown={linkPointerDown}
-          onClick={openInNotion}
+          onClick={openInDrive}
           className="inline-flex items-center gap-1 self-start text-[11.5px] font-medium hover:underline"
           style={{
             color: 'var(--text-mute)',
@@ -177,7 +184,7 @@ export function NotionPageNode({
             cursor: 'pointer',
           }}
         >
-          Open in Notion
+          Open in Drive
           <ArrowSquareOut size={11} weight="bold" />
         </a>
         {refreshError && (
@@ -194,34 +201,46 @@ export function NotionPageNode({
 // Internal pieces
 // ---------------------------------------------------------------------------
 
-function Icon({ data }: { data: NotionPageData }) {
-  if (data.iconEmoji) {
-    return (
-      <div
-        className="w-6 h-6 flex items-center justify-center text-[18px] leading-none"
-        style={{ flexShrink: 0 }}
-      >
-        {data.iconEmoji}
-      </div>
-    )
+function providerSubLine(folder: DriveFolderData | null, file: DriveFileData | null): string {
+  if (folder) {
+    const items = folder.childCount === 1 ? '1 item' : `${folder.childCount} items`
+    return `Drive · folder · ${items}`
   }
-  if (data.iconUrl) {
-    return (
-      <img
-        src={data.iconUrl}
-        alt=""
-        className="w-6 h-6 object-contain"
-        style={{ borderRadius: 4, flexShrink: 0 }}
-        loading="lazy"
-      />
-    )
+  if (file) {
+    const label = mimeLabel(file.mimeType)
+    const edited = file.modifiedTime ? ` · edited ${relativeTime(file.modifiedTime)}` : ''
+    return `Drive · ${label}${edited}`
   }
+  return 'Drive'
+}
+
+function mimeLabel(mimeType: string): string {
+  if (mimeType === MIME_DOC) return 'Doc'
+  if (mimeType === MIME_SHEET) return 'Sheet'
+  if (mimeType === MIME_SLIDES) return 'Slides'
+  // Strip top-level for everything else: "application/pdf" → "Pdf",
+  // "text/plain" → "Plain", "video/mp4" → "Mp4". Good enough for the chip.
+  const sub = mimeType.split('/')[1] ?? mimeType
+  return sub.charAt(0).toUpperCase() + sub.slice(1).split('.').pop()
+}
+
+function MimeIcon({ mimeType }: { mimeType: string }) {
+  const IconCmp: Icon =
+    mimeType === 'folder' || mimeType === 'application/vnd.google-apps.folder'
+      ? Folder
+      : mimeType === MIME_DOC
+        ? FileDoc
+        : mimeType === MIME_SHEET
+          ? FileXls
+          : mimeType === MIME_SLIDES
+            ? FilePpt
+            : File
   return (
     <div
-      className="w-6 h-6 rounded-sm flex items-center justify-center text-[10px] font-semibold"
-      style={{ backgroundColor: 'var(--bg-elevated)', color: 'var(--text-faint)', flexShrink: 0 }}
+      className="w-6 h-6 flex items-center justify-center"
+      style={{ flexShrink: 0, color: 'var(--text-mute)' }}
     >
-      ◌
+      <IconCmp size={20} weight="duotone" />
     </div>
   )
 }
@@ -239,9 +258,6 @@ function RefreshDot({
     <button
       type="button"
       onClick={onClick}
-      // The refresh dot is the only interactive element that needs to
-      // intercept pointer events — otherwise a click on it would also
-      // start a drag from the surrounding card.
       onPointerDown={(e) => e.stopPropagation()}
       title={stale ? 'Source updated — refresh' : 'Refresh from source'}
       aria-label="Refresh from source"
@@ -264,18 +280,13 @@ function RefreshDot({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Staleness + relative time. fetchedAt and lastEditedAt are ISO strings; we
-// just parse them and compare. Both being optional handles legacy snapshots
-// from before refresh shipped.
-// ---------------------------------------------------------------------------
-
-function isStale(data: NotionPageData): boolean {
-  if (!data.lastEditedAt) return false
-  const fetched = Date.parse(data.fetchedAt)
-  const edited = Date.parse(data.lastEditedAt)
-  if (Number.isNaN(fetched) || Number.isNaN(edited)) return false
-  return edited > fetched
+function isStale(object: CanvasObject): boolean {
+  const d = object.data as { modifiedTime?: string; fetchedAt?: string }
+  if (!d.modifiedTime || !d.fetchedAt) return false
+  const fetched = Date.parse(d.fetchedAt)
+  const modified = Date.parse(d.modifiedTime)
+  if (Number.isNaN(fetched) || Number.isNaN(modified)) return false
+  return modified > fetched
 }
 
 function relativeTime(iso: string): string {

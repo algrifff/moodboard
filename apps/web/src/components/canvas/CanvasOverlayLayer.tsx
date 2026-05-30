@@ -1,5 +1,6 @@
 import type { CanvasObject } from '@moodboard/shared'
 import { FontNode } from './FontNode'
+import { NotionPageNode } from './NotionPageNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
 
@@ -9,12 +10,17 @@ export function CanvasOverlayLayer({
   offset,
   panMode,
   selectedIds,
+  boardId,
 }: {
   objects: CanvasObject[]
   scale: number
   offset: { x: number; y: number }
   panMode: boolean
   selectedIds: string[]
+  // External nodes need the boardId for the refresh endpoint. Threaded
+  // through here rather than read from a global so each node is a pure
+  // function of its props.
+  boardId?: string
 }) {
   const selectedSet = new Set(selectedIds)
   return (
@@ -60,6 +66,18 @@ export function CanvasOverlayLayer({
                 scale={scale}
                 panMode={panMode}
                 selected={selectedSet.has(o.id)}
+              />
+            )
+          }
+          if (o.type === 'notion-page' && boardId) {
+            return (
+              <NotionPageNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
               />
             )
           }

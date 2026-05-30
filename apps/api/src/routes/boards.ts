@@ -19,16 +19,17 @@ const PREVIEW_OBJECT_CAP = 12
 // historical board snapshots may have minor shape drift, and the dashboard
 // preview shouldn't fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font'
+  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'notion-page'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
 }
+const STORED_TYPES = ['image', 'sticky', 'text', 'pdf', 'font', 'notion-page'] as const
 function isStoredObject(o: unknown): o is StoredObject {
   if (!o || typeof o !== 'object') return false
   const obj = o as Record<string, unknown>
   if (typeof obj.type !== 'string') return false
-  if (!['image', 'sticky', 'text', 'pdf', 'font'].includes(obj.type as string)) return false
+  if (!STORED_TYPES.includes(obj.type as (typeof STORED_TYPES)[number])) return false
   const pos = obj.position as Record<string, unknown> | undefined
   const size = obj.size as Record<string, unknown> | undefined
   if (!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return false
@@ -81,6 +82,10 @@ function buildPreview(data: unknown): BoardPreview {
     if (o.type === 'font' && d) {
       if (typeof d.family === 'string') base.family = d.family
       if (typeof d.url === 'string') base.url = d.url
+    }
+    if (o.type === 'notion-page' && d) {
+      if (typeof d.title === 'string') base.title = d.title
+      if (typeof d.iconEmoji === 'string') base.iconEmoji = d.iconEmoji
     }
     return base
   })

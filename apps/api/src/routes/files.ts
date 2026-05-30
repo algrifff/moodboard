@@ -11,6 +11,7 @@ import { db, schema } from '../db'
 import { processPdf } from '../lib/pdfProcessing'
 import { rateLimit } from '../lib/rateLimit'
 import {
+  externalPath,
   isSafeFilename,
   pdfPath,
   pdfThumbPath,
@@ -47,12 +48,14 @@ files.use('*', async (c, next) => {
 const uploadRateLimit = rateLimit({ scope: 'upload', limit: 30, windowMs: 60_000 })
 const proxyRateLimit = rateLimit({ scope: 'proxy', limit: 30, windowMs: 60_000 })
 
+type AssetKind = 'upload' | 'pdf' | 'pdf-thumb' | 'external-notion' | 'external-drive'
+
 async function recordAsset(
   userId: string,
   filename: string,
   mimeType: string,
   size: number,
-  kind: 'upload' | 'pdf' | 'pdf-thumb' = 'upload',
+  kind: AssetKind = 'upload',
 ): Promise<void> {
   await db.insert(schema.asset).values({
     id: nanoid(),
@@ -317,12 +320,18 @@ files.get('/files/:filename', async (c) => {
     .limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
 
+  // kind drives the on-disk root. external-notion / external-drive land
+  // under EXTERNAL_DIR/{provider}; everything else uses the legacy roots.
   const fullPath =
     row.kind === 'pdf'
       ? pdfPath(filename)
       : row.kind === 'pdf-thumb'
         ? pdfThumbPath(filename)
-        : uploadPath(filename)
+        : row.kind === 'external-notion'
+          ? externalPath('notion', filename)
+          : row.kind === 'external-drive'
+            ? externalPath('drive', filename)
+            : uploadPath(filename)
   let s
   try {
     s = await stat(fullPath)

@@ -15,6 +15,13 @@
       "when": 1779914164460,
       "tag": "0001_wonderful_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780138196354,
+      "tag": "0002_special_korg",
+      "breakpoints": true
     }
   ]
 }

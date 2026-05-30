@@ -7,8 +7,10 @@ import { cubicBezier } from 'framer-motion'
 import { groupBoundingBox, objectsInMarquee } from '@/lib/aabb'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
+import { importNotionPage } from '@/lib/connectionsApi'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
-import { createText } from '@/lib/objectFactory'
+import { extractNotionPageId } from '@/lib/notionUrl'
+import { createNotionPage, createText } from '@/lib/objectFactory'
 import {
   EASE_OUT_STANDARD,
   FIT_ALL_DURATION_MS,
@@ -18,6 +20,7 @@ import {
 import { screenToWorld, zoomAroundPoint, type Point } from '@/lib/transform'
 import { tweenTransform } from '@/lib/tweenTransform'
 import { useCanvasStore } from '@/store/canvas'
+import { useSourcePickerStore } from '@/store/sourcePicker'
 import { CanvasOverlayLayer } from './CanvasOverlayLayer'
 import { DotGridLayer } from './DotGridLayer'
 import { EmptyStateHint } from './EmptyStateHint'
@@ -372,6 +375,32 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [scale, offset, addImageFromBlob, addImageFromUrl, addPdfFromBlob],
   )
 
+  // Handle a Notion page-id extracted from a pasted URL. If the user has at
+  // least one Notion connection, import + spawn now. Otherwise stash the id
+  // on the picker store and open the picker so the connect CTA is visible —
+  // Board.tsx watches for `pendingPaste` and resumes the import after OAuth.
+  const handleNotionPasteUrl = useCallback(
+    async (pageId: string, point: Point) => {
+      const picker = useSourcePickerStore.getState()
+      const notionConnection = picker.connections.find((c) => c.provider === 'notion')
+      if (!notionConnection) {
+        picker.setPendingPaste({ provider: 'notion', pageId })
+        picker.openPicker()
+        showToast('Connect Notion first to drop this link')
+        return
+      }
+      try {
+        const data = await importNotionPage(notionConnection.id, pageId)
+        const state = useCanvasStore.getState()
+        state.commitBeforeAction()
+        addObject(createNotionPage(point, state.objects.length, data))
+      } catch (err) {
+        showToast(`Notion import failed: ${err instanceof Error ? err.message : 'unknown'}`)
+      }
+    },
+    [addObject],
+  )
+
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return
@@ -423,9 +452,23 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
         }
       }
 
-      // 4. text/plain — could be an image URL, a data URI, or just text.
+      // 4. text/plain — could be a Notion URL, an image URL, a data URI,
+      // or just text. Notion takes precedence because the URL string
+      // would also match the image-URL fallback (Notion's URLs are http).
       if (snap.text) {
         const trimmed = snap.text.trim()
+
+        // 4a. Notion page URL → import via the user's first Notion
+        // connection, or stash the page id and open the connect flow if
+        // no connection exists yet.
+        if (trimmed.length > 0 && /https?:\/\//i.test(trimmed)) {
+          const notionPageId = extractNotionPageId(trimmed)
+          if (notionPageId) {
+            e.preventDefault()
+            await handleNotionPasteUrl(notionPageId, viewportCenterWorld())
+            return
+          }
+        }
 
         if (
           trimmed.length > 0 &&
@@ -458,7 +501,14 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)
-  }, [addImageFromBlob, addImageFromUrl, addObject, addPdfFromBlob, viewportCenterWorld])
+  }, [
+    addImageFromBlob,
+    addImageFromUrl,
+    addObject,
+    addPdfFromBlob,
+    handleNotionPasteUrl,
+    viewportCenterWorld,
+  ])
 
   // Wheel handler lives on the container, not on the Konva Stage. The
   // analysis panels / palette popovers are siblings of the Stage in the
@@ -612,12 +662,17 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
 
       <CanvasOverlayLayer
         objects={objects.filter(
-          (o) => o.type === 'sticky' || o.type === 'text' || o.type === 'font',
+          (o) =>
+            o.type === 'sticky' ||
+            o.type === 'text' ||
+            o.type === 'font' ||
+            o.type === 'notion-page',
         )}
         scale={scale}
         offset={offset}
         panMode={panMode}
         selectedIds={selectedIds}
+        boardId={boardId}
       />
 
       {marquee && (

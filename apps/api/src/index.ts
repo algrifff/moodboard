@@ -11,6 +11,8 @@ import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
 import { analyze } from './routes/analyze'
 import { boards } from './routes/boards'
+import { connections } from './routes/connections'
+import { external } from './routes/external'
 import { files } from './routes/files'
 
 type AppVariables = {
@@ -81,6 +83,8 @@ api.use('/boards', jsonBodyLimit)
 api.use('/boards/*', jsonBodyLimit)
 
 api.route('/boards', boards)
+api.route('/connections', connections)
+api.route('/external', external)
 api.route('/', analyze)
 api.route('/', files)
 

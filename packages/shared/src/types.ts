@@ -18,7 +18,30 @@ export type FontData = {
   sampleText?: string
 }
 
-export type CanvasObjectType = 'image' | 'sticky' | 'text' | 'pdf' | 'font'
+// External-source nodes — content imported from a connected Notion or Drive
+// account. The board owns its snapshot: `markdown` / `excerpt` lives on the
+// canvas object itself so the board keeps rendering even if the source moves
+// or is deleted. `connectionId` lets the refresh endpoint look up credentials
+// to refetch on demand. A stale indicator on the node fires when remote
+// `lastEditedAt > fetchedAt`.
+export type NotionPageData = {
+  connectionId: string
+  pageId: string
+  workspaceId: string
+  title: string
+  iconEmoji?: string
+  iconUrl?: string
+  coverUrl?: string
+  // Public Notion URL — used by the "Open in Notion" link.
+  url: string
+  // The cached extraction. Source of truth for the on-canvas reader + the
+  // AD/synthesiser. When the user clicks refresh, this is what gets swapped.
+  markdown: string
+  fetchedAt: string
+  lastEditedAt?: string
+}
+
+export type CanvasObjectType = 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'notion-page'
 
 export type CanvasObject = {
   id: string
@@ -27,7 +50,7 @@ export type CanvasObject = {
   size: { width: number; height: number }
   rotation: number
   zIndex: number
-  data: ImageData | StickyData | TextData | PDFData | FontData
+  data: ImageData | StickyData | TextData | PDFData | FontData | NotionPageData
 }
 
 export type AIAnalysis = {

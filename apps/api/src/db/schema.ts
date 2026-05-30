@@ -97,3 +97,47 @@ export const groupAnalysis = pgTable('group_analysis', {
   analysis: jsonb('analysis').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// External-source OAuth connections (Phase 12+). One row per (user, provider,
+// account) — a user may connect multiple Notion workspaces or multiple Google
+// accounts and we treat each as a separate connection. Tokens are encrypted at
+// rest with AES-GCM using CONNECTION_TOKEN_KEY (server-side); the frontend
+// only ever sees `id`, `provider`, and `accountEmail`.
+export const connection = pgTable('connection', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(), // 'notion' | 'drive'
+  accountEmail: text('account_email').notNull(),
+  // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
+  accessTokenEnc: text('access_token_enc').notNull(),
+  refreshTokenEnc: text('refresh_token_enc'),
+  expiresAt: timestamp('expires_at'),
+  scopes: text('scopes').notNull(),
+  // Notion-specific (nullable for Drive). Kept as flat columns rather than
+  // a JSON blob so we can index/filter cheaply if we ever need to.
+  workspaceId: text('workspace_id'),
+  workspaceName: text('workspace_name'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  lastUsedAt: timestamp('last_used_at'),
+})
+
+// Per-user recent picks across sources. Drives the picker drawer's "Recents"
+// tab without re-querying the provider every time. Capped server-side; old
+// entries beyond the cap are pruned on insert.
+export const recentExternal = pgTable('recent_external', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  connectionId: text('connection_id')
+    .notNull()
+    .references(() => connection.id, { onDelete: 'cascade' }),
+  externalId: text('external_id').notNull(), // pageId / fileId / folderId
+  kind: text('kind').notNull(), // 'page' | 'file' | 'folder'
+  title: text('title').notNull(),
+  iconUrl: text('icon_url'),
+  mimeType: text('mime_type'), // null for Notion
+  lastUsedAt: timestamp('last_used_at').notNull().defaultNow(),
+})

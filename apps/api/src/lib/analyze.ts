@@ -4,6 +4,7 @@ import type {
   CanvasObject,
   FontData,
   ImageData,
+  NotionPageData,
   PDFData,
   StickyData,
   TextData,
@@ -46,6 +47,14 @@ function isPdfData(d: CanvasObject['data']): d is PDFData {
 }
 function isFontData(d: CanvasObject['data']): d is FontData {
   return 'family' in d && typeof (d as FontData).family === 'string'
+}
+function isNotionPageData(d: CanvasObject['data']): d is NotionPageData {
+  return (
+    'markdown' in d &&
+    typeof (d as NotionPageData).markdown === 'string' &&
+    'pageId' in d &&
+    typeof (d as NotionPageData).pageId === 'string'
+  )
 }
 
 function urlToFilename(url: string): string | null {
@@ -151,12 +160,15 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
 
   const textLines: string[] = []
   const pdfExcerpts: string[] = []
+  const notionExcerpts: string[] = []
   // Per-PDF excerpt cap — keeps the prompt bounded when several PDFs land
   // in the same group. Whole-document analysis isn't the job; setting the
-  // tone is.
+  // tone is. Notion pages share the same cap.
   const PDF_EXCERPT_MAX = 4000
+  const NOTION_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
+  let notionCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -176,6 +188,17 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       if (raw) {
         const excerpt = raw.length > PDF_EXCERPT_MAX ? `${raw.slice(0, PDF_EXCERPT_MAX)}…` : raw
         pdfExcerpts.push(`--- PDF excerpt ---\n${excerpt}\n--- end PDF ---`)
+      }
+    } else if (o.type === 'notion-page' && isNotionPageData(o.data)) {
+      notionCount += 1
+      const md = o.data.markdown.trim()
+      if (md) {
+        const excerpt = md.length > NOTION_EXCERPT_MAX ? `${md.slice(0, NOTION_EXCERPT_MAX)}…` : md
+        const title = o.data.title || 'Untitled'
+        const editedAt = o.data.lastEditedAt ?? 'unknown'
+        notionExcerpts.push(
+          `--- Notion page: "${title}" (last edited ${editedAt}) ---\n${excerpt}\n--- end Notion page ---`,
+        )
       }
     }
   }
@@ -208,10 +231,10 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s).`,
     textLines.length > 0
       ? '\nText content:'
-      : pdfExcerpts.length > 0
+      : pdfExcerpts.length > 0 || notionExcerpts.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -223,6 +246,18 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       text:
         'PDF contents (treat as reference material — read for subject matter, voice, and visual references). PDF layout typography is incidental and does NOT dictate the brand\'s chosen fonts. BUT if a PDF excerpt explicitly names a typeface ("use Helvetica", "set in Akzidenz Grotesk", etc.), treat that name as a deliberate typography reference and count it for the fonts field.\n\n' +
         pdfExcerpts.join('\n\n'),
+    })
+  }
+  if (notionExcerpts.length > 0) {
+    // Equal-weight treatment per Phase 12 plan: Notion pages are first-class
+    // content the user pulled onto the board. Same register as the PDF block
+    // — read for subject matter, voice, and references. Markdown typography
+    // (heading hashes, list bullets) is not a typography signal.
+    content.push({
+      type: 'text',
+      text:
+        "Notion page contents (treat as reference material — read for subject matter, voice, brand strategy, and visual references). Markdown formatting (heading hashes, list bullets) is structural and does NOT dictate the brand's typography. If a Notion page explicitly names a typeface, treat that name as a deliberate typography reference and count it for the fonts field.\n\n" +
+        notionExcerpts.join('\n\n'),
     })
   }
   content.push({ type: 'text', text: 'Give me the read.' })
@@ -302,7 +337,15 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      now explicitly in the IGNORE list.
   // v8 = logo schema changed from single object to array — AD now
   //      returns every mark variant (wordmark, icon, colour variants).
-  const v = 'v8'
+  // v9 = Notion pages now feed into the AD/synth prompt as a dedicated
+  //      content block with equal weight to PDFs. Cache invalidates so
+  //      groups that already contained an external node re-run with the
+  //      page contents in context.
+  // v10 = Notion markdown converter expanded — column_list / synced_block
+  //      now inline their children, tables flatten to pipe-tables, media
+  //      blocks render as labelled links, per-block error isolation. The
+  //      markdown for any page that contains these blocks changes.
+  const v = 'v10'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -320,7 +363,11 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //      shifts noticeably, so downstream synth needs to re-run.
   // v8 — logo schema is now an array; downstream synth output shape
   //      changed to match.
-  const v = 'v8'
+  // v9 — Notion page contents now appear in the AD/synth input prompt.
+  //      Synth output shape unchanged but the upstream content shifts.
+  // v10 — Notion markdown converter expanded (columns, tables, media);
+  //       upstream content shifts again.
+  const v = 'v10'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

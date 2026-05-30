@@ -6,11 +6,31 @@ export const DATA_DIR = process.env.DATA_DIR ?? DEFAULT_DATA_DIR
 export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads')
 export const PDF_DIR = path.join(DATA_DIR, 'pdfs')
 export const PDF_THUMB_DIR = path.join(DATA_DIR, 'pdf-thumbs')
+// Phase 12+: proxied thumbnails / icons from external providers. Drive
+// thumbnails are signed and expire ~hourly, so we have to serve through
+// our own origin. Notion icons are stable public URLs and we render them
+// inline on the client without proxying. The provider segment is part of
+// the on-disk layout so phase 13 doesn't need to invent another constant.
+export const EXTERNAL_DIR = path.join(DATA_DIR, 'external')
+export const EXTERNAL_NOTION_DIR = path.join(EXTERNAL_DIR, 'notion')
+export const EXTERNAL_DRIVE_DIR = path.join(EXTERNAL_DIR, 'drive')
 
 export async function ensureDataDirs(): Promise<void> {
   await mkdir(UPLOADS_DIR, { recursive: true })
   await mkdir(PDF_DIR, { recursive: true })
   await mkdir(PDF_THUMB_DIR, { recursive: true })
+  await mkdir(EXTERNAL_NOTION_DIR, { recursive: true })
+  await mkdir(EXTERNAL_DRIVE_DIR, { recursive: true })
+}
+
+// Per-provider on-disk lookup for an external thumbnail/icon. Provider is
+// constrained so a hostile filename + crafted provider string can't escape
+// the EXTERNAL_DIR tree.
+export function externalPath(provider: 'notion' | 'drive', filename: string): string {
+  if (provider !== 'notion' && provider !== 'drive') {
+    throw new Error(`Unknown external provider: ${provider}`)
+  }
+  return path.join(EXTERNAL_DIR, provider, filename)
 }
 
 export type SavedUpload = {

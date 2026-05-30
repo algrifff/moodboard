@@ -1,5 +1,7 @@
 import type {
   CanvasObject,
+  DriveFileData,
+  DriveFolderData,
   FontData,
   NotionPageData,
   StickyData,
@@ -91,6 +93,7 @@ export function createFont(
 // content; 140 gives a little breathing room without an empty void below
 // the pill. User can resize from any edge for a chunkier card.
 const NOTION_DEFAULT_SIZE = { width: 280, height: 140 }
+const DRIVE_DEFAULT_SIZE = { width: 280, height: 140 }
 
 // External-source factory. The full data snapshot comes from the import
 // endpoint and is stored verbatim on the canvas object — the board owns
@@ -109,6 +112,44 @@ export function createNotionPage(
       y: worldCenter.y - NOTION_DEFAULT_SIZE.height / 2,
     },
     size: NOTION_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+export function createDriveFile(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: DriveFileData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'drive-file',
+    position: {
+      x: worldCenter.x - DRIVE_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - DRIVE_DEFAULT_SIZE.height / 2,
+    },
+    size: DRIVE_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+export function createDriveFolder(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: DriveFolderData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'drive-folder',
+    position: {
+      x: worldCenter.x - DRIVE_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - DRIVE_DEFAULT_SIZE.height / 2,
+    },
+    size: DRIVE_DEFAULT_SIZE,
     rotation: 0,
     zIndex,
     data,

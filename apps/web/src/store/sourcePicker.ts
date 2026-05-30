@@ -8,11 +8,13 @@ import { listConnections } from '@/lib/connectionsApi'
 // here; the drawer reads from the cache rather than re-fetching on each
 // open.
 
-// When the user pastes a Notion URL on the canvas but has no Notion
-// connection yet, we stash the page id here, open the picker drawer (which
-// shows the connect CTA in its empty state), and after the OAuth handshake
-// completes the Board page checks this and runs the import.
-export type PendingPaste = { provider: 'notion'; pageId: string }
+// When the user pastes an external URL on the canvas but has no matching
+// connection yet, we stash the resource id here, open the picker drawer
+// (which shows the connect CTAs in its empty state), and after the OAuth
+// handshake completes the Board page checks this and runs the import.
+export type PendingPaste =
+  | { provider: 'notion'; pageId: string }
+  | { provider: 'drive'; fileId: string }
 
 type SourcePickerState = {
   open: boolean

@@ -1,4 +1,5 @@
 import type { CanvasObject } from '@moodboard/shared'
+import { DriveNode } from './DriveNode'
 import { FontNode } from './FontNode'
 import { NotionPageNode } from './NotionPageNode'
 import { StickyNote } from './StickyNote'
@@ -72,6 +73,18 @@ export function CanvasOverlayLayer({
           if (o.type === 'notion-page' && boardId) {
             return (
               <NotionPageNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
+              />
+            )
+          }
+          if ((o.type === 'drive-file' || o.type === 'drive-folder') && boardId) {
+            return (
+              <DriveNode
                 key={o.id}
                 object={o}
                 scale={scale}

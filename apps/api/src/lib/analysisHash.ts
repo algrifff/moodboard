@@ -1,5 +1,7 @@
 import type {
   CanvasObject,
+  DriveFileData,
+  DriveFolderData,
   FontData,
   ImageData,
   NotionPageData,
@@ -45,6 +47,18 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
     } else if (o.type === 'notion-page') {
       const d = o.data as NotionPageData
       parts.push(`${o.id}|notion-page|${d.lastEditedAt ?? ''}|${d.markdown}`)
+    } else if (o.type === 'drive-file') {
+      // modifiedTime + excerpt — refresh updates both; cache picks up
+      // content changes naturally when either drifts.
+      const d = o.data as DriveFileData
+      parts.push(`${o.id}|drive-file|${d.mimeType}|${d.modifiedTime ?? ''}|${d.excerpt}`)
+    } else if (o.type === 'drive-folder') {
+      const d = o.data as DriveFolderData
+      parts.push(
+        `${o.id}|drive-folder|${d.modifiedTime ?? ''}|${d.childCount}|${d.childPreview
+          .map((c) => `${c.name}::${c.mimeType}`)
+          .join(',')}`,
+      )
     }
   }
   return createHash('sha256')

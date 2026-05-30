@@ -7,10 +7,16 @@ import { cubicBezier } from 'framer-motion'
 import { groupBoundingBox, objectsInMarquee } from '@/lib/aabb'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
-import { importNotionPage } from '@/lib/connectionsApi'
+import { importDriveFile, importNotionPage } from '@/lib/connectionsApi'
+import { extractDriveFileId } from '@/lib/driveUrl'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { extractNotionPageId } from '@/lib/notionUrl'
-import { createNotionPage, createText } from '@/lib/objectFactory'
+import {
+  createDriveFile,
+  createDriveFolder,
+  createNotionPage,
+  createText,
+} from '@/lib/objectFactory'
 import {
   EASE_OUT_STANDARD,
   FIT_ALL_DURATION_MS,
@@ -401,6 +407,54 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
+  // Same shape as the Notion paste handler, dispatched by the import's `kind`
+  // discriminator so PDFs land as PDFNode and images as ImageNode.
+  const handleDrivePasteUrl = useCallback(
+    async (fileId: string, point: Point) => {
+      const picker = useSourcePickerStore.getState()
+      const driveConnection = picker.connections.find((c) => c.provider === 'drive')
+      if (!driveConnection) {
+        picker.setPendingPaste({ provider: 'drive', fileId })
+        picker.openPicker()
+        showToast('Connect Google Drive first to drop this link')
+        return
+      }
+      try {
+        const result = await importDriveFile(driveConnection.id, fileId)
+        const state = useCanvasStore.getState()
+        state.commitBeforeAction()
+        if (result.kind === 'file') {
+          addObject(createDriveFile(point, state.objects.length, result.data))
+        } else if (result.kind === 'folder') {
+          addObject(createDriveFolder(point, state.objects.length, result.data))
+        } else if (result.kind === 'pdf') {
+          addObject({
+            id: nanoid(),
+            type: 'pdf',
+            position: { x: point.x - 90, y: point.y - 120 },
+            size: { width: 180, height: 240 },
+            rotation: 0,
+            zIndex: state.objects.length,
+            data: result.data,
+          })
+        } else {
+          addObject({
+            id: nanoid(),
+            type: 'image',
+            position: { x: point.x - 200, y: point.y - 150 },
+            size: { width: 400, height: 300 },
+            rotation: 0,
+            zIndex: state.objects.length,
+            data: result.data,
+          })
+        }
+      } catch (err) {
+        showToast(`Drive import failed: ${err instanceof Error ? err.message : 'unknown'}`)
+      }
+    },
+    [addObject],
+  )
+
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return
@@ -458,14 +512,19 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       if (snap.text) {
         const trimmed = snap.text.trim()
 
-        // 4a. Notion page URL → import via the user's first Notion
-        // connection, or stash the page id and open the connect flow if
-        // no connection exists yet.
+        // 4a. Notion / Drive URL → import via the matching connection, or
+        // stash the id and open the connect flow if no connection exists.
         if (trimmed.length > 0 && /https?:\/\//i.test(trimmed)) {
           const notionPageId = extractNotionPageId(trimmed)
           if (notionPageId) {
             e.preventDefault()
             await handleNotionPasteUrl(notionPageId, viewportCenterWorld())
+            return
+          }
+          const driveFileId = extractDriveFileId(trimmed)
+          if (driveFileId) {
+            e.preventDefault()
+            await handleDrivePasteUrl(driveFileId, viewportCenterWorld())
             return
           }
         }
@@ -506,6 +565,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     addImageFromUrl,
     addObject,
     addPdfFromBlob,
+    handleDrivePasteUrl,
     handleNotionPasteUrl,
     viewportCenterWorld,
   ])
@@ -666,7 +726,9 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'sticky' ||
             o.type === 'text' ||
             o.type === 'font' ||
-            o.type === 'notion-page',
+            o.type === 'notion-page' ||
+            o.type === 'drive-file' ||
+            o.type === 'drive-folder',
         )}
         scale={scale}
         offset={offset}

@@ -1,11 +1,16 @@
 import {
   connectionsListResponseSchema,
+  importDriveResponseSchema,
   importNotionResponseSchema,
   pickerChildrenResponseSchema,
   pickerRecentsResponseSchema,
   pickerSearchResponseSchema,
   type ConnectionSummary,
+  type DriveFileData,
+  type DriveFolderData,
+  type ImageData,
   type NotionPageData,
+  type PDFData,
   type PickerTile,
 } from '@moodboard/shared'
 
@@ -88,16 +93,54 @@ export async function importNotionPage(
   return body.data
 }
 
-/** Refresh an existing canvas object's snapshot from its source. */
-export async function refreshExternal(boardId: string, objectId: string): Promise<NotionPageData> {
+export type DriveImportResult =
+  | { kind: 'file'; data: DriveFileData }
+  | { kind: 'folder'; data: DriveFolderData }
+  | { kind: 'pdf'; data: PDFData }
+  | { kind: 'image'; data: ImageData }
+
+export async function importDriveFile(
+  connectionId: string,
+  fileId: string,
+): Promise<DriveImportResult> {
+  const res = await fetch('/api/external/drive/import', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectionId, fileId }),
+  })
+  return importDriveResponseSchema.parse(await jsonOrThrow(res)) as DriveImportResult
+}
+
+/**
+ * Refresh an existing canvas object's snapshot from its source. Returns a
+ * discriminated union — Notion pages stay as 'notion-page' kind for
+ * type-narrowing on the caller side.
+ */
+export type RefreshResult =
+  | { kind: 'notion-page'; data: NotionPageData }
+  | { kind: 'file'; data: DriveFileData }
+  | { kind: 'folder'; data: DriveFolderData }
+  | { kind: 'pdf'; data: PDFData }
+  | { kind: 'image'; data: ImageData }
+
+export async function refreshExternal(boardId: string, objectId: string): Promise<RefreshResult> {
   const res = await fetch('/api/external/refresh', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ boardId, objectId }),
   })
-  // Refresh currently only supports notion-page; when Drive lands, the
-  // response shape will be a discriminated union and this parser changes.
-  const body = importNotionResponseSchema.parse(await jsonOrThrow(res))
-  return body.data
+  const body = (await jsonOrThrow(res)) as { kind?: string; data?: unknown }
+  // The server returns either { data } (notion) or { kind, data } (drive).
+  if (body.kind === 'file' || body.kind === 'folder') {
+    const parsed = importDriveResponseSchema.parse(body) as DriveImportResult
+    return parsed as RefreshResult
+  }
+  if (body.kind === 'pdf' || body.kind === 'image') {
+    const parsed = importDriveResponseSchema.parse(body) as DriveImportResult
+    return parsed as RefreshResult
+  }
+  const notion = importNotionResponseSchema.parse(body)
+  return { kind: 'notion-page', data: notion.data }
 }

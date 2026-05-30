@@ -7,10 +7,11 @@ import { MoodBoardCanvas } from '@/components/canvas/MoodBoardCanvas'
 import { SourcePickerDrawer } from '@/components/canvas/SourcePickerDrawer'
 import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
+import { nanoid } from 'nanoid'
 import { groupBoundingBox } from '@/lib/aabb'
 import { updateBoard } from '@/lib/boardsApi'
-import { importNotionPage } from '@/lib/connectionsApi'
-import { createNotionPage } from '@/lib/objectFactory'
+import { importDriveFile, importNotionPage } from '@/lib/connectionsApi'
+import { createDriveFile, createDriveFolder, createNotionPage } from '@/lib/objectFactory'
 import { screenToWorld } from '@/lib/transform'
 import {
   EASE_OUT_STANDARD,
@@ -111,6 +112,62 @@ export function BoardPage() {
     }
   }, [boardId])
 
+  // Drive OAuth — same shape as onConnectNotion. After the popup closes
+  // we resume any pendingPaste targeting drive.
+  const onConnectDrive = useCallback(async () => {
+    try {
+      await openConnectionPopup('drive')
+      await useSourcePickerStore.getState().refreshConnections()
+      const pending = useSourcePickerStore.getState().pendingPaste
+      if (pending?.provider === 'drive' && boardId) {
+        const fresh = useSourcePickerStore.getState()
+        const conn = fresh.connections.find((c) => c.provider === 'drive')
+        if (conn) {
+          try {
+            const result = await importDriveFile(conn.id, pending.fileId)
+            const state = useCanvasStore.getState()
+            const center = screenToWorld(
+              { x: state.viewportSize.width / 2, y: state.viewportSize.height / 2 },
+              { scale: state.scale, x: state.offset.x, y: state.offset.y },
+            )
+            state.commitBeforeAction()
+            if (result.kind === 'file') {
+              state.addObject(createDriveFile(center, state.objects.length, result.data))
+            } else if (result.kind === 'folder') {
+              state.addObject(createDriveFolder(center, state.objects.length, result.data))
+            } else if (result.kind === 'pdf') {
+              state.addObject({
+                id: nanoid(),
+                type: 'pdf',
+                position: { x: center.x - 90, y: center.y - 120 },
+                size: { width: 180, height: 240 },
+                rotation: 0,
+                zIndex: state.objects.length,
+                data: result.data,
+              })
+            } else {
+              state.addObject({
+                id: nanoid(),
+                type: 'image',
+                position: { x: center.x - 200, y: center.y - 150 },
+                size: { width: 400, height: 300 },
+                rotation: 0,
+                zIndex: state.objects.length,
+                data: result.data,
+              })
+            }
+            fresh.closePicker()
+          } catch (importErr) {
+            console.error('Resume of Drive paste failed', importErr)
+          }
+        }
+        useSourcePickerStore.getState().setPendingPaste(null)
+      }
+    } catch (e) {
+      console.error('Drive connect failed', e)
+    }
+  }, [boardId])
+
   if (!boardId) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6 bg-background">
@@ -152,7 +209,7 @@ export function BoardPage() {
         <MoodBoardCanvas boardId={boardId} />
         <Toolbar />
         <ToastHost />
-        <SourcePickerDrawer onConnectNotion={onConnectNotion} />
+        <SourcePickerDrawer onConnectNotion={onConnectNotion} onConnectDrive={onConnectDrive} />
 
         <div
           className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"

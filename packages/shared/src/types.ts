@@ -41,7 +41,54 @@ export type NotionPageData = {
   lastEditedAt?: string
 }
 
-export type CanvasObjectType = 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'notion-page'
+// Google Drive file — Docs, Sheets, Slides, or any other type that isn't
+// routed to a dedicated node. PDFs and images come back through the existing
+// PDFNode / ImageNode flows; only the "Google native" + arbitrary files
+// land on this type.
+//
+// `excerpt` is the AI-readable representation:
+//   - Doc       → first ~4000 chars of plain-text export
+//   - Sheet     → CSV of the first sheet, capped
+//   - Slides    → slide titles + speaker notes, joined
+//   - other     → file name + mime + size, with a "(no preview)" note
+export type DriveFileData = {
+  connectionId: string
+  fileId: string
+  mimeType: string
+  name: string
+  iconUrl?: string
+  // Public Drive URL — used by the "Open in Drive" link.
+  webViewLink: string
+  excerpt: string
+  fetchedAt: string
+  modifiedTime?: string
+}
+
+// Google Drive folder. Folders don't carry content of their own — they're
+// hierarchy. The card shows the name + a child-count chip; the AD reads the
+// child list as auxiliary context (not first-class content).
+export type DriveFolderData = {
+  connectionId: string
+  folderId: string
+  name: string
+  webViewLink: string
+  childCount: number
+  // Names + mime types of the first 30 children, captured at import. The AD
+  // uses this for context; the picker uses /children to walk the live tree.
+  childPreview: { name: string; mimeType: string }[]
+  fetchedAt: string
+  modifiedTime?: string
+}
+
+export type CanvasObjectType =
+  | 'image'
+  | 'sticky'
+  | 'text'
+  | 'pdf'
+  | 'font'
+  | 'notion-page'
+  | 'drive-file'
+  | 'drive-folder'
 
 export type CanvasObject = {
   id: string
@@ -50,7 +97,15 @@ export type CanvasObject = {
   size: { width: number; height: number }
   rotation: number
   zIndex: number
-  data: ImageData | StickyData | TextData | PDFData | FontData | NotionPageData
+  data:
+    | ImageData
+    | StickyData
+    | TextData
+    | PDFData
+    | FontData
+    | NotionPageData
+    | DriveFileData
+    | DriveFolderData
 }
 
 export type AIAnalysis = {

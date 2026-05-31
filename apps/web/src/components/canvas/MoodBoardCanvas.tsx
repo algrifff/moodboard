@@ -919,7 +919,8 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'web-page' ||
             o.type === 'spotify-playlist' ||
             o.type === 'spotify-track' ||
-            o.type === 'spotify-album',
+            o.type === 'spotify-album' ||
+            o.type === 'video-clip',
         )}
         scale={scale}
         offset={offset}

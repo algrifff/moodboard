@@ -560,3 +560,69 @@ export type Board = {
   createdAt: string
   updatedAt: string
 }
+
+// ---------------------------------------------------------------------------
+// Phase 18 — shareable moodboards (frozen snapshot + PDF)
+//
+// A share is an immutable read-only projection of a board at a moment in
+// time. The blob carries everything a viewer needs to render the canvas
+// hero + per-group brief without a database round trip beyond the share
+// row itself. The owner can "Update snapshot" — same token, new payload.
+// ---------------------------------------------------------------------------
+
+// What an agent-row run produced for a group, baked into the share
+// snapshot. Mirrors the four "ready" SlotState kinds the editor's
+// AIAnalysisPanel renders (excluding loading/error/idle, which would
+// be meaningless once frozen). The viewer dispatches on `kind` to
+// pick the matching readout component.
+export type SharedAnalysisDisplay =
+  | { kind: 'ad'; data: AIAnalysis }
+  | { kind: 'sectioned'; data: SectionedParagraphs }
+  | { kind: 'video'; data: VideoEditorBreakdown }
+  | { kind: 'brief'; data: SynthesisBrief }
+
+// One group as captured in the snapshot. Distinct from the live
+// runtime Group type because (a) it carries the baked analysis
+// display (which only lives in localStorage on the editor) and (b)
+// the bounds shape matches what GroupOutline / ColorPaletteWidget
+// consume.
+export type SharedGroupSnapshot = {
+  // Stable identity — sorted-join of object IDs, same as groupId() in
+  // apps/web/src/lib/aabb.ts. Lets the viewer key React lists.
+  key: string
+  objectIds: string[]
+  bounds: { left: number; top: number; right: number; bottom: number }
+  // Final palette hexes (AI palette when synthesis ran, otherwise the
+  // image-derived palette). Empty array when neither was available.
+  palette: string[]
+  // The analysis display baked at share-time, including any inline
+  // edits the user made. Absent when the group's agent row never
+  // produced a finished run. Covers all four ready kinds so a single-
+  // agent Art Director run survives the snapshot the same way a
+  // multi-agent synthesis does.
+  display?: SharedAnalysisDisplay
+  // Back-compat: an earlier draft of this type used `brief` for
+  // synthesis output only. Keep it as a read-time alias so existing
+  // shares created before `display` landed still render correctly.
+  brief?: SynthesisBrief
+}
+
+// The serialised payload stored in share.snapshot. Version stamped so a
+// future schema change can be migrated without breaking old shares.
+export type SharedBoardSnapshot = {
+  version: 1
+  boardName: string
+  capturedAt: string
+  objects: CanvasObject[]
+  groups: SharedGroupSnapshot[]
+}
+
+// What GET /api/shares/:token returns. Owner-side fields (assetFilenames,
+// pdfFilename) stay server-side.
+export type ShareView = {
+  token: string
+  boardName: string
+  snapshot: SharedBoardSnapshot
+  capturedAt: string
+  updatedAt: string
+}

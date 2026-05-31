@@ -5,6 +5,7 @@ import { PageMotion } from '@/components/PageMotion'
 import { RequireAuth } from '@/components/RequireAuth'
 import { BoardPage } from '@/pages/Board'
 import { DashboardPage } from '@/pages/Dashboard'
+import { SharePage } from '@/pages/Share'
 import { SignInPage } from '@/pages/SignIn'
 import { SignUpPage } from '@/pages/SignUp'
 
@@ -60,6 +61,15 @@ function AnimatedRoutes() {
                 <BoardPage />
               </PageMotion>
             </RequireAuth>
+          }
+        />
+        {/* Public — no RequireAuth. Anyone with the token can view. */}
+        <Route
+          path="/share/:token"
+          element={
+            <PageMotion>
+              <SharePage />
+            </PageMotion>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />

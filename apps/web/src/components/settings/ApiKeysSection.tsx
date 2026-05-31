@@ -266,22 +266,16 @@ function KeyRevealDialog({
     return <DialogShell open={false} onClose={onClose} title="" />
   }
 
-  // In dev the Vite origin (5173) speaks HTTPS via mkcert, whose root
-  // CA isn't trusted by Node-based MCP clients (Claude Code, Cursor).
-  // Point those clients at the API process directly on 3001 (plain
-  // HTTP) so they can connect without us asking the user to install a
-  // root CA. In prod (any non-loopback host) the Vite origin IS the
-  // public deployed origin with a real cert, so we serve the same
-  // URL the rest of the app uses.
-  const baseUrl = (() => {
-    if (typeof window === 'undefined') return '/api/mcp'
-    const { hostname, origin } = window.location
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return 'http://localhost:3001/api/mcp'
-    }
-    return `${origin}/api/mcp`
-  })()
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  const baseUrl = `${origin}/api/mcp`
   const combinedUrl = `${baseUrl}/${minted.plaintext}`
+  // Claude Code, Cursor, Claude Desktop are Node-based — they trust
+  // Node's bundled CA bundle, not the system keychain where mkcert
+  // installs its root. In dev, surface the one-liner that wires
+  // them up.
+  const isDev =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
 
   const copy = async (text: string, mark: 'combined' | 'url' | 'token') => {
     try {
@@ -401,6 +395,38 @@ function KeyRevealDialog({
               style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
             />
           </div>
+        </div>
+      )}
+
+      {isDev && (
+        <div
+          className="mt-4"
+          style={{
+            padding: '10px 12px',
+            borderRadius: 'var(--radius)',
+            backgroundColor: 'var(--bg-elevated)',
+          }}
+        >
+          <p
+            className="text-[11px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold"
+            style={{ marginBottom: 6 }}
+          >
+            Dev cert workaround
+          </p>
+          <p className="text-[11.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
+            Node-based clients (Claude Code, Cursor, Claude Desktop) don't trust mkcert by default.
+            Add this to your shell rc so they accept the local cert:
+          </p>
+          <pre
+            className="text-[11px] text-foreground font-mono overflow-x-auto"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              padding: '8px 10px',
+              borderRadius: 'var(--radius)',
+              marginTop: 6,
+              lineHeight: 1.45,
+            }}
+          >{`export NODE_EXTRA_CA_CERTS="$(mkcert -CAROOT)/rootCA.pem"`}</pre>
         </div>
       )}
 

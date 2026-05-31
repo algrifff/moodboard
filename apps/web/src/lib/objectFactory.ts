@@ -9,6 +9,7 @@ import type {
   SpotifyTrackData,
   StickyData,
   TextData,
+  VideoClipData,
   WebPageData,
 } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
@@ -241,6 +242,29 @@ export function createSpotifyAlbum(
       y: worldCenter.y - SPOTIFY_PLAYLIST_SIZE.height / 2,
     },
     size: SPOTIFY_PLAYLIST_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// Video clip card: a 16:9 thumbnail fills the top, title + channel + meta
+// below. 320 wide → 180 tall thumbnail (16:9) + ~110 chrome.
+const VIDEO_DEFAULT_SIZE = { width: 320, height: 290 }
+
+export function createVideoClip(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: VideoClipData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'video-clip',
+    position: {
+      x: worldCenter.x - VIDEO_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - VIDEO_DEFAULT_SIZE.height / 2,
+    },
+    size: VIDEO_DEFAULT_SIZE,
     rotation: 0,
     zIndex,
     data,

@@ -287,7 +287,9 @@ export function GroupsLayer({
             [key]:
               res.agentId === 'art-director'
                 ? { kind: 'ready-ad', data: res.data, cached: res.cached }
-                : { kind: 'ready-sec', data: res.data, cached: res.cached },
+                : res.agentId === 'video-editor'
+                  ? { kind: 'ready-video', data: res.data, cached: res.cached }
+                  : { kind: 'ready-sec', data: res.data, cached: res.cached },
           }))
           if (res.agentId === 'art-director' && res.data.palette.length > 0) {
             const palette = res.data.palette

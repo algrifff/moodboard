@@ -1,4 +1,10 @@
-import type { AgentId, AIAnalysis, SectionedParagraphs, SynthesisBrief } from '@moodboard/shared'
+import type {
+  AgentId,
+  AIAnalysis,
+  SectionedParagraphs,
+  SynthesisBrief,
+  VideoEditorBreakdown,
+} from '@moodboard/shared'
 import { ArrowsOutSimple, X } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
@@ -22,6 +28,7 @@ export type SlotState =
   | { kind: 'loading' }
   | { kind: 'ready-ad'; data: AIAnalysis; cached: boolean }
   | { kind: 'ready-sec'; data: SectionedParagraphs; cached: boolean }
+  | { kind: 'ready-video'; data: VideoEditorBreakdown; cached: boolean }
   | { kind: 'ready-brief'; data: SynthesisBrief; cached: boolean }
   | { kind: 'error'; message: string }
 
@@ -129,6 +136,7 @@ export function AIAnalysisPanel({
   const isReadyKind =
     activeState.kind === 'ready-ad' ||
     activeState.kind === 'ready-sec' ||
+    activeState.kind === 'ready-video' ||
     activeState.kind === 'ready-brief'
   const playState: PlayState =
     activeState.kind === 'loading'
@@ -271,7 +279,10 @@ function SummaryCard({
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDone =
-    state.kind === 'ready-ad' || state.kind === 'ready-sec' || state.kind === 'ready-brief'
+    state.kind === 'ready-ad' ||
+    state.kind === 'ready-sec' ||
+    state.kind === 'ready-video' ||
+    state.kind === 'ready-brief'
   const isIdle = state.kind === 'idle'
 
   const idleStyle: React.CSSProperties = {
@@ -357,6 +368,12 @@ function SummaryCard({
             <SectionedReadout data={state.data} />
           ) : (
             <SectionedGlance data={state.data} />
+          ))}
+        {state.kind === 'ready-video' &&
+          (expanded ? (
+            <VideoEditorReadout data={state.data} />
+          ) : (
+            <VideoEditorGlance data={state.data} />
           ))}
         {state.kind === 'ready-brief' &&
           (expanded ? (
@@ -505,6 +522,161 @@ function SectionedReadout({ data }: { data: SectionedParagraphs }) {
           </p>
         </div>
       ))}
+    </div>
+  )
+}
+
+// Senior Video Editor — the timestamped craft breakdown. When the clip
+// couldn't be analysed (no Gemini key / unsupported), `unavailableReason` is
+// set and the arrays are empty, so we show just the note.
+function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
+  if (data.unavailableReason) {
+    return (
+      <div className="text-[12.5px] text-[var(--text-mute)] italic" style={{ lineHeight: 1.5 }}>
+        {data.unavailableReason}
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-3.5">
+      {data.summary && (
+        <p className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
+          {data.summary}
+        </p>
+      )}
+
+      <VideoSection heading="Hooks">
+        {data.hooks.map((h, i) => (
+          <div key={i} className="space-y-0.5">
+            <div className="flex items-baseline gap-2">
+              <Stamp>{h.timestamp}</Stamp>
+              <span className="text-[12.5px] font-medium text-foreground">{h.what}</span>
+            </div>
+            <div className="text-[12px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
+              <span className="text-[var(--text-faint)]">Why it works — </span>
+              {h.whyItWorks}
+            </div>
+            <div className="text-[12px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
+              <span className="text-[var(--text-faint)]">Replicate — </span>
+              {h.howToReplicate}
+            </div>
+          </div>
+        ))}
+      </VideoSection>
+
+      <VideoSection heading="Transitions">
+        {data.transitions.map((t, i) => (
+          <div key={i} className="flex items-baseline gap-2">
+            <Stamp>{t.timestamp}</Stamp>
+            <span className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
+              <span className="font-medium text-foreground">{t.type}</span> — {t.description}
+            </span>
+          </div>
+        ))}
+      </VideoSection>
+
+      <VideoSection heading="Sound design">
+        {data.soundDesign.map((s, i) => (
+          <div key={i} className="flex items-baseline gap-2">
+            <Stamp>{s.timestamp}</Stamp>
+            <span className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
+              <span className="font-medium text-foreground">{s.element}</span> — {s.effect}
+            </span>
+          </div>
+        ))}
+      </VideoSection>
+
+      <VideoSection heading="What's said">
+        {data.spokenBeats.map((s, i) => (
+          <div key={i} className="space-y-0.5">
+            <div className="flex items-baseline gap-2">
+              <Stamp>{s.timestamp}</Stamp>
+              <span className="text-[12.5px] text-foreground" style={{ lineHeight: 1.5 }}>
+                “{s.quote}”
+              </span>
+            </div>
+            <div className="text-[12px] text-[var(--text-faint)]" style={{ lineHeight: 1.5 }}>
+              {s.delivery}
+            </div>
+          </div>
+        ))}
+      </VideoSection>
+
+      {data.pacing && (
+        <div>
+          <VideoHeading>Pacing</VideoHeading>
+          <p className="mt-1 text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
+            {data.pacing}
+          </p>
+        </div>
+      )}
+
+      {data.replicationPlaybook.length > 0 && (
+        <div>
+          <VideoHeading>Replication playbook</VideoHeading>
+          <ol className="mt-1.5 space-y-1.5">
+            {data.replicationPlaybook.map((step, i) => (
+              <li key={i} className="flex gap-2 text-[12.5px] text-[var(--text-soft)]">
+                <span className="text-[var(--text-faint)] tabular-nums">{i + 1}.</span>
+                <span style={{ lineHeight: 1.5 }}>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VideoSection({ heading, children }: { heading: string; children: React.ReactNode[] }) {
+  if (!children || children.length === 0) return null
+  return (
+    <div>
+      <VideoHeading>{heading}</VideoHeading>
+      <div className="mt-1.5 space-y-2">{children}</div>
+    </div>
+  )
+}
+
+function VideoHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-faint)] font-semibold">
+      {children}
+    </div>
+  )
+}
+
+function Stamp({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="text-[10px] font-medium tabular-nums flex-shrink-0"
+      style={{
+        color: 'var(--accent-foreground)',
+        backgroundColor: 'var(--accent-soft)',
+        padding: '1px 5px',
+        borderRadius: 4,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+function VideoEditorGlance({ data }: { data: VideoEditorBreakdown }) {
+  if (data.unavailableReason) {
+    return (
+      <div className="text-[12px] text-[var(--text-faint)] italic">{data.unavailableReason}</div>
+    )
+  }
+  const firstHook = data.hooks[0]
+  return (
+    <div className="space-y-1">
+      <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-faint)] font-semibold">
+        {data.hooks.length} hooks · {data.transitions.length} transitions
+      </div>
+      <p className="text-[12.5px] text-[var(--text-soft)] line-clamp-2" style={{ lineHeight: 1.5 }}>
+        {firstHook ? firstHook.what : data.summary}
+      </p>
     </div>
   )
 }
@@ -702,6 +874,7 @@ function FullscreenDrawer({
       >
         {state.kind === 'ready-ad' && <ArtDirectorReadout data={state.data} />}
         {state.kind === 'ready-sec' && <SectionedReadout data={state.data} />}
+        {state.kind === 'ready-video' && <VideoEditorReadout data={state.data} />}
         {state.kind === 'ready-brief' && (
           <BriefReadout
             data={state.data}

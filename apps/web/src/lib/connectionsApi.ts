@@ -3,6 +3,7 @@ import {
   importDriveResponseSchema,
   importNotionResponseSchema,
   importSpotifyResponseSchema,
+  importVideoResponseSchema,
   importWebResponseSchema,
   pickerChildrenResponseSchema,
   pickerRecentsResponseSchema,
@@ -17,6 +18,7 @@ import {
   type SpotifyAlbumData,
   type SpotifyPlaylistData,
   type SpotifyTrackData,
+  type VideoClipData,
   type WebPageData,
 } from '@moodboard/shared'
 
@@ -163,6 +165,22 @@ export async function importSpotifyRef(
 }
 
 /**
+ * Import a public video by URL (YouTube / TikTok / Instagram / X / Vimeo).
+ * No connection required — the server uses yt-dlp + OpenAI Whisper. Can take
+ * a while (download + transcribe), so callers should show a toast.
+ */
+export async function importVideoUrl(url: string): Promise<VideoClipData> {
+  const res = await fetch('/api/external/video/import', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  const body = importVideoResponseSchema.parse(await jsonOrThrow(res))
+  return body.data
+}
+
+/**
  * Refresh an existing canvas object's snapshot from its source. Returns a
  * discriminated union — Notion pages stay as 'notion-page' kind for
  * type-narrowing on the caller side.
@@ -177,6 +195,7 @@ export type RefreshResult =
   | { kind: 'playlist'; data: SpotifyPlaylistData }
   | { kind: 'track'; data: SpotifyTrackData }
   | { kind: 'album'; data: SpotifyAlbumData }
+  | { kind: 'video-clip'; data: VideoClipData }
 
 export async function refreshExternal(boardId: string, objectId: string): Promise<RefreshResult> {
   const res = await fetch('/api/external/refresh', {
@@ -203,6 +222,11 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
     const b = body as { kind: 'web-page'; data: unknown }
     const page = importWebResponseSchema.shape.page.parse(b.data)
     return { kind: 'web-page', data: page }
+  }
+  if (body.kind === 'video-clip') {
+    const b = body as { kind: 'video-clip'; data: unknown }
+    const data = importVideoResponseSchema.shape.data.parse(b.data)
+    return { kind: 'video-clip', data }
   }
   if (body.kind === 'playlist' || body.kind === 'track' || body.kind === 'album') {
     const parsed = importSpotifyResponseSchema.parse(body) as SpotifyImportResult

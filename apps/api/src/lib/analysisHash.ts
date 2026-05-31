@@ -10,6 +10,7 @@ import type {
   SpotifyTrackData,
   StickyData,
   TextData,
+  VideoClipData,
   WebPageData,
 } from '@moodboard/shared'
 import { createHash } from 'node:crypto'
@@ -94,6 +95,13 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       parts.push(
         `${o.id}|spotify-album|${d.albumId}|${d.trackCount}|${af.avgEnergy}|${af.avgValence}|${af.medianTempo}`,
       )
+    } else if (o.type === 'video-clip') {
+      // The video id is the identity. Deep analysis is the Senior Video
+      // Editor agent's job (Gemini, cached under that agent's own key), so
+      // the AD-facing content is just id + title + channel. fetchedAt is
+      // excluded so a no-op refresh reuses the cached analysis.
+      const d = o.data as VideoClipData
+      parts.push(`${o.id}|video-clip|${d.videoId}|${d.title}|${d.channel}`)
     }
   }
   return createHash('sha256')

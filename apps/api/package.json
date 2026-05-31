@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
+    "@google/genai": "^2.7.0",
     "@hono/node-server": "^1.13.7",
     "@moodboard/shared": "workspace:*",
     "@napi-rs/canvas": "^1.0.0",

@@ -13,10 +13,13 @@ import type {
   SpotifyTrackData,
   StickyData,
   TextData,
+  VideoClipData,
+  VideoEditorBreakdown,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
 import { getAgent, SYNTHESIZER } from './agents'
+import { analyzeVideoForEditor, GEMINI_VIDEO_MODEL } from './gemini'
 import { isSafeFilename, pdfThumbPath, uploadPath } from './storage'
 import { mimeFromExt } from './upload-validation'
 
@@ -95,6 +98,9 @@ function isSpotifyTrackData(d: CanvasObject['data']): d is SpotifyTrackData {
 }
 function isSpotifyAlbumData(d: CanvasObject['data']): d is SpotifyAlbumData {
   return 'albumId' in d && typeof (d as SpotifyAlbumData).albumId === 'string' && 'releaseDate' in d
+}
+function isVideoClipData(d: CanvasObject['data']): d is VideoClipData {
+  return 'videoId' in d && typeof (d as VideoClipData).videoId === 'string' && 'platform' in d
 }
 
 function urlToFilename(url: string): string | null {
@@ -205,6 +211,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const driveFolderLines: string[] = []
   const webExcerpts: string[] = []
   const spotifyBlocks: string[] = []
+  const videoBlocks: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
   // is. PDF / Notion / Drive / Web all share the same cap.
@@ -221,6 +228,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   let spotifyPlaylistCount = 0
   let spotifyTrackCount = 0
   let spotifyAlbumCount = 0
+  let videoCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -303,6 +311,9 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     } else if (o.type === 'spotify-album' && isSpotifyAlbumData(o.data)) {
       spotifyAlbumCount += 1
       spotifyBlocks.push(formatSpotifyAlbum(o.data))
+    } else if (o.type === 'video-clip' && isVideoClipData(o.data)) {
+      videoCount += 1
+      videoBlocks.push(formatVideoClip(o.data))
     }
   }
 
@@ -334,14 +345,15 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0 ||
           notionExcerpts.length > 0 ||
           driveExcerpts.length > 0 ||
           webExcerpts.length > 0 ||
-          spotifyBlocks.length > 0
+          spotifyBlocks.length > 0 ||
+          videoBlocks.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -413,6 +425,18 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
         '  tempo (BPM)     — median across tracks.\n' +
         "Read for mood, tone, emotion, era, and audience. Audio features are first-class evidence for the AD's mood / tone / emotions / adjectives fields. They do NOT dictate typography, palette, or visual references — those come from the visual sources.\n\n" +
         spotifyBlocks.join('\n\n'),
+    })
+  }
+  if (videoBlocks.length > 0) {
+    // Video clips appear here only as framing (title / channel / platform /
+    // duration). The deep read — hooks, transitions, pacing, sound design,
+    // dialogue — is produced by the Senior Video Editor agent (Gemini) and
+    // reaches the synthesizer through that agent's output, not this block.
+    content.push({
+      type: 'text',
+      text:
+        'Video clips on this board (the user pasted these because the content or vibe matters). Treat the title + channel as a topical/voice hint. The detailed video breakdown is handled by the Senior Video Editor agent.\n\n' +
+        videoBlocks.join('\n\n'),
     })
   }
   content.push({ type: 'text', text: 'Give me the read.' })
@@ -555,6 +579,47 @@ function formatSpotifyAlbum(d: SpotifyAlbumData): string {
   return `--- ${head.join('\n')} ---\nTrack list:\n${trackLines.join('\n')}\n--- end Spotify album ---`
 }
 
+function formatVideoClip(d: VideoClipData): string {
+  // The AD only gets framing here (title / channel / platform / duration).
+  // The deep read — hooks, transitions, pacing, sound, dialogue — comes from
+  // the Senior Video Editor agent (Gemini), which the synthesizer folds in.
+  const dur = d.durationSec > 0 ? ` (${formatVideoDuration(d.durationSec)})` : ''
+  const platform = d.platform && d.platform !== 'other' ? ` [${d.platform}]` : ''
+  const head = `Video: "${d.title || 'Untitled'}"${d.channel ? ` by ${d.channel}` : ''}${dur}${platform}`
+  return `--- ${head} ---\n--- end video ---`
+}
+
+function formatVideoDuration(sec: number): string {
+  const s = Math.round(sec)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = s % 60
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
+
+// Senior Video Editor — finds the first video clip in the group and sends it
+// to Gemini for the craft breakdown. No clip → a clear "add a clip" stub
+// (cache-safe: the group's hash changes the moment a clip is added).
+async function analyzeVideoEditorGroup(objects: CanvasObject[]): Promise<VideoEditorBreakdown> {
+  const clip = objects.find((o) => o.type === 'video-clip' && isVideoClipData(o.data))?.data as
+    | VideoClipData
+    | undefined
+  if (!clip) {
+    return {
+      summary: '',
+      hooks: [],
+      transitions: [],
+      soundDesign: [],
+      spokenBeats: [],
+      pacing: '',
+      replicationPlaybook: [],
+      unavailableReason: 'Group this agent with a video clip and it will break the video down.',
+    }
+  }
+  return analyzeVideoForEditor(clip)
+}
+
 /**
  * Run a single agent against a group. Returns the agent-specific data
  * (validated against the agent's zod schema).
@@ -564,6 +629,11 @@ export async function analyzeGroup(
   agentId: AgentId,
   depth: AnalysisDepth = DEFAULT_DEPTH,
 ): Promise<unknown> {
+  // The Senior Video Editor doesn't run on Claude — route it to Gemini, which
+  // watches the clip. It needs no Anthropic client, so branch before that check.
+  if (agentId === 'video-editor') {
+    return analyzeVideoEditorGroup(objects)
+  }
   if (!client) {
     throw new Error('Anthropic client not configured (ANTHROPIC_API_KEY missing)')
   }
@@ -612,6 +682,11 @@ export async function analyzeGroup(
 }
 
 export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
+  // The Senior Video Editor runs on Gemini, not Claude — its cache bucket is
+  // keyed by the Gemini model, independent of the Claude depth setting.
+  if (agentId === 'video-editor') {
+    return `video-editor@${GEMINI_VIDEO_MODEL}@v1`
+  }
   // Suffix bumps invalidate the on-disk cache when the schema changes.
   // v3 = agent registry introduction (different cache bucket per agent).
   // v4 = AIAnalysis gained logo + fonts fields; prompt + content builder
@@ -653,7 +728,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      not actually return them (Nov 2024 access lock fallback). The
   //      AD now has explicit "track list unavailable" wording for
   //      editorial playlists so it doesn't hallucinate tracks.
-  const v = 'v15'
+  // v16 = Video clips (Phase 16) feed in as a reference block — Whisper
+  //      transcript + title + channel. Header counts gain a video line.
+  const v = 'v16'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -686,7 +763,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   // v15 — Spotify playlist prompt now leads with the owner's
   //       description and suppresses zero audio-features instead of
   //       reading them as literal zeros.
-  const v = 'v15'
+  // v16 — Video clips feed into the synth prompt as a reference block
+  //       (transcript + title + channel). Bumps in lockstep with the AD.
+  const v = 'v16'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

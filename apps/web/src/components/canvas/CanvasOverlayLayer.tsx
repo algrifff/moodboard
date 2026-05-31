@@ -5,6 +5,7 @@ import { NotionPageNode } from './NotionPageNode'
 import { SpotifyNode } from './SpotifyNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
+import { VideoClipNode } from './VideoClipNode'
 import { WebPageNode } from './WebPageNode'
 
 export function CanvasOverlayLayer({
@@ -116,6 +117,18 @@ export function CanvasOverlayLayer({
           ) {
             return (
               <SpotifyNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
+              />
+            )
+          }
+          if (o.type === 'video-clip' && boardId) {
+            return (
+              <VideoClipNode
                 key={o.id}
                 object={o}
                 scale={scale}

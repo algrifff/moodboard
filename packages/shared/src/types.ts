@@ -254,6 +254,51 @@ export type SpotifyAlbumData = {
   fetchedAt: string
 }
 
+// A video clip imported from a public URL (YouTube, TikTok, Instagram Reel,
+// X, Vimeo). yt-dlp pulls the metadata + audio; OpenAI Whisper transcribes
+// the audio; the platform thumbnail is saved to /data like an upload. The
+// transcript is the high-signal mood input the AD reads — what's actually
+// said in the clip — alongside the title + channel.
+export type VideoClipData = {
+  // Normalised platform label ('youtube' | 'tiktok' | 'instagram' | 'x' |
+  // 'vimeo' | 'other') — drives the "Open in …" chip + logging.
+  platform: string
+  // The canonical/webpage URL (yt-dlp's resolved `webpage_url`).
+  url: string
+  // Stable platform video id (yt-dlp `id`) — refresh + hash identity.
+  videoId: string
+  title: string
+  channel: string
+  // Duration in whole seconds (0 when unknown — some platforms omit it).
+  durationSec: number
+  // Saved thumbnail served from /api/files/… (empty when none was found).
+  thumbnailUrl: string
+  fetchedAt: string
+}
+
+// The Senior Video Editor agent's output — a granular craft breakdown of a
+// video clip produced by Gemini (which watches frames + listens to audio +
+// reads speech together). Every timestamp is a "M:SS" string into the clip.
+export type VideoEditorBreakdown = {
+  // One-paragraph read of the overall edit style + what makes it work.
+  summary: string
+  // The attention hooks and WHY each lands + how to recreate it.
+  hooks: { timestamp: string; what: string; whyItWorks: string; howToReplicate: string }[]
+  // Cuts / transitions and the effect each creates.
+  transitions: { timestamp: string; type: string; description: string }[]
+  // Sound design beats — SFX, music drops, silence, risers.
+  soundDesign: { timestamp: string; element: string; effect: string }[]
+  // What's said + how it's delivered (cadence, emphasis, timing).
+  spokenBeats: { timestamp: string; quote: string; delivery: string }[]
+  // Cut cadence / rhythm / energy curve across the clip — one paragraph.
+  pacing: string
+  // Step-by-step playbook to replicate this clip's style on a new video.
+  replicationPlaybook: string[]
+  // Set when the clip couldn't be analysed (e.g. unsupported platform, no
+  // Gemini key) — a short human-readable reason; the arrays will be empty.
+  unavailableReason?: string
+}
+
 export type CanvasObjectType =
   | 'image'
   | 'sticky'
@@ -267,6 +312,7 @@ export type CanvasObjectType =
   | 'spotify-playlist'
   | 'spotify-track'
   | 'spotify-album'
+  | 'video-clip'
 
 export type CanvasObject = {
   id: string
@@ -288,6 +334,7 @@ export type CanvasObject = {
     | SpotifyPlaylistData
     | SpotifyTrackData
     | SpotifyAlbumData
+    | VideoClipData
 }
 
 export type AIAnalysis = {
@@ -428,6 +475,7 @@ export type AgentId =
   | 'audience-profiler'
   | 'channel-strategist'
   | 'copywriter'
+  | 'video-editor'
 
 // What an agent returns. The Art Director is the historical structured
 // shape; everything else returns sectioned paragraphs.
@@ -437,6 +485,7 @@ export type AgentOutput =
       agentId: 'business-analyst' | 'audience-profiler' | 'channel-strategist' | 'copywriter'
       data: SectionedParagraphs
     }
+  | { agentId: 'video-editor'; data: VideoEditorBreakdown }
 
 export type Group = {
   id: string

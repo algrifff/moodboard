@@ -191,6 +191,17 @@ export const spotifyAlbumDataSchema = z.object({
   fetchedAt: z.string(),
 })
 
+export const videoClipDataSchema = z.object({
+  platform: z.string(),
+  url: z.string(),
+  videoId: z.string(),
+  title: z.string(),
+  channel: z.string(),
+  durationSec: z.number(),
+  thumbnailUrl: z.string(),
+  fetchedAt: z.string(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
   type: z.enum([
@@ -206,6 +217,7 @@ export const canvasObjectSchema = z.object({
     'spotify-playlist',
     'spotify-track',
     'spotify-album',
+    'video-clip',
   ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
@@ -224,6 +236,7 @@ export const canvasObjectSchema = z.object({
     spotifyPlaylistDataSchema,
     spotifyTrackDataSchema,
     spotifyAlbumDataSchema,
+    videoClipDataSchema,
   ]),
 })
 
@@ -323,8 +336,35 @@ export const agentIdSchema = z.enum([
   'audience-profiler',
   'channel-strategist',
   'copywriter',
+  'video-editor',
 ])
 export type AgentIdInput = z.infer<typeof agentIdSchema>
+
+// Senior Video Editor agent output (Gemini-produced). Validated server-side
+// after Gemini returns JSON, and on the client when reading agent results.
+export const videoEditorBreakdownSchema = z.object({
+  summary: z.string(),
+  hooks: z.array(
+    z.object({
+      timestamp: z.string(),
+      what: z.string(),
+      whyItWorks: z.string(),
+      howToReplicate: z.string(),
+    }),
+  ),
+  transitions: z.array(
+    z.object({ timestamp: z.string(), type: z.string(), description: z.string() }),
+  ),
+  soundDesign: z.array(
+    z.object({ timestamp: z.string(), element: z.string(), effect: z.string() }),
+  ),
+  spokenBeats: z.array(
+    z.object({ timestamp: z.string(), quote: z.string(), delivery: z.string() }),
+  ),
+  pacing: z.string(),
+  replicationPlaybook: z.array(z.string()),
+  unavailableReason: z.string().optional(),
+})
 
 export const analyzeRequestSchema = z.object({
   objectIds: z.array(z.string()).min(1).max(50),
@@ -432,6 +472,7 @@ export const boardPreviewObjectSchema = z.object({
     'spotify-playlist',
     'spotify-track',
     'spotify-album',
+    'video-clip',
   ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -599,6 +640,12 @@ export const importWebResponseSchema = z.object({
 export const importSpotifyResponseSchema = z.object({
   kind: z.enum(['playlist', 'track', 'album']),
   data: z.union([spotifyPlaylistDataSchema, spotifyTrackDataSchema, spotifyAlbumDataSchema]),
+})
+
+// Video import — single shape (no connection, no sub-kinds). The client
+// mounts it as a VideoClipNode at the cursor.
+export const importVideoResponseSchema = z.object({
+  data: videoClipDataSchema,
 })
 
 export const updateBoardRequestSchema = z.object({

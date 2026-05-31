@@ -2,6 +2,7 @@ import type { AgentId } from '@moodboard/shared'
 import {
   ArrowsClockwise,
   Briefcase,
+  FilmSlate,
   Megaphone,
   Palette,
   PenNib,
@@ -23,6 +24,7 @@ export const AGENT_META: Record<AgentId, { label: string; icon: Icon }> = {
   'audience-profiler': { label: 'Audience Profiler', icon: UsersThree },
   'channel-strategist': { label: 'Channel Strategist', icon: Megaphone },
   copywriter: { label: 'Copywriter', icon: PenNib },
+  'video-editor': { label: 'Senior Video Editor', icon: FilmSlate },
 }
 
 export const AGENT_ORDER: AgentId[] = [
@@ -31,6 +33,7 @@ export const AGENT_ORDER: AgentId[] = [
   'audience-profiler',
   'channel-strategist',
   'copywriter',
+  'video-editor',
 ]
 
 export type PlayState = 'idle' | 'loading' | 'ready' | 'error'

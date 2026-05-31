@@ -254,6 +254,27 @@ export type SpotifyAlbumData = {
   fetchedAt: string
 }
 
+// A voice note recorded in-browser via MediaRecorder, with live
+// transcription from the Web Speech API. The audio file lives on the
+// volume like any upload; the transcript travels alongside so the AD
+// reads what was said the same way it reads a sticky note. In browsers
+// without SpeechRecognition (Firefox) the audio still records and the
+// transcript lands empty.
+export type VoiceNoteData = {
+  // /api/files/<id>.<ext> served by the files route.
+  url: string
+  // MediaRecorder's chosen MIME — audio/webm;codecs=opus on Chromium,
+  // audio/mp4 on Safari. Stored so playback picks the right decoder.
+  mimeType: string
+  // Recording length in whole seconds.
+  durationSec: number
+  // Final transcript (may be empty when the live recogniser was
+  // unavailable or the recording was silence).
+  transcript: string
+  // ISO timestamp of when the recording finished.
+  fetchedAt: string
+}
+
 // A video clip imported from a public URL (YouTube, TikTok, Instagram Reel,
 // X, Vimeo). yt-dlp pulls the metadata + audio; OpenAI Whisper transcribes
 // the audio; the platform thumbnail is saved to /data like an upload. The
@@ -330,6 +351,7 @@ export type CanvasObjectType =
   | 'spotify-track'
   | 'spotify-album'
   | 'video-clip'
+  | 'voice-note'
 
 export type CanvasObject = {
   id: string
@@ -352,6 +374,7 @@ export type CanvasObject = {
     | SpotifyTrackData
     | SpotifyAlbumData
     | VideoClipData
+    | VoiceNoteData
 }
 
 export type AIAnalysis = {

@@ -14,6 +14,7 @@ import { boards } from './routes/boards'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
 import { files } from './routes/files'
+import { voice } from './routes/voice'
 
 type AppVariables = {
   user: AuthUser | null
@@ -98,6 +99,7 @@ api.use('/boards/*', jsonBodyLimit)
 api.route('/boards', boards)
 api.route('/connections', connections)
 api.route('/external', external)
+api.route('/voice', voice)
 api.route('/', analyze)
 api.route('/', files)
 

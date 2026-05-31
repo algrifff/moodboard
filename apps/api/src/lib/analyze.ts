@@ -16,6 +16,7 @@ import type {
   VideoClipBreakdown,
   VideoClipData,
   VideoEditorBreakdown,
+  VoiceNoteData,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
@@ -102,6 +103,16 @@ function isSpotifyAlbumData(d: CanvasObject['data']): d is SpotifyAlbumData {
 }
 function isVideoClipData(d: CanvasObject['data']): d is VideoClipData {
   return 'videoId' in d && typeof (d as VideoClipData).videoId === 'string' && 'platform' in d
+}
+function isVoiceNoteData(d: CanvasObject['data']): d is VoiceNoteData {
+  return (
+    'transcript' in d &&
+    typeof (d as VoiceNoteData).transcript === 'string' &&
+    'durationSec' in d &&
+    typeof (d as VoiceNoteData).durationSec === 'number' &&
+    'mimeType' in d &&
+    typeof (d as VoiceNoteData).mimeType === 'string'
+  )
 }
 
 function urlToFilename(url: string): string | null {
@@ -213,6 +224,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const webExcerpts: string[] = []
   const spotifyBlocks: string[] = []
   const videoBlocks: string[] = []
+  const voiceNoteBlocks: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
   // is. PDF / Notion / Drive / Web all share the same cap.
@@ -230,6 +242,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   let spotifyTrackCount = 0
   let spotifyAlbumCount = 0
   let videoCount = 0
+  let voiceNoteCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -315,6 +328,20 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     } else if (o.type === 'video-clip' && isVideoClipData(o.data)) {
       videoCount += 1
       videoBlocks.push(formatVideoClip(o.data))
+    } else if (o.type === 'voice-note' && isVoiceNoteData(o.data)) {
+      voiceNoteCount += 1
+      // Voice notes get a dedicated block (below) rather than mixing
+      // into the generic text-content section. The transcript is the
+      // user speaking directly — load-bearing intent — and deserves
+      // its own preamble so agents don't read it as just another
+      // sticky. Empty transcripts (Gemini failed, recording silent,
+      // or page-reload-mid-transcribe) still produce a placeholder
+      // so the agent knows a voice note is present.
+      const raw = o.data.transcript.trim()
+      const body = raw || '(no transcript captured)'
+      voiceNoteBlocks.push(
+        `--- Voice note (${formatVideoDuration(o.data.durationSec)}) ---\n${body}\n--- end voice note ---`,
+      )
     }
   }
 
@@ -346,7 +373,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s), ${voiceNoteCount} voice note(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0 ||
@@ -354,7 +381,8 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
           driveExcerpts.length > 0 ||
           webExcerpts.length > 0 ||
           spotifyBlocks.length > 0 ||
-          videoBlocks.length > 0
+          videoBlocks.length > 0 ||
+          voiceNoteBlocks.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -438,6 +466,30 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       text:
         'Video clips on this board (the user pasted these because the content or vibe matters). Treat the title + channel as a topical/voice hint. The detailed video breakdown is handled by the Senior Video Editor agent.\n\n' +
         videoBlocks.join('\n\n'),
+    })
+  }
+  if (voiceNoteBlocks.length > 0) {
+    // Voice notes are the user speaking into the moodboard — direct
+    // verbal intent for the brand. Transcripts are Gemini-cleaned (ums,
+    // false starts, repeats stripped) so the prose reads cleanly while
+    // preserving the user's actual word choice, cadence, and emphasis.
+    //
+    // Weight these as LOAD-BEARING intent — on par with web pages and
+    // ahead of stickies — because the user articulated their thinking
+    // here rather than just collecting references. Read for:
+    //   • intent + positioning (what they're actually trying to build)
+    //   • brand voice (the words and sentence shapes they reach for)
+    //   • specifics (names, numbers, references they call out by name)
+    //   • audience cues (who they describe wanting to reach)
+    // Voice notes do NOT dictate typography, palette, or visual
+    // references — those come from the visual sources. A voice note that
+    // names a typeface ("set in Söhne", "use Helvetica") DOES count as
+    // an explicit typography reference for the fonts field.
+    content.push({
+      type: 'text',
+      text:
+        "User voice notes — the brand owner thinking out loud about this work. Treat these as direct intent: the brand's voice IS the voice in these recordings. Read for positioning, audience, references, and tone. Match their cadence and vocabulary when writing copy or naming the read.\n\n" +
+        voiceNoteBlocks.join('\n\n'),
     })
   }
   content.push({ type: 'text', text: 'Give me the read.' })

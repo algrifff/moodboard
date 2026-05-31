@@ -10,6 +10,7 @@ import type {
   StickyData,
   TextData,
   VideoClipData,
+  VoiceNoteData,
   WebPageData,
 } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
@@ -265,6 +266,30 @@ export function createVideoClip(
       y: worldCenter.y - VIDEO_DEFAULT_SIZE.height / 2,
     },
     size: VIDEO_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// Voice note card: header + waveform + scrubber + transcript area.
+// 320 wide gives the 18-bar waveform decent resolution; 200 tall fits the
+// chrome plus ~3 clamped transcript lines before the user expands it.
+const VOICE_NOTE_DEFAULT_SIZE = { width: 320, height: 200 }
+
+export function createVoiceNote(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: VoiceNoteData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'voice-note',
+    position: {
+      x: worldCenter.x - VOICE_NOTE_DEFAULT_SIZE.width / 2,
+      y: worldCenter.y - VOICE_NOTE_DEFAULT_SIZE.height / 2,
+    },
+    size: VOICE_NOTE_DEFAULT_SIZE,
     rotation: 0,
     zIndex,
     data,

@@ -6,6 +6,7 @@ import { SpotifyNode } from './SpotifyNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
 import { VideoClipNode } from './VideoClipNode'
+import { VoiceNoteNode } from './VoiceNoteNode'
 import { WebPageNode } from './WebPageNode'
 
 export function CanvasOverlayLayer({
@@ -135,6 +136,17 @@ export function CanvasOverlayLayer({
                 panMode={panMode}
                 selected={selectedSet.has(o.id)}
                 boardId={boardId}
+              />
+            )
+          }
+          if (o.type === 'voice-note') {
+            return (
+              <VoiceNoteNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
               />
             )
           }

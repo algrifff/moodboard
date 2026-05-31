@@ -7,10 +7,26 @@ export const MAX_PDF_PAGES = 50
 // Fonts are typically 30–200 KB (woff2) or 1–5 MB (full ttf/otf). Cap
 // at 5 MB so a heavy-weight family doesn't push past.
 export const MAX_FONT_BYTES = 5 * 1024 * 1024
+// Voice notes recorded in-browser via MediaRecorder (opus ~16 KB/s, AAC
+// ~32 KB/s). 50 MB covers ~30–50 minutes — well above any plausible note.
+export const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 export const PDF_MIME = 'application/pdf'
 
 export const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+// Audio MIME landscape varies by browser: Chromium picks audio/webm with
+// codecs=opus, Safari picks audio/mp4. We also accept hand-uploaded wav /
+// ogg / mp3 so dropped files work the same.
+export const ALLOWED_AUDIO_MIME = new Set([
+  'audio/webm',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/m4a',
+  'audio/x-m4a',
+])
 // Font MIME landscape is messy — browsers and OSes report several
 // equivalents per format. Accept all the common ones; we re-validate by
 // extension fallback when type is application/octet-stream.
@@ -57,6 +73,19 @@ export function extFromMime(mime: string): string | null {
     case 'font/woff2':
     case 'application/font-woff2':
       return 'woff2'
+    case 'audio/webm':
+      return 'webm'
+    case 'audio/ogg':
+      return 'ogg'
+    case 'audio/mp4':
+    case 'audio/m4a':
+    case 'audio/x-m4a':
+      return 'm4a'
+    case 'audio/mpeg':
+      return 'mp3'
+    case 'audio/wav':
+    case 'audio/x-wav':
+      return 'wav'
     default:
       return null
   }
@@ -81,6 +110,16 @@ export function mimeFromExt(ext: string): string {
       return 'font/woff'
     case 'woff2':
       return 'font/woff2'
+    case 'webm':
+      return 'audio/webm'
+    case 'ogg':
+      return 'audio/ogg'
+    case 'm4a':
+      return 'audio/mp4'
+    case 'mp3':
+      return 'audio/mpeg'
+    case 'wav':
+      return 'audio/wav'
     default:
       return 'application/octet-stream'
   }

@@ -493,7 +493,13 @@ function ConnectionSection({
   onDisconnect: () => void
   importingId: string | null
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  // Default: collapsed. With several connections + recents up top, an
+  // all-expanded view buries the connection list under hundreds of tiles
+  // — the user wanted to see what's connected first, then drill in.
+  // A non-empty search query overrides this so results stay visible
+  // across every connection at once.
+  const [userCollapsed, setUserCollapsed] = useState(true)
+  const collapsed = query.length === 0 ? userCollapsed : false
   const [tiles, setTiles] = useState<PickerTile[]>([])
   const [nextCursor, setNextCursor] = useState<string | undefined>(undefined)
   const [loadingInitial, setLoadingInitial] = useState(false)
@@ -627,7 +633,7 @@ function ConnectionSection({
           confirming={confirmingDisconnect}
           onDisconnect={handleDisconnectClick}
           collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((v) => !v)}
+          onToggleCollapse={() => setUserCollapsed((v) => !v)}
         />
       }
     >

@@ -2,6 +2,7 @@ import {
   connectionsListResponseSchema,
   importDriveResponseSchema,
   importNotionResponseSchema,
+  importSpotifyResponseSchema,
   importWebResponseSchema,
   pickerChildrenResponseSchema,
   pickerRecentsResponseSchema,
@@ -13,6 +14,9 @@ import {
   type NotionPageData,
   type PDFData,
   type PickerTile,
+  type SpotifyAlbumData,
+  type SpotifyPlaylistData,
+  type SpotifyTrackData,
   type WebPageData,
 } from '@moodboard/shared'
 
@@ -136,6 +140,28 @@ export async function importWebUrl(url: string): Promise<WebImportResult> {
   return { page: body.page, logoImages: body.logoImages }
 }
 
+export type SpotifyImportResult =
+  | { kind: 'playlist'; data: SpotifyPlaylistData }
+  | { kind: 'track'; data: SpotifyTrackData }
+  | { kind: 'album'; data: SpotifyAlbumData }
+
+/**
+ * Import a Spotify resource by ref. The server has already resolved which
+ * connection to use — caller passes the connectionId from the picker state.
+ */
+export async function importSpotifyRef(
+  connectionId: string,
+  ref: { kind: 'playlist' | 'track' | 'album'; id: string },
+): Promise<SpotifyImportResult> {
+  const res = await fetch('/api/external/spotify/import', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ connectionId, ref }),
+  })
+  return importSpotifyResponseSchema.parse(await jsonOrThrow(res)) as SpotifyImportResult
+}
+
 /**
  * Refresh an existing canvas object's snapshot from its source. Returns a
  * discriminated union — Notion pages stay as 'notion-page' kind for
@@ -148,6 +174,9 @@ export type RefreshResult =
   | { kind: 'pdf'; data: PDFData }
   | { kind: 'image'; data: ImageData }
   | { kind: 'web-page'; data: WebPageData }
+  | { kind: 'playlist'; data: SpotifyPlaylistData }
+  | { kind: 'track'; data: SpotifyTrackData }
+  | { kind: 'album'; data: SpotifyAlbumData }
 
 export async function refreshExternal(boardId: string, objectId: string): Promise<RefreshResult> {
   const res = await fetch('/api/external/refresh', {
@@ -174,6 +203,10 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
     const b = body as { kind: 'web-page'; data: unknown }
     const page = importWebResponseSchema.shape.page.parse(b.data)
     return { kind: 'web-page', data: page }
+  }
+  if (body.kind === 'playlist' || body.kind === 'track' || body.kind === 'album') {
+    const parsed = importSpotifyResponseSchema.parse(body) as SpotifyImportResult
+    return parsed as RefreshResult
   }
   const notion = importNotionResponseSchema.parse(body)
   return { kind: 'notion-page', data: notion.data }

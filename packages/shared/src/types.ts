@@ -102,6 +102,158 @@ export type WebPageData = {
   fetchedAt: string
 }
 
+// Shared aggregate of Spotify's audio-features endpoint. Every value is in
+// 0..1 *except* tempo (BPM) and durationMs. We aggregate at extraction time
+// so the canvas object stores ready-to-render tonal signal — the AD prompt
+// reads from the aggregate, not the per-track features. Per-track features
+// would explode prompt size for a 100-track playlist with no extra signal.
+export type SpotifyAudioFeaturesAgg = {
+  // Energy 0..1 — perceptual intensity & activity. Loud, fast, noisy = high.
+  avgEnergy: number
+  // Valence 0..1 — musical positiveness. High = cheerful / euphoric.
+  avgValence: number
+  // Danceability 0..1 — how suitable for dancing.
+  avgDanceability: number
+  // Acousticness 0..1 — confidence that the track is acoustic.
+  avgAcousticness: number
+  // Instrumentalness 0..1 — high = no vocals.
+  avgInstrumentalness: number
+  // Speechiness 0..1 — talk/podcast content. >0.66 = mostly spoken.
+  avgSpeechiness: number
+  // Tempo (BPM) — median rather than mean so a single outlier track
+  // doesn't pull the centre value.
+  medianTempo: number
+  // Track sample size the aggregate was computed over. Lets the AD weight
+  // a 50-track read more than a 3-track one.
+  trackCount: number
+}
+
+// One track entry on a playlist/album card. Capped to the top N when
+// stored so a 200-track playlist doesn't blow the JSONB budget. The
+// per-track audio features live alongside so we can highlight specific
+// tracks ("hooky track #3 is high energy + low valence") if we ever want
+// to surface them, but the aggregate above is what the AD reads.
+export type SpotifyTrackSummary = {
+  id: string
+  name: string
+  artists: string[]
+  durationMs: number
+  // Album name + release date give era + grouping signal that the AD
+  // reads inline. Release date is Spotify's ISO `YYYY-MM-DD` or `YYYY`.
+  albumName?: string
+  albumReleaseDate?: string
+  // Spotify's content flags + popularity score (0..100). Surfaced so the
+  // AD can comment on era + accessibility + mass appeal of the mix.
+  explicit?: boolean
+  popularity?: number
+  // 30s preview mp3 if available — used by the canvas card's hover preview.
+  previewUrl?: string
+  // Primary-artist genres for this track. Same source as the playlist's
+  // aggregate topGenres, but kept per-track so the expanded detail view
+  // can show which songs carry which genre. Empty when the artist is
+  // untagged or the artists endpoint was unavailable.
+  genres?: string[]
+  // Optional because audio-features can 404 for tracks like local files
+  // or podcasts that don't have features computed.
+  audioFeatures?: {
+    energy: number
+    valence: number
+    danceability: number
+    tempo: number
+  }
+}
+
+// Per-decade breakdown derived from track album release dates. The
+// dominant decade is the head of the list; full distribution carried for
+// when the AD wants to comment on a mix that straddles eras ("70s rock
+// to 90s rap → genre-spanning, eclectic").
+export type SpotifyEraAgg = {
+  dominantDecade: string | null
+  decadeBreakdown: { decade: string; count: number }[]
+  yearMin: number | null
+  yearMax: number | null
+}
+
+// A Spotify playlist imported via OAuth. The cover + name + audio-feature
+// aggregate are the on-canvas signal; tracks[] is capped at the first 30
+// for prompt budget, but the aggregate is computed over the *full*
+// playlist's audio features at extraction time.
+//
+// `snapshotId` is Spotify's playlist-state etag. Refresh compares it to
+// know whether the playlist changed; the analysis hash also bakes it in
+// so a track add/remove busts the AD cache cleanly.
+export type SpotifyPlaylistData = {
+  connectionId: string
+  playlistId: string
+  snapshotId: string
+  name: string
+  description: string
+  ownerName: string
+  coverUrl?: string
+  trackCount: number
+  // First 30 tracks for display; aggregate is over the full set.
+  tracks: SpotifyTrackSummary[]
+  audioFeatures: SpotifyAudioFeaturesAgg
+  // Track-weighted top genres across the playlist's primary artists. Up
+  // to 8 entries, sorted by frequency. Empty when the playlist's artists
+  // have no genres tagged (rare — Spotify tags most catalog artists).
+  topGenres: string[]
+  // Decade aggregate over per-track album release dates.
+  era: SpotifyEraAgg
+  // Public Spotify URL — used by the "Open in Spotify" link.
+  url: string
+  fetchedAt: string
+}
+
+// A single Spotify track. Audio features land directly on the data (no
+// aggregation — there's one track's worth). `albumCoverUrl` is the
+// track's album cover; we show it on the card.
+export type SpotifyTrackData = {
+  connectionId: string
+  trackId: string
+  name: string
+  artists: string[]
+  albumName: string
+  albumCoverUrl?: string
+  albumReleaseDate?: string
+  durationMs: number
+  explicit?: boolean
+  popularity?: number
+  previewUrl?: string
+  // Genres of the track's primary artist. Same source as the playlist
+  // aggregate but flat (it's one track).
+  genres: string[]
+  audioFeatures?: {
+    energy: number
+    valence: number
+    danceability: number
+    acousticness: number
+    instrumentalness: number
+    speechiness: number
+    tempo: number
+  }
+  url: string
+  fetchedAt: string
+}
+
+// A Spotify album. Aggregate audio features over all tracks; track list
+// uncapped because albums are bounded (a 30-track album is rare).
+export type SpotifyAlbumData = {
+  connectionId: string
+  albumId: string
+  name: string
+  artists: string[]
+  releaseDate: string
+  coverUrl?: string
+  trackCount: number
+  tracks: SpotifyTrackSummary[]
+  audioFeatures: SpotifyAudioFeaturesAgg
+  topGenres: string[]
+  era: SpotifyEraAgg
+  url: string
+  fetchedAt: string
+}
+
 export type CanvasObjectType =
   | 'image'
   | 'sticky'
@@ -112,6 +264,9 @@ export type CanvasObjectType =
   | 'drive-file'
   | 'drive-folder'
   | 'web-page'
+  | 'spotify-playlist'
+  | 'spotify-track'
+  | 'spotify-album'
 
 export type CanvasObject = {
   id: string
@@ -130,6 +285,9 @@ export type CanvasObject = {
     | DriveFileData
     | DriveFolderData
     | WebPageData
+    | SpotifyPlaylistData
+    | SpotifyTrackData
+    | SpotifyAlbumData
 }
 
 export type AIAnalysis = {

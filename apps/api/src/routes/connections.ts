@@ -1,3 +1,4 @@
+import type { PickerTile } from '@moodboard/shared'
 import { and, desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
@@ -15,6 +16,13 @@ import {
 } from '../lib/drive'
 import { exchangeCode, getChildPages, searchPages } from '../lib/notion'
 import { rateLimit } from '../lib/rateLimit'
+import {
+  exchangeCode as spotifyExchangeCode,
+  getValidToken as spotifyValidToken,
+  listMyPlaylists,
+  searchTracks,
+  SpotifyApiError,
+} from '../lib/spotify'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 
@@ -59,6 +67,24 @@ function googleEnv(): { clientId: string; clientSecret: string; redirectUri: str
   return { clientId, clientSecret, redirectUri }
 }
 
+function spotifyEnv(): { clientId: string; clientSecret: string; redirectUri: string } {
+  const clientId = process.env.SPOTIFY_CLIENT_ID
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
+  const redirectUri = process.env.SPOTIFY_REDIRECT_URI
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Spotify OAuth env vars are not configured')
+  }
+  return { clientId, clientSecret, redirectUri }
+}
+
+// Spotify scopes — enough to read public + private playlists, individual
+// tracks/albums, and the connected user's email (for the connection label).
+const SPOTIFY_SCOPES = [
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'user-read-email',
+].join(' ')
+
 // Drive scopes — readonly is enough for the picker + import. userinfo.email
 // + openid give us the account's email for the connection label (returned
 // via id_token, decoded server-side).
@@ -77,6 +103,78 @@ connections.use('*', async (c, next) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
   await next()
 })
+
+// Upsert a connection by (userId, provider, accountEmail). If the user
+// has already connected this provider with the same account email, we
+// rotate the stored tokens in-place rather than inserting a duplicate.
+// Spotify especially needs this — double-clicking Connect Spotify used
+// to create two identical rows because the callback handler had no
+// dedup. The Notion + Drive flows had the same latent bug; multiple
+// workspaces/accounts with the same email would never legitimately
+// exist, so dedup is universally safe.
+//
+// Returns the connection id (whether existing or freshly inserted).
+async function upsertConnection(args: {
+  userId: string
+  provider: 'notion' | 'drive' | 'spotify'
+  accountEmail: string
+  accessTokenEnc: string
+  refreshTokenEnc: string | null
+  expiresAt: Date | null
+  scopes: string
+  workspaceId?: string | null
+  workspaceName?: string | null
+}): Promise<string> {
+  const [existing] = await db
+    .select({ id: schema.connection.id })
+    .from(schema.connection)
+    .where(
+      and(
+        eq(schema.connection.userId, args.userId),
+        eq(schema.connection.provider, args.provider),
+        eq(schema.connection.accountEmail, args.accountEmail),
+      ),
+    )
+    .limit(1)
+  if (existing) {
+    const updateFields: {
+      accessTokenEnc: string
+      refreshTokenEnc: string | null
+      expiresAt: Date | null
+      scopes: string
+      lastUsedAt: Date
+      workspaceId?: string | null
+      workspaceName?: string | null
+    } = {
+      accessTokenEnc: args.accessTokenEnc,
+      refreshTokenEnc: args.refreshTokenEnc,
+      expiresAt: args.expiresAt,
+      scopes: args.scopes,
+      lastUsedAt: new Date(),
+    }
+    if (args.workspaceId !== undefined) updateFields.workspaceId = args.workspaceId
+    if (args.workspaceName !== undefined) updateFields.workspaceName = args.workspaceName
+    await db
+      .update(schema.connection)
+      .set(updateFields)
+      .where(eq(schema.connection.id, existing.id))
+    return existing.id
+  }
+  const id = nanoid()
+  await db.insert(schema.connection).values({
+    id,
+    userId: args.userId,
+    provider: args.provider,
+    accountEmail: args.accountEmail,
+    accessTokenEnc: args.accessTokenEnc,
+    refreshTokenEnc: args.refreshTokenEnc,
+    expiresAt: args.expiresAt,
+    scopes: args.scopes,
+    workspaceId: args.workspaceId ?? null,
+    workspaceName: args.workspaceName ?? null,
+  })
+  return id
+}
 
 // ---------------------------------------------------------------------------
 // GET /api/connections
@@ -191,9 +289,7 @@ connections.get('/notion/callback', async (c) => {
     const ownerEmail = token.owner?.user?.person?.email
     const accountEmail = ownerEmail ?? token.workspaceName ?? 'Notion workspace'
 
-    const id = nanoid()
-    await db.insert(schema.connection).values({
-      id,
+    const id = await upsertConnection({
       userId: user.id,
       provider: 'notion',
       accountEmail,
@@ -264,9 +360,7 @@ connections.get('/drive/callback', async (c) => {
     const token = await driveExchangeCode({ code, clientId, clientSecret, redirectUri })
 
     const accountEmail = token.email ?? 'Google account'
-    const id = nanoid()
-    await db.insert(schema.connection).values({
-      id,
+    const id = await upsertConnection({
       userId: user.id,
       provider: 'drive',
       accountEmail,
@@ -274,6 +368,75 @@ connections.get('/drive/callback', async (c) => {
       refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
       expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
       scopes: token.scope ?? GOOGLE_SCOPES,
+    })
+
+    return callbackHtml(c, { kind: 'done', id })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return callbackHtml(c, { kind: 'error', message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/spotify/start
+//
+// Mirrors notion + drive start routes. Spotify uses standard PKCE-less
+// authorization-code grant; client_secret lives server-side. `show_dialog=true`
+// forces re-consent for users who've previously authorised the app — useful
+// if scopes have changed.
+// ---------------------------------------------------------------------------
+connections.get('/spotify/start', async (c) => {
+  const { clientId, redirectUri } = spotifyEnv()
+  const state = randomBytes(24).toString('hex')
+  setCookie(c, STATE_COOKIE('spotify'), state, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  })
+  const url = new URL('https://accounts.spotify.com/authorize')
+  url.searchParams.set('client_id', clientId)
+  url.searchParams.set('redirect_uri', redirectUri)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', SPOTIFY_SCOPES)
+  url.searchParams.set('state', state)
+  return c.redirect(url.toString())
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/spotify/callback
+//
+// Same state-cookie CSRF check + token exchange as the other providers.
+// The connected user's email comes from the /me endpoint in spotify.ts's
+// exchangeCode helper (uses the freshly-issued access token) so the
+// connection card has a usable label.
+// ---------------------------------------------------------------------------
+connections.get('/spotify/callback', async (c) => {
+  const user = c.get('user')!
+  const code = c.req.query('code')
+  const stateParam = c.req.query('state')
+  const stateCookie = getCookie(c, STATE_COOKIE('spotify'))
+  deleteCookie(c, STATE_COOKIE('spotify'), { path: '/' })
+
+  if (!code) return callbackHtml(c, { kind: 'error', message: 'Missing code' })
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    return callbackHtml(c, { kind: 'error', message: 'Invalid state' })
+  }
+
+  try {
+    const { clientId, clientSecret, redirectUri } = spotifyEnv()
+    const token = await spotifyExchangeCode({ code, clientId, clientSecret, redirectUri })
+
+    const accountEmail = token.email ?? 'Spotify account'
+    const id = await upsertConnection({
+      userId: user.id,
+      provider: 'spotify',
+      accountEmail,
+      accessTokenEnc: encryptToken(token.accessToken),
+      refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
+      expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
+      scopes: token.scope ?? SPOTIFY_SCOPES,
     })
 
     return callbackHtml(c, { kind: 'done', id })
@@ -328,18 +491,6 @@ function callbackHtml(
 // connection id and use the connection's stored tokens directly. Imports
 // (notion/import, drive/import) live in external.ts.
 // ---------------------------------------------------------------------------
-
-type PickerTile = {
-  id: string
-  connectionId: string
-  provider: 'notion' | 'drive'
-  kind: 'page' | 'file' | 'folder'
-  title: string
-  iconUrl?: string
-  iconEmoji?: string
-  mimeType?: string
-  lastEditedAt?: string
-}
 
 const MIME_FOLDER = 'application/vnd.google-apps.folder'
 
@@ -420,6 +571,73 @@ connections.post('/:id/search', externalSearchLimit, async (c) => {
     return c.json({ tiles, nextCursor: nextPageToken })
   }
 
+  if (row.provider === 'spotify') {
+    let token: string
+    try {
+      token = await spotifyValidToken(row)
+    } catch {
+      return c.json({ error: 'Connection unavailable' }, 503)
+    }
+    // Two modes:
+    //   empty query → browse the user's own playlists (/me/playlists).
+    //   query       → search the Spotify catalog for individual tracks
+    //                 (/search?type=track) so the user can drop a single
+    //                 song. This is the "search for specific songs" flow.
+    try {
+      if (query) {
+        // `cursor` carries the numeric search offset for track search (the
+        // catalog search API paginates by offset, not an opaque cursor).
+        const offset = cursor ? Number.parseInt(cursor, 10) || 0 : 0
+        const { tracks, nextOffset } = await searchTracks({ token, query, offset })
+        const tiles: PickerTile[] = tracks.map((t) => {
+          const tile: PickerTile = {
+            id: t.id,
+            connectionId: row.id,
+            provider: 'spotify',
+            kind: 'page',
+            spotifyKind: 'track',
+            title: t.name,
+          }
+          const sub = [t.artists, t.albumName].filter(Boolean).join(' · ')
+          if (sub) tile.subtitle = sub
+          if (t.coverUrl) tile.iconUrl = t.coverUrl
+          return tile
+        })
+        return c.json({ tiles, nextCursor: nextOffset != null ? String(nextOffset) : undefined })
+      }
+      const playlistsArgs: { token: string; cursor?: string } = { token }
+      if (cursor !== undefined) playlistsArgs.cursor = cursor
+      const { playlists, nextCursor } = await listMyPlaylists(playlistsArgs)
+      const tiles: PickerTile[] = playlists.map((p) => {
+        const tile: PickerTile = {
+          id: p.id,
+          connectionId: row.id,
+          provider: 'spotify',
+          kind: 'page', // Reuse the page/file/folder union — Spotify tiles
+          // are visually flat (no tree expansion); kind is
+          // just for layout, the drawer's onImport handler
+          // dispatches by spotifyKind.
+          spotifyKind: 'playlist',
+          title: p.name,
+        }
+        if (p.coverUrl) tile.iconUrl = p.coverUrl
+        return tile
+      })
+      return c.json({ tiles, nextCursor: nextCursor ?? undefined })
+    } catch (e) {
+      if (e instanceof SpotifyApiError) {
+        // 401/403 → the user revoked the app; tell the client to reconnect.
+        if (e.status === 401 || e.status === 403) {
+          return c.json({ error: 'Spotify connection no longer authorised' }, 409)
+        }
+        console.warn('[connections/search] spotify api error', e.status, e.message)
+        return c.json({ error: e.message }, 502)
+      }
+      console.error('[connections/search] unexpected spotify error', e)
+      return c.json({ error: e instanceof Error ? e.message : 'Search failed' }, 502)
+    }
+  }
+
   return c.json({ error: 'Unsupported provider' }, 400)
 })
 
@@ -482,6 +700,11 @@ connections.post('/:id/children', externalSearchLimit, async (c) => {
     return c.json({ tiles })
   }
 
+  // Spotify has no folder/tree concept; nothing to expand.
+  if (row.provider === 'spotify') {
+    return c.json({ tiles: [] })
+  }
+
   return c.json({ error: 'Unsupported provider' }, 400)
 })
 
@@ -509,16 +732,26 @@ connections.get('/:id/recents', async (c) => {
     const tile: PickerTile = {
       id: r.externalId,
       connectionId: row.id,
-      provider: row.provider as 'notion' | 'drive',
+      provider: row.provider as 'notion' | 'drive' | 'spotify',
       kind: r.kind as 'page' | 'file' | 'folder',
       title: r.title,
       lastEditedAt: r.lastUsedAt.toISOString(),
     }
     if (r.iconUrl) tile.iconUrl = r.iconUrl
+    // Spotify recents stash their sub-kind in mimeType (playlist/track/album)
+    // so re-importing dispatches to the right endpoint. Without it the import
+    // would default to 'playlist' and a track/album id would 404.
+    if (row.provider === 'spotify' && isSpotifySubKind(r.mimeType)) {
+      tile.spotifyKind = r.mimeType
+    }
     return tile
   })
   return c.json({ tiles })
 })
+
+function isSpotifySubKind(v: string | null): v is 'playlist' | 'track' | 'album' {
+  return v === 'playlist' || v === 'track' || v === 'album'
+}
 
 // Shared helper for external.ts so the connection lookup + ownership check
 // doesn't get duplicated across import / refresh handlers.

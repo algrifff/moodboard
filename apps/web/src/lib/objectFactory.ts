@@ -4,6 +4,9 @@ import type {
   DriveFolderData,
   FontData,
   NotionPageData,
+  SpotifyAlbumData,
+  SpotifyPlaylistData,
+  SpotifyTrackData,
   StickyData,
   TextData,
   WebPageData,
@@ -174,6 +177,70 @@ export function createWebPage(
       y: worldCenter.y - WEB_DEFAULT_SIZE.height / 2,
     },
     size: WEB_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// Spotify cards auto-height to their content at mount (SpotifyNode measures
+// the rendered card and writes the height back), so these heights are just
+// sensible starting values to minimise the first-paint reflow. Tracks start
+// taller because they carry the inline player; playlists/albums are shorter.
+const SPOTIFY_PLAYLIST_SIZE = { width: 320, height: 150 }
+const SPOTIFY_TRACK_SIZE = { width: 320, height: 248 }
+
+export function createSpotifyPlaylist(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: SpotifyPlaylistData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'spotify-playlist',
+    position: {
+      x: worldCenter.x - SPOTIFY_PLAYLIST_SIZE.width / 2,
+      y: worldCenter.y - SPOTIFY_PLAYLIST_SIZE.height / 2,
+    },
+    size: SPOTIFY_PLAYLIST_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+export function createSpotifyTrack(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: SpotifyTrackData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'spotify-track',
+    position: {
+      x: worldCenter.x - SPOTIFY_TRACK_SIZE.width / 2,
+      y: worldCenter.y - SPOTIFY_TRACK_SIZE.height / 2,
+    },
+    size: SPOTIFY_TRACK_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+export function createSpotifyAlbum(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: SpotifyAlbumData,
+): CanvasObject {
+  return {
+    id: nanoid(),
+    type: 'spotify-album',
+    position: {
+      x: worldCenter.x - SPOTIFY_PLAYLIST_SIZE.width / 2,
+      y: worldCenter.y - SPOTIFY_PLAYLIST_SIZE.height / 2,
+    },
+    size: SPOTIFY_PLAYLIST_SIZE,
     rotation: 0,
     zIndex,
     data,

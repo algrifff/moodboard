@@ -225,6 +225,118 @@ describe('analysisHash', () => {
     expect(analysisHash([a], 'm1')).toBe(analysisHash([b], 'm1'))
   })
 
+  it('changes when a spotify playlist snapshotId changes', () => {
+    const playlist = (id: string, snapshotId: string): CanvasObject => ({
+      id,
+      type: 'spotify-playlist',
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 160 },
+      rotation: 0,
+      zIndex: 0,
+      data: {
+        connectionId: 'c1',
+        playlistId: 'p1',
+        snapshotId,
+        name: 'After Hours',
+        description: '',
+        ownerName: 'alex',
+        trackCount: 12,
+        tracks: [],
+        audioFeatures: {
+          avgEnergy: 0.6,
+          avgValence: 0.4,
+          avgDanceability: 0.5,
+          avgAcousticness: 0.3,
+          avgInstrumentalness: 0.1,
+          avgSpeechiness: 0.05,
+          medianTempo: 110,
+          trackCount: 12,
+        },
+        url: 'https://open.spotify.com/playlist/p1',
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    })
+    // Adding / removing / reordering tracks issues a fresh snapshotId from
+    // Spotify — that should bust the cache.
+    expect(analysisHash([playlist('a', 'snap-v1')], 'm1')).not.toBe(
+      analysisHash([playlist('a', 'snap-v2')], 'm1'),
+    )
+  })
+
+  it('does not invalidate when only spotify fetchedAt drifts', () => {
+    // A no-op refresh (same snapshotId, same content) should reuse the
+    // AD cache. fetchedAt advances every refresh, so it stays out of the hash.
+    const base = {
+      id: 'a',
+      type: 'spotify-playlist' as const,
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 160 },
+      rotation: 0,
+      zIndex: 0,
+    }
+    const a: CanvasObject = {
+      ...base,
+      data: {
+        connectionId: 'c1',
+        playlistId: 'p1',
+        snapshotId: 'snap-v1',
+        name: 'Mix',
+        description: '',
+        ownerName: 'alex',
+        trackCount: 1,
+        tracks: [],
+        audioFeatures: {
+          avgEnergy: 0.5,
+          avgValence: 0.5,
+          avgDanceability: 0.5,
+          avgAcousticness: 0.5,
+          avgInstrumentalness: 0.5,
+          avgSpeechiness: 0.5,
+          medianTempo: 100,
+          trackCount: 1,
+        },
+        url: 'https://open.spotify.com/playlist/p1',
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    }
+    const b: CanvasObject = {
+      ...base,
+      data: { ...(a.data as Record<string, unknown>), fetchedAt: '2026-06-30T00:00:00Z' } as never,
+    }
+    expect(analysisHash([a], 'm1')).toBe(analysisHash([b], 'm1'))
+  })
+
+  it('changes when a spotify track audio features change', () => {
+    const track = (id: string, energy: number): CanvasObject => ({
+      id,
+      type: 'spotify-track',
+      position: { x: 0, y: 0 },
+      size: { width: 320, height: 160 },
+      rotation: 0,
+      zIndex: 0,
+      data: {
+        connectionId: 'c1',
+        trackId: 't1',
+        name: 'Track',
+        artists: ['Artist'],
+        albumName: 'Album',
+        durationMs: 180000,
+        audioFeatures: {
+          energy,
+          valence: 0.5,
+          danceability: 0.5,
+          acousticness: 0.3,
+          instrumentalness: 0.1,
+          speechiness: 0.05,
+          tempo: 120,
+        },
+        url: 'https://open.spotify.com/track/t1',
+        fetchedAt: '2026-05-30T00:00:00Z',
+      },
+    })
+    expect(analysisHash([track('a', 0.7)], 'm1')).not.toBe(analysisHash([track('a', 0.3)], 'm1'))
+  })
+
   it('changes when a drive folder gains a child', () => {
     const folder = (id: string, children: { name: string; mimeType: string }[]): CanvasObject => ({
       id,

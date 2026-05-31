@@ -15,7 +15,9 @@
 
 type PopupResult = { id: string }
 
-export async function openConnectionPopup(provider: 'notion' | 'drive'): Promise<PopupResult> {
+export async function openConnectionPopup(
+  provider: 'notion' | 'drive' | 'spotify',
+): Promise<PopupResult> {
   // Open at the current origin — the server side handles the OAuth dance
   // and we receive a postMessage back from the callback page once it
   // finishes. Using a relative URL means the session cookie comes along.

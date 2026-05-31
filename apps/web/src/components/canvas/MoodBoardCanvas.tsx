@@ -7,8 +7,14 @@ import { cubicBezier } from 'framer-motion'
 import { groupBoundingBox, objectsInMarquee } from '@/lib/aabb'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
-import { importDriveFile, importNotionPage, importWebUrl } from '@/lib/connectionsApi'
+import {
+  importDriveFile,
+  importNotionPage,
+  importSpotifyRef,
+  importWebUrl,
+} from '@/lib/connectionsApi'
 import { extractDriveFileId } from '@/lib/driveUrl'
+import { extractSpotifyRef, type SpotifyRef } from '@/lib/spotifyUrl'
 import { extractWebUrl } from '@/lib/webUrl'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { extractNotionPageId } from '@/lib/notionUrl'
@@ -16,6 +22,9 @@ import {
   createDriveFile,
   createDriveFolder,
   createNotionPage,
+  createSpotifyAlbum,
+  createSpotifyPlaylist,
+  createSpotifyTrack,
   createText,
   createWebPage,
 } from '@/lib/objectFactory'
@@ -522,6 +531,38 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
+  // Spotify paste handler. Mirrors the Notion / Drive shape: if there's a
+  // Spotify connection, import + spawn now; otherwise stash the ref on the
+  // picker store and open the connect flow. Board.tsx watches pendingPaste
+  // and resumes the import after the OAuth handshake completes.
+  const handleSpotifyPasteUrl = useCallback(
+    async (ref: SpotifyRef, point: Point) => {
+      const picker = useSourcePickerStore.getState()
+      const spotifyConnection = picker.connections.find((c) => c.provider === 'spotify')
+      if (!spotifyConnection) {
+        picker.setPendingPaste({ provider: 'spotify', ref })
+        picker.openPicker()
+        showToast('Connect Spotify first to drop this link')
+        return
+      }
+      try {
+        const result = await importSpotifyRef(spotifyConnection.id, ref)
+        const state = useCanvasStore.getState()
+        state.commitBeforeAction()
+        if (result.kind === 'playlist') {
+          addObject(createSpotifyPlaylist(point, state.objects.length, result.data))
+        } else if (result.kind === 'track') {
+          addObject(createSpotifyTrack(point, state.objects.length, result.data))
+        } else {
+          addObject(createSpotifyAlbum(point, state.objects.length, result.data))
+        }
+      } catch (err) {
+        showToast(`Spotify import failed: ${err instanceof Error ? err.message : 'unknown'}`)
+      }
+    },
+    [addObject],
+  )
+
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return
@@ -579,8 +620,16 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       if (snap.text) {
         const trimmed = snap.text.trim()
 
-        // 4a. Notion / Drive URL → import via the matching connection, or
-        // stash the id and open the connect flow if no connection exists.
+        // 4a. Notion / Drive / Spotify URL → import via the matching
+        // connection, or stash the id and open the connect flow if no
+        // connection exists. Spotify also accepts `spotify:…` URI form
+        // (no http prefix) so the recogniser runs outside the http guard.
+        const spotifyRef = extractSpotifyRef(trimmed)
+        if (spotifyRef) {
+          e.preventDefault()
+          await handleSpotifyPasteUrl(spotifyRef, viewportCenterWorld())
+          return
+        }
         if (trimmed.length > 0 && /https?:\/\//i.test(trimmed)) {
           const notionPageId = extractNotionPageId(trimmed)
           if (notionPageId) {
@@ -651,6 +700,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     addPdfFromBlob,
     handleDrivePasteUrl,
     handleNotionPasteUrl,
+    handleSpotifyPasteUrl,
     handleWebPasteUrl,
     viewportCenterWorld,
   ])
@@ -833,7 +883,10 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'notion-page' ||
             o.type === 'drive-file' ||
             o.type === 'drive-folder' ||
-            o.type === 'web-page',
+            o.type === 'web-page' ||
+            o.type === 'spotify-playlist' ||
+            o.type === 'spotify-track' ||
+            o.type === 'spotify-album',
         )}
         scale={scale}
         offset={offset}

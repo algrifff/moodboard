@@ -5,6 +5,9 @@ import type {
   FontData,
   ImageData,
   NotionPageData,
+  SpotifyAlbumData,
+  SpotifyPlaylistData,
+  SpotifyTrackData,
   StickyData,
   TextData,
   WebPageData,
@@ -68,6 +71,29 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       // that returns identical readableText should reuse the cache.
       const d = o.data as WebPageData
       parts.push(`${o.id}|web-page|${d.url}|${d.title}|${d.readableText}`)
+    } else if (o.type === 'spotify-playlist') {
+      // snapshotId is Spotify's own change-detection token — perfect cache
+      // key. A track add/remove or reorder produces a new snapshotId, which
+      // busts the cache. fetchedAt is excluded so a no-op refresh reuses.
+      const d = o.data as SpotifyPlaylistData
+      parts.push(`${o.id}|spotify-playlist|${d.playlistId}|${d.snapshotId}|${d.name}`)
+    } else if (o.type === 'spotify-track') {
+      // Tracks are immutable — same id = same content. We still hash the
+      // audio-features payload so a re-extraction that gets fresh features
+      // (Spotify occasionally re-computes them) busts the cache.
+      const d = o.data as SpotifyTrackData
+      const af = d.audioFeatures
+      const afKey = af ? `${af.energy}|${af.valence}|${af.tempo}` : ''
+      parts.push(`${o.id}|spotify-track|${d.trackId}|${afKey}`)
+    } else if (o.type === 'spotify-album') {
+      // Albums are immutable like tracks; the id + aggregate audio-feature
+      // signature is enough. trackCount guards against the rare case where
+      // a re-release adds bonus tracks under the same albumId.
+      const d = o.data as SpotifyAlbumData
+      const af = d.audioFeatures
+      parts.push(
+        `${o.id}|spotify-album|${d.albumId}|${d.trackCount}|${af.avgEnergy}|${af.avgValence}|${af.medianTempo}`,
+      )
     }
   }
   return createHash('sha256')

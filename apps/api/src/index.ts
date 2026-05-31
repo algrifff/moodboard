@@ -23,11 +23,24 @@ type AppVariables = {
 const app = new Hono<{ Variables: AppVariables }>()
 
 app.use('*', logger())
+// Allowed dev origins for browser-driven requests. We accept all four
+// localhost-class origins:
+//   - http://localhost:5173  — plain dev
+//   - https://localhost:5173 — local TLS via mkcert (apps/web/vite.config.ts)
+//   - http://127.0.0.1:5173  — required by Spotify's redirect-URI policy
+//                              (they reject https://localhost since their
+//                              validator can't verify a locally-signed cert)
+//   - http://localhost:3001  — direct api hits (curl / health checks)
+const ALLOWED_ORIGINS = new Set([
+  'http://localhost:5173',
+  'https://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3001',
+])
 app.use(
   '*',
   cors({
-    origin: (origin) =>
-      origin === 'http://localhost:5173' || origin === 'http://localhost:3001' ? origin : null,
+    origin: (origin) => (ALLOWED_ORIGINS.has(origin) ? origin : null),
     credentials: true,
   }),
 )

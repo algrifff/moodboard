@@ -91,6 +91,106 @@ export const webPageDataSchema = z.object({
   fetchedAt: z.string(),
 })
 
+const spotifyAudioFeaturesAggSchema = z.object({
+  avgEnergy: z.number(),
+  avgValence: z.number(),
+  avgDanceability: z.number(),
+  avgAcousticness: z.number(),
+  avgInstrumentalness: z.number(),
+  avgSpeechiness: z.number(),
+  medianTempo: z.number(),
+  trackCount: z.number(),
+})
+
+const spotifyTrackSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  artists: z.array(z.string()),
+  durationMs: z.number(),
+  albumName: z.string().optional(),
+  albumReleaseDate: z.string().optional(),
+  explicit: z.boolean().optional(),
+  popularity: z.number().optional(),
+  previewUrl: z.string().optional(),
+  genres: z.array(z.string()).optional(),
+  audioFeatures: z
+    .object({
+      energy: z.number(),
+      valence: z.number(),
+      danceability: z.number(),
+      tempo: z.number(),
+    })
+    .optional(),
+})
+
+const spotifyEraAggSchema = z.object({
+  dominantDecade: z.string().nullable(),
+  decadeBreakdown: z.array(z.object({ decade: z.string(), count: z.number() })),
+  yearMin: z.number().nullable(),
+  yearMax: z.number().nullable(),
+})
+
+export const spotifyPlaylistDataSchema = z.object({
+  connectionId: z.string(),
+  playlistId: z.string(),
+  snapshotId: z.string(),
+  name: z.string(),
+  description: z.string(),
+  ownerName: z.string(),
+  coverUrl: z.string().optional(),
+  trackCount: z.number(),
+  tracks: z.array(spotifyTrackSummarySchema),
+  audioFeatures: spotifyAudioFeaturesAggSchema,
+  topGenres: z.array(z.string()),
+  era: spotifyEraAggSchema,
+  url: z.string(),
+  fetchedAt: z.string(),
+})
+
+export const spotifyTrackDataSchema = z.object({
+  connectionId: z.string(),
+  trackId: z.string(),
+  name: z.string(),
+  artists: z.array(z.string()),
+  albumName: z.string(),
+  albumCoverUrl: z.string().optional(),
+  albumReleaseDate: z.string().optional(),
+  durationMs: z.number(),
+  explicit: z.boolean().optional(),
+  popularity: z.number().optional(),
+  previewUrl: z.string().optional(),
+  genres: z.array(z.string()),
+  audioFeatures: z
+    .object({
+      energy: z.number(),
+      valence: z.number(),
+      danceability: z.number(),
+      acousticness: z.number(),
+      instrumentalness: z.number(),
+      speechiness: z.number(),
+      tempo: z.number(),
+    })
+    .optional(),
+  url: z.string(),
+  fetchedAt: z.string(),
+})
+
+export const spotifyAlbumDataSchema = z.object({
+  connectionId: z.string(),
+  albumId: z.string(),
+  name: z.string(),
+  artists: z.array(z.string()),
+  releaseDate: z.string(),
+  coverUrl: z.string().optional(),
+  trackCount: z.number(),
+  tracks: z.array(spotifyTrackSummarySchema),
+  audioFeatures: spotifyAudioFeaturesAggSchema,
+  topGenres: z.array(z.string()),
+  era: spotifyEraAggSchema,
+  url: z.string(),
+  fetchedAt: z.string(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
   type: z.enum([
@@ -103,6 +203,9 @@ export const canvasObjectSchema = z.object({
     'drive-file',
     'drive-folder',
     'web-page',
+    'spotify-playlist',
+    'spotify-track',
+    'spotify-album',
   ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
@@ -118,6 +221,9 @@ export const canvasObjectSchema = z.object({
     driveFileDataSchema,
     driveFolderDataSchema,
     webPageDataSchema,
+    spotifyPlaylistDataSchema,
+    spotifyTrackDataSchema,
+    spotifyAlbumDataSchema,
   ]),
 })
 
@@ -323,6 +429,9 @@ export const boardPreviewObjectSchema = z.object({
     'drive-file',
     'drive-folder',
     'web-page',
+    'spotify-playlist',
+    'spotify-track',
+    'spotify-album',
   ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -392,7 +501,7 @@ export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 // client only sees what's needed to label the connection in the picker.
 export const connectionSummarySchema = z.object({
   id: z.string(),
-  provider: z.enum(['notion', 'drive']),
+  provider: z.enum(['notion', 'drive', 'spotify']),
   accountEmail: z.string(),
   workspaceName: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -407,10 +516,14 @@ export const connectionsListResponseSchema = z.object({
 // Uniform tile shape across providers — what the picker drawer renders.
 // Optional fields populate per provider: Notion fills `iconEmoji` or
 // `iconUrl`; Drive fills `mimeType` + `thumbnailUrl`.
+// Widened to include 'spotify' so the picker can render the user's own
+// playlists. Spotify tiles use `kind: 'page'` since the union is page|
+// file|folder and the picker treats kind generically for layout — only
+// the drawer's onImport dispatcher needs to special-case Spotify.
 export const pickerTileSchema = z.object({
   id: z.string(),
   connectionId: z.string(),
-  provider: z.enum(['notion', 'drive']),
+  provider: z.enum(['notion', 'drive', 'spotify']),
   kind: z.enum(['page', 'file', 'folder']),
   title: z.string(),
   iconUrl: z.string().optional(),
@@ -418,6 +531,14 @@ export const pickerTileSchema = z.object({
   mimeType: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   lastEditedAt: z.string().optional(),
+  // Spotify-specific: which Spotify resource this tile imports as. Playlist
+  // tiles come from browsing /me/playlists; track tiles come from catalog
+  // search. The drawer's onImport dispatches on this. Absent → playlist
+  // (back-compat with existing browse tiles).
+  spotifyKind: z.enum(['playlist', 'track', 'album']).optional(),
+  // Secondary line under the title (e.g. a track's artist · album). Used by
+  // Spotify track-search tiles where the title alone is just the song name.
+  subtitle: z.string().optional(),
 })
 export type PickerTile = z.infer<typeof pickerTileSchema>
 
@@ -468,6 +589,16 @@ export const importWebResponseSchema = z.object({
       thumbnailUrl: z.string().optional(),
     }),
   ),
+})
+
+// Spotify import discriminates by `kind` so a single endpoint serves
+// playlists, tracks, and albums. The URL recogniser on the client knows
+// which to expect from the pasted URL shape (/playlist/, /track/, /album/);
+// the server validates by hitting the right Spotify endpoint and shapes
+// the response with matching `kind`.
+export const importSpotifyResponseSchema = z.object({
+  kind: z.enum(['playlist', 'track', 'album']),
+  data: z.union([spotifyPlaylistDataSchema, spotifyTrackDataSchema, spotifyAlbumDataSchema]),
 })
 
 export const updateBoardRequestSchema = z.object({

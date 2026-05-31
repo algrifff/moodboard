@@ -16,16 +16,26 @@ import {
   deleteConnection,
   importDriveFile,
   importNotionPage,
+  importSpotifyRef,
+  type SpotifyImportResult,
   listChildPages,
   listRecents,
   searchConnection,
 } from '@/lib/connectionsApi'
 import { EASE_OUT_QUICK, EASE_OUT_STANDARD } from '@/lib/motion'
-import { createDriveFile, createDriveFolder, createNotionPage } from '@/lib/objectFactory'
+import {
+  createDriveFile,
+  createDriveFolder,
+  createNotionPage,
+  createSpotifyAlbum,
+  createSpotifyPlaylist,
+  createSpotifyTrack,
+} from '@/lib/objectFactory'
 import { screenToWorld } from '@/lib/transform'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
-import { DriveLogo, NotionLogo } from './sourceLogos'
+import { DriveLogo, NotionLogo, SpotifyLogo } from './sourceLogos'
+import { showToast } from './Toast'
 
 // ---------------------------------------------------------------------------
 // Left-side drawer mirroring the right-side AIAnalysisPanel FullscreenDrawer
@@ -71,9 +81,14 @@ const DRAWER_WIDTH = 'min(720px, max(480px, 50vw))'
 type ConnectProps = {
   onConnectNotion: () => void
   onConnectDrive: () => void
+  onConnectSpotify: () => void
 }
 
-export function SourcePickerDrawer({ onConnectNotion, onConnectDrive }: ConnectProps) {
+export function SourcePickerDrawer({
+  onConnectNotion,
+  onConnectDrive,
+  onConnectSpotify,
+}: ConnectProps) {
   const open = useSourcePickerStore((s) => s.open)
   const closePicker = useSourcePickerStore((s) => s.closePicker)
   const connections = useSourcePickerStore((s) => s.connections)
@@ -109,6 +124,7 @@ export function SourcePickerDrawer({ onConnectNotion, onConnectDrive }: ConnectP
                 loadingConnections={loadingConnections}
                 onConnectNotion={onConnectNotion}
                 onConnectDrive={onConnectDrive}
+                onConnectSpotify={onConnectSpotify}
                 onClose={closePicker}
               />
             )}
@@ -124,12 +140,14 @@ function DrawerContent({
   loadingConnections,
   onConnectNotion,
   onConnectDrive,
+  onConnectSpotify,
   onClose,
 }: {
   connections: ConnectionSummary[]
   loadingConnections: boolean
   onConnectNotion: () => void
   onConnectDrive: () => void
+  onConnectSpotify: () => void
   onClose: () => void
 }) {
   // Global search query — fans out to every connection section. Empty
@@ -153,18 +171,39 @@ function DrawerContent({
     async (tile: PickerTile) => {
       if (importingId) return
       setImportingId(tile.id)
+      // Immediate toast so the user has feedback while the upstream call
+      // is in flight. Spotify playlists in particular pull metadata +
+      // audio features + artists in parallel — can take a few seconds.
+      const provider = tile.provider
+      const inFlightLabel =
+        provider === 'spotify'
+          ? tile.spotifyKind === 'track'
+            ? `Reading "${tile.title || 'track'}" — pulling audio features + genres…`
+            : `Reading "${tile.title || 'playlist'}" — pulling audio features, genres, era…`
+          : `Importing "${tile.title || 'item'}"…`
+      showToast(inFlightLabel)
       try {
-        if (tile.provider === 'notion') {
+        if (provider === 'notion') {
           const data = await importNotionPage(tile.connectionId, tile.id)
           spawnNotionAtViewportCenter(data)
-        } else if (tile.provider === 'drive') {
+        } else if (provider === 'drive') {
           const result = await importDriveFile(tile.connectionId, tile.id)
           spawnDriveAtViewportCenter(result)
+        } else if (provider === 'spotify') {
+          // The tile carries its Spotify kind — playlists come from
+          // browsing /me/playlists, tracks from catalog search. Default to
+          // playlist for back-compat with any tile that predates the field.
+          const result = await importSpotifyRef(tile.connectionId, {
+            kind: tile.spotifyKind ?? 'playlist',
+            id: tile.id,
+          })
+          spawnSpotifyAtViewportCenter(result)
         }
         onClose()
       } catch (e) {
-        // Surface fail-state on the tile row; for now console-warn.
-        console.warn('Source import failed', e)
+        const msg = e instanceof Error ? e.message : 'unknown error'
+        console.warn('[picker] import failed', { provider, id: tile.id, error: e })
+        showToast(`${provider} import failed: ${msg}`)
       } finally {
         setImportingId(null)
       }
@@ -209,6 +248,7 @@ function DrawerContent({
           loading={loadingConnections}
           onConnectNotion={onConnectNotion}
           onConnectDrive={onConnectDrive}
+          onConnectSpotify={onConnectSpotify}
         />
       ) : (
         <>
@@ -219,6 +259,7 @@ function DrawerContent({
               loading={loadingConnections}
               onConnectNotion={onConnectNotion}
               onConnectDrive={onConnectDrive}
+              onConnectSpotify={onConnectSpotify}
             />
             {!query && (
               <RecentsSection
@@ -317,10 +358,12 @@ function EmptySourcesState({
   loading,
   onConnectNotion,
   onConnectDrive,
+  onConnectSpotify,
 }: {
   loading: boolean
   onConnectNotion: () => void
   onConnectDrive: () => void
+  onConnectSpotify: () => void
 }) {
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-4">
@@ -348,6 +391,12 @@ function EmptySourcesState({
           provider="drive"
           connectedCount={0}
           onClick={onConnectDrive}
+          disabled={loading}
+        />
+        <ConnectProviderButton
+          provider="spotify"
+          connectedCount={0}
+          onClick={onConnectSpotify}
           disabled={loading}
         />
       </div>
@@ -457,6 +506,11 @@ function ConnectionSection({
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const seq = useRef(0)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
+  // On first mount we skip the debounce — there's no typing to coalesce
+  // yet, and waiting 240ms after a freshly-connected provider just looks
+  // like "nothing happened" until the user gives up. After the first run
+  // we debounce normally for query changes.
+  const hasMounted = useRef(false)
 
   // Reset clean when the global query changes. Debounced 240ms so typing
   // doesn't hammer upstream APIs. Empty query loads the most recent items.
@@ -467,6 +521,8 @@ function ConnectionSection({
     setLoadingChildren(new Set())
     if (debounceTimer.current) clearTimeout(debounceTimer.current)
     setLoadingInitial(true)
+    const delay = hasMounted.current ? 240 : 0
+    hasMounted.current = true
     debounceTimer.current = setTimeout(() => {
       searchConnection(connection.id, query)
         .then((res) => {
@@ -481,7 +537,7 @@ function ConnectionSection({
         .finally(() => {
           if (s === seq.current) setLoadingInitial(false)
         })
-    }, 240)
+    }, delay)
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current)
     }
@@ -638,14 +694,14 @@ function ConnectionHeader({
   collapsed,
   onToggleCollapse,
 }: {
-  provider: 'notion' | 'drive'
+  provider: 'notion' | 'drive' | 'spotify'
   email: string
   confirming: boolean
   onDisconnect: () => void
   collapsed: boolean
   onToggleCollapse: () => void
 }) {
-  const label = provider === 'notion' ? 'Notion' : 'Google Drive'
+  const label = provider === 'notion' ? 'Notion' : provider === 'drive' ? 'Google Drive' : 'Spotify'
   return (
     <div className="flex items-center gap-2 w-full">
       <button
@@ -705,14 +761,17 @@ function AddSourceSection({
   loading,
   onConnectNotion,
   onConnectDrive,
+  onConnectSpotify,
 }: {
   connections: ConnectionSummary[]
   loading: boolean
   onConnectNotion: () => void
   onConnectDrive: () => void
+  onConnectSpotify: () => void
 }) {
   const notionCount = connections.filter((c) => c.provider === 'notion').length
   const driveCount = connections.filter((c) => c.provider === 'drive').length
+  const spotifyCount = connections.filter((c) => c.provider === 'spotify').length
 
   return (
     <div
@@ -743,6 +802,12 @@ function AddSourceSection({
           onClick={onConnectDrive}
           disabled={loading}
         />
+        <ConnectProviderButton
+          provider="spotify"
+          connectedCount={spotifyCount}
+          onClick={onConnectSpotify}
+          disabled={loading}
+        />
       </div>
     </div>
   )
@@ -759,12 +824,12 @@ function ConnectProviderButton({
   onClick,
   disabled,
 }: {
-  provider: 'notion' | 'drive'
+  provider: 'notion' | 'drive' | 'spotify'
   connectedCount: number
   onClick: () => void
   disabled?: boolean
 }) {
-  const label = provider === 'notion' ? 'Notion' : 'Google Drive'
+  const label = provider === 'notion' ? 'Notion' : provider === 'drive' ? 'Google Drive' : 'Spotify'
   const isConnected = connectedCount > 0
   return (
     <motion.button
@@ -807,8 +872,15 @@ function ConnectProviderButton({
   )
 }
 
-function ProviderGlyph({ provider, size = 14 }: { provider: 'notion' | 'drive'; size?: number }) {
+function ProviderGlyph({
+  provider,
+  size = 14,
+}: {
+  provider: 'notion' | 'drive' | 'spotify'
+  size?: number
+}) {
   if (provider === 'drive') return <DriveLogo size={size} />
+  if (provider === 'spotify') return <SpotifyLogo size={size} />
   return <NotionLogo size={size} />
 }
 
@@ -950,8 +1022,15 @@ function TileRow({
           }}
         >
           <TileIcon tile={tile} />
-          <div className="flex-1 min-w-0 truncate text-[12.5px] font-medium leading-tight">
-            {tile.title || 'Untitled'}
+          <div className="flex-1 min-w-0">
+            <div className="truncate text-[12.5px] font-medium leading-tight">
+              {tile.title || 'Untitled'}
+            </div>
+            {tile.subtitle && (
+              <div className="truncate text-[10.5px] leading-tight text-[var(--text-faint)] mt-0.5">
+                {tile.subtitle}
+              </div>
+            )}
           </div>
           {tile.lastEditedAt && (
             <div className="text-[10px] text-[var(--text-faint)] flex-shrink-0">
@@ -1087,5 +1166,22 @@ function spawnDriveAtViewportCenter(
       zIndex: objects.length,
       data: result.data,
     })
+  }
+}
+
+function spawnSpotifyAtViewportCenter(result: SpotifyImportResult) {
+  const { scale, offset, viewportSize, objects, addObject, commitBeforeAction } =
+    useCanvasStore.getState()
+  const center = screenToWorld(
+    { x: viewportSize.width / 2, y: viewportSize.height / 2 },
+    { scale, x: offset.x, y: offset.y },
+  )
+  commitBeforeAction()
+  if (result.kind === 'playlist') {
+    addObject(createSpotifyPlaylist(center, objects.length, result.data))
+  } else if (result.kind === 'track') {
+    addObject(createSpotifyTrack(center, objects.length, result.data))
+  } else {
+    addObject(createSpotifyAlbum(center, objects.length, result.data))
   }
 }

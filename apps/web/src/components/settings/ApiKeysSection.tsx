@@ -242,10 +242,11 @@ function CreateKeyDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Reveal dialog — shows the plaintext token AND the MCP endpoint as a
-// ready-to-paste config snippet. Reading the URL from
-// window.location.origin means dev and prod surface their own correct
-// host without us threading an env var through the SPA.
+// Reveal dialog — URL goes first (it's what every connector UI asks
+// for), token sits below for clients that require an Authorization
+// header. Reading the URL from window.location.origin means dev and
+// prod surface their own correct host without us threading an env
+// var through the SPA.
 // ---------------------------------------------------------------------------
 
 function KeyRevealDialog({
@@ -255,7 +256,7 @@ function KeyRevealDialog({
   minted: MintedApiKey | null
   onClose: () => void
 }) {
-  const [copiedSnippet, setCopiedSnippet] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
   const [copiedToken, setCopiedToken] = useState(false)
 
   if (!minted) {
@@ -263,27 +264,13 @@ function KeyRevealDialog({
   }
 
   const endpoint = typeof window === 'undefined' ? '/api/mcp' : `${window.location.origin}/api/mcp`
-  const snippet = JSON.stringify(
-    {
-      mcpServers: {
-        moodboard: {
-          url: endpoint,
-          headers: {
-            Authorization: `Bearer ${minted.plaintext}`,
-          },
-        },
-      },
-    },
-    null,
-    2,
-  )
 
-  const copy = async (text: string, mark: 'snippet' | 'token') => {
+  const copy = async (text: string, mark: 'url' | 'token') => {
     try {
       await navigator.clipboard.writeText(text)
-      if (mark === 'snippet') {
-        setCopiedSnippet(true)
-        setTimeout(() => setCopiedSnippet(false), 1400)
+      if (mark === 'url') {
+        setCopiedUrl(true)
+        setTimeout(() => setCopiedUrl(false), 1400)
       } else {
         setCopiedToken(true)
         setTimeout(() => setCopiedToken(false), 1400)
@@ -296,8 +283,8 @@ function KeyRevealDialog({
   return (
     <DialogShell open={true} onClose={onClose} title="Your new key">
       <p className="text-[13px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
-        Drop this into your MCP client config — Claude Desktop, Claude Code, Cursor — and restart
-        it.{' '}
+        Paste the URL into your MCP client. If it asks for an Authorization header, use the token
+        below.{' '}
         <span className="text-foreground font-medium">
           You won't see the token again after closing this.
         </span>
@@ -306,40 +293,31 @@ function KeyRevealDialog({
       <div className="mt-4">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold">
-            Config snippet
+            Server URL
           </span>
           <button
             type="button"
-            onClick={() => copy(snippet, 'snippet')}
+            onClick={() => copy(endpoint, 'url')}
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
             style={{ padding: '4px 8px', borderRadius: 'var(--radius)' }}
           >
-            {copiedSnippet ? (
-              <Check size={12} weight="bold" />
-            ) : (
-              <Copy size={12} weight="regular" />
-            )}
-            {copiedSnippet ? 'Copied' : 'Copy'}
+            {copiedUrl ? <Check size={12} weight="bold" /> : <Copy size={12} weight="regular" />}
+            {copiedUrl ? 'Copied' : 'Copy'}
           </button>
         </div>
-        <pre
-          className="text-[11.5px] text-[var(--text)] font-mono overflow-x-auto"
-          style={{
-            backgroundColor: 'var(--bg-elevated)',
-            padding: '12px 14px',
-            borderRadius: 'var(--radius)',
-            lineHeight: 1.5,
-            margin: 0,
-          }}
-        >
-          {snippet}
-        </pre>
+        <input
+          readOnly
+          value={endpoint}
+          onFocus={(e) => e.currentTarget.select()}
+          className="w-full bg-[var(--bg-elevated)] text-[12.5px] font-mono text-foreground outline-none"
+          style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
+        />
       </div>
 
       <div className="mt-4">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold">
-            Token only
+            Authorization token
           </span>
           <button
             type="button"
@@ -358,6 +336,10 @@ function KeyRevealDialog({
           className="w-full bg-[var(--bg-elevated)] text-[12px] font-mono text-foreground outline-none"
           style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
         />
+        <p className="mt-2 text-[11.5px] text-[var(--text-faint)]" style={{ lineHeight: 1.5 }}>
+          Most connector UIs hide this under "Advanced settings" — paste as{' '}
+          <span className="font-mono text-[var(--text-mute)]">Bearer {minted.prefix}…</span>
+        </p>
       </div>
 
       <div className="mt-5 flex justify-end">

@@ -3,6 +3,8 @@ import {
   synthesizeRequestSchema,
   type AgentId,
   type CanvasObject,
+  type VideoClipBreakdown,
+  type VideoClipData,
 } from '@moodboard/shared'
 import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
@@ -11,12 +13,18 @@ import { db, schema } from '../db'
 import { getAgent } from '../lib/agents'
 import {
   analyzeGroup,
+  assembleVideoEditorBreakdown,
   DEFAULT_DEPTH,
+  mapWithConcurrency,
+  MAX_VIDEO_CLIPS,
   modelTag,
   synthesisModelTag,
   synthesizeGroup,
+  VIDEO_CLIP_CONCURRENCY,
+  videoClipCacheTag,
   type AnalysisDepth,
 } from '../lib/analyze'
+import { analyzeVideoForEditor } from '../lib/gemini'
 import { analysisHash } from '../lib/analysisHash'
 import { rateLimit } from '../lib/rateLimit'
 
@@ -72,6 +80,11 @@ async function getAgentResult(
   depth: AnalysisDepth,
   force: boolean,
 ): Promise<{ data: unknown; cached: boolean; cacheKey: string; tag: string }> {
+  // The Senior Video Editor caches per *clip*, not per group (see
+  // getVideoEditorResult) — branch before the group-level cache lookup.
+  if (agentId === 'video-editor') {
+    return getVideoEditorResult(objects, depth, force)
+  }
   const tag = modelTag(agentId, depth)
   const cacheKey = analysisHash(objects, tag)
   if (!force) {
@@ -88,6 +101,64 @@ async function getAgentResult(
     .values({ cacheKey, model: tag, analysis: data as object })
     .onConflictDoNothing()
   return { data, cached: false, cacheKey, tag }
+}
+
+// Senior Video Editor — analyses every video clip in the group, caching each
+// one by its own identity so a given video is sent to Gemini exactly once,
+// ever. Adding/removing clips or regrouping only pays for genuinely new videos;
+// re-runs of already-watched clips are free. Capped at MAX_VIDEO_CLIPS/group.
+async function getVideoEditorResult(
+  objects: CanvasObject[],
+  depth: AnalysisDepth,
+  force: boolean,
+): Promise<{ data: unknown; cached: boolean; cacheKey: string; tag: string }> {
+  const tag = modelTag('video-editor', depth)
+  const groupKey = analysisHash(objects, tag)
+
+  const clipObjects = objects.filter((o) => o.type === 'video-clip')
+  const analyzable = clipObjects.slice(0, MAX_VIDEO_CLIPS)
+  const skipped = clipObjects.length - analyzable.length
+  if (analyzable.length === 0) {
+    return { data: assembleVideoEditorBreakdown([], 0), cached: true, cacheKey: groupKey, tag }
+  }
+
+  const clipTag = videoClipCacheTag()
+  let allCached = true
+  const breakdowns = await mapWithConcurrency(
+    analyzable,
+    VIDEO_CLIP_CONCURRENCY,
+    async (o): Promise<VideoClipBreakdown> => {
+      const clip = o.data as VideoClipData
+      // Hash the clip alone (not the group) so its bucket is independent of
+      // what else is on the canvas.
+      const perClipKey = analysisHash([o], clipTag)
+      if (!force) {
+        const [hit] = await db
+          .select()
+          .from(schema.groupAnalysis)
+          .where(eq(schema.groupAnalysis.cacheKey, perClipKey))
+          .limit(1)
+        if (hit) return hit.analysis as VideoClipBreakdown
+      }
+      allCached = false
+      const breakdown = await analyzeVideoForEditor(clip)
+      // Never cache a failed clip — a re-run should get a fresh attempt.
+      if (!breakdown.unavailableReason) {
+        await db
+          .insert(schema.groupAnalysis)
+          .values({ cacheKey: perClipKey, model: clipTag, analysis: breakdown as object })
+          .onConflictDoNothing()
+      }
+      return breakdown
+    },
+  )
+
+  return {
+    data: assembleVideoEditorBreakdown(breakdowns, skipped),
+    cached: allCached,
+    cacheKey: groupKey,
+    tag,
+  }
 }
 
 analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {

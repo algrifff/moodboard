@@ -276,10 +276,16 @@ export type VideoClipData = {
   fetchedAt: string
 }
 
-// The Senior Video Editor agent's output — a granular craft breakdown of a
-// video clip produced by Gemini (which watches frames + listens to audio +
-// reads speech together). Every timestamp is a "M:SS" string into the clip.
-export type VideoEditorBreakdown = {
+// A granular craft breakdown of ONE video clip produced by Gemini (which
+// watches frames + listens to audio + reads speech together). Identity fields
+// (videoId/title/platform/url) are stamped from the clip object, never the
+// model, so they're always trustworthy. Every timestamp is a "M:SS" string
+// into that clip.
+export type VideoClipBreakdown = {
+  videoId: string
+  title: string
+  platform: string
+  url: string
   // One-paragraph read of the overall edit style + what makes it work.
   summary: string
   // The attention hooks and WHY each lands + how to recreate it.
@@ -294,9 +300,20 @@ export type VideoEditorBreakdown = {
   pacing: string
   // Step-by-step playbook to replicate this clip's style on a new video.
   replicationPlaybook: string[]
-  // Set when the clip couldn't be analysed (e.g. unsupported platform, no
-  // Gemini key) — a short human-readable reason; the arrays will be empty.
+  // Set when this clip couldn't be analysed (unsupported platform, download
+  // failure, unreadable model response) — a short reason; arrays will be empty.
   unavailableReason?: string
+}
+
+// The Senior Video Editor agent's output — one craft breakdown per video clip
+// in the group. Clips are watched + cached individually (each video is sent to
+// Gemini exactly once, ever, keyed by its id), then assembled here.
+export type VideoEditorBreakdown = {
+  clips: VideoClipBreakdown[]
+  // Clips beyond the per-group analysis cap that were left unanalysed.
+  skipped?: number
+  // Empty-state / global hint shown when there are no clips to break down yet.
+  note?: string
 }
 
 export type CanvasObjectType =
@@ -465,6 +482,22 @@ export type SynthesisBrief = {
   watchFors: string[]
   // Markdown-style bullet lines for nuance the structured fields don't hold.
   notes: string[]
+
+  // Video direction — populated only when the Senior Video Editor analysed a
+  // clip in the group. The synthesiser translates the reference clips' craft
+  // into a concrete, timestamped plan for the brand's OWN video. All-empty
+  // (both arrays empty + blank pacing) when no video editor read was present,
+  // and the renderer skips the block.
+  video: {
+    // Opening hooks to use in the brand's video — each with a timing cue, a
+    // concrete line to SAY (or action to take), the technique it borrows from
+    // the references, and why it lands.
+    hooks: { at: string; say: string; technique: string; why: string }[]
+    // Transitions that would work + when to fire them.
+    transitions: { at: string; type: string; note: string }[]
+    // One-line cut-rhythm / pacing recommendation for the brand's video.
+    pacing: string
+  }
 }
 
 // The full set of agent IDs the backend supports. Add new entries here as

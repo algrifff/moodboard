@@ -328,6 +328,18 @@ export const synthesisBriefSchema = z.object({
   statements: z.array(z.string()),
   watchFors: z.array(z.string()),
   notes: z.array(z.string()),
+  video: z.object({
+    hooks: z.array(
+      z.object({
+        at: z.string(),
+        say: z.string(),
+        technique: z.string(),
+        why: z.string(),
+      }),
+    ),
+    transitions: z.array(z.object({ at: z.string(), type: z.string(), note: z.string() })),
+    pacing: z.string(),
+  }),
 })
 
 export const agentIdSchema = z.enum([
@@ -342,7 +354,10 @@ export type AgentIdInput = z.infer<typeof agentIdSchema>
 
 // Senior Video Editor agent output (Gemini-produced). Validated server-side
 // after Gemini returns JSON, and on the client when reading agent results.
-export const videoEditorBreakdownSchema = z.object({
+// Craft-only shape Gemini is asked to return for ONE clip — no identity, no
+// unavailable flag (the server stamps identity from the clip object and owns
+// the unavailable path). Used to validate raw model output.
+export const geminiVideoCraftSchema = z.object({
   summary: z.string(),
   hooks: z.array(
     z.object({
@@ -363,7 +378,23 @@ export const videoEditorBreakdownSchema = z.object({
   ),
   pacing: z.string(),
   replicationPlaybook: z.array(z.string()),
+})
+
+// One clip's stored breakdown = craft fields + identity (+ optional
+// unavailable reason). This is the per-clip cache payload.
+export const videoClipBreakdownSchema = geminiVideoCraftSchema.extend({
+  videoId: z.string(),
+  title: z.string(),
+  platform: z.string(),
+  url: z.string(),
   unavailableReason: z.string().optional(),
+})
+
+// The Senior Video Editor agent's full output — one breakdown per clip.
+export const videoEditorBreakdownSchema = z.object({
+  clips: z.array(videoClipBreakdownSchema),
+  skipped: z.number().optional(),
+  note: z.string().optional(),
 })
 
 export const analyzeRequestSchema = z.object({
@@ -387,7 +418,10 @@ export type AnalyzeResponse = z.infer<typeof analyzeResponseSchema>
 // Synthesise multiple agent outputs into a single unified read.
 export const synthesizeRequestSchema = z.object({
   objectIds: z.array(z.string()).min(1).max(50),
-  agentIds: z.array(agentIdSchema).min(2).max(5),
+  // Cap = the number of agents (agentIdSchema). Was 5 when there were five
+  // agents; the Senior Video Editor made six, so a "select all" synthesis hit
+  // the old cap. Bump this in lockstep whenever an agent is added.
+  agentIds: z.array(agentIdSchema).min(2).max(6),
   force: z.boolean().optional(),
   depth: z.enum(['fast', 'deep']).optional(),
 })

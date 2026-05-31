@@ -3,6 +3,7 @@ import type {
   AIAnalysis,
   SectionedParagraphs,
   SynthesisBrief,
+  VideoClipBreakdown,
   VideoEditorBreakdown,
 } from '@moodboard/shared'
 import { ArrowsOutSimple, X } from '@phosphor-icons/react'
@@ -526,27 +527,88 @@ function SectionedReadout({ data }: { data: SectionedParagraphs }) {
   )
 }
 
-// Senior Video Editor — the timestamped craft breakdown. When the clip
-// couldn't be analysed (no Gemini key / unsupported), `unavailableReason` is
-// set and the arrays are empty, so we show just the note.
+// Senior Video Editor — one timestamped craft breakdown per clip in the group.
+// Each video is watched + cached individually, so a group of clips renders a
+// stacked section per clip. Empty group → the agent's `note` hint.
 function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
-  if (data.unavailableReason) {
+  if (data.clips.length === 0) {
     return (
       <div className="text-[12.5px] text-[var(--text-mute)] italic" style={{ lineHeight: 1.5 }}>
-        {data.unavailableReason}
+        {data.note ?? 'Group this agent with a video clip and it will break it down.'}
+      </div>
+    )
+  }
+  const multi = data.clips.length > 1
+  return (
+    <div className="space-y-5">
+      {data.clips.map((clip, i) => (
+        <div
+          key={`${clip.videoId}-${i}`}
+          className={i > 0 ? 'space-y-2 border-t border-[var(--border-soft)] pt-4' : 'space-y-2'}
+        >
+          {multi && <ClipHeader clip={clip} index={i} total={data.clips.length} />}
+          <ClipBreakdownBody clip={clip} />
+        </div>
+      ))}
+      {data.skipped ? (
+        <div className="text-[11.5px] text-[var(--text-faint)] italic" style={{ lineHeight: 1.5 }}>
+          {data.skipped} more clip{data.skipped > 1 ? 's' : ''} in this group{' '}
+          {data.skipped > 1 ? "weren't" : "wasn't"} analysed (max {data.clips.length} per group) —
+          put {data.skipped > 1 ? 'them' : 'it'} in a separate group to break{' '}
+          {data.skipped > 1 ? 'them' : 'it'} down.
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+// Clip title row for multi-clip groups — index, title, platform tag.
+function ClipHeader({
+  clip,
+  index,
+  total,
+}: {
+  clip: VideoClipBreakdown
+  index: number
+  total: number
+}) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="text-[10px] tabular-nums text-[var(--text-faint)] font-semibold flex-shrink-0">
+        {index + 1}/{total}
+      </span>
+      <span className="text-[12.5px] font-semibold text-foreground truncate">
+        {clip.title || 'Untitled clip'}
+      </span>
+      {clip.platform && clip.platform !== 'other' && (
+        <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-faint)] flex-shrink-0">
+          {clip.platform}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// One clip's breakdown body. When the clip couldn't be analysed (unsupported /
+// download failure / no key) `unavailableReason` is set and arrays are empty.
+function ClipBreakdownBody({ clip }: { clip: VideoClipBreakdown }) {
+  if (clip.unavailableReason) {
+    return (
+      <div className="text-[12.5px] text-[var(--text-mute)] italic" style={{ lineHeight: 1.5 }}>
+        {clip.unavailableReason}
       </div>
     )
   }
   return (
     <div className="space-y-3.5">
-      {data.summary && (
+      {clip.summary && (
         <p className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
-          {data.summary}
+          {clip.summary}
         </p>
       )}
 
       <VideoSection heading="Hooks">
-        {data.hooks.map((h, i) => (
+        {clip.hooks.map((h, i) => (
           <div key={i} className="space-y-0.5">
             <div className="flex items-baseline gap-2">
               <Stamp>{h.timestamp}</Stamp>
@@ -565,7 +627,7 @@ function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
       </VideoSection>
 
       <VideoSection heading="Transitions">
-        {data.transitions.map((t, i) => (
+        {clip.transitions.map((t, i) => (
           <div key={i} className="flex items-baseline gap-2">
             <Stamp>{t.timestamp}</Stamp>
             <span className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
@@ -576,7 +638,7 @@ function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
       </VideoSection>
 
       <VideoSection heading="Sound design">
-        {data.soundDesign.map((s, i) => (
+        {clip.soundDesign.map((s, i) => (
           <div key={i} className="flex items-baseline gap-2">
             <Stamp>{s.timestamp}</Stamp>
             <span className="text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.5 }}>
@@ -587,7 +649,7 @@ function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
       </VideoSection>
 
       <VideoSection heading="What's said">
-        {data.spokenBeats.map((s, i) => (
+        {clip.spokenBeats.map((s, i) => (
           <div key={i} className="space-y-0.5">
             <div className="flex items-baseline gap-2">
               <Stamp>{s.timestamp}</Stamp>
@@ -602,20 +664,20 @@ function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
         ))}
       </VideoSection>
 
-      {data.pacing && (
+      {clip.pacing && (
         <div>
           <VideoHeading>Pacing</VideoHeading>
           <p className="mt-1 text-[12.5px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
-            {data.pacing}
+            {clip.pacing}
           </p>
         </div>
       )}
 
-      {data.replicationPlaybook.length > 0 && (
+      {clip.replicationPlaybook.length > 0 && (
         <div>
           <VideoHeading>Replication playbook</VideoHeading>
           <ol className="mt-1.5 space-y-1.5">
-            {data.replicationPlaybook.map((step, i) => (
+            {clip.replicationPlaybook.map((step, i) => (
               <li key={i} className="flex gap-2 text-[12.5px] text-[var(--text-soft)]">
                 <span className="text-[var(--text-faint)] tabular-nums">{i + 1}.</span>
                 <span style={{ lineHeight: 1.5 }}>{step}</span>
@@ -663,19 +725,26 @@ function Stamp({ children }: { children: React.ReactNode }) {
 }
 
 function VideoEditorGlance({ data }: { data: VideoEditorBreakdown }) {
-  if (data.unavailableReason) {
+  if (data.clips.length === 0) {
     return (
-      <div className="text-[12px] text-[var(--text-faint)] italic">{data.unavailableReason}</div>
+      <div className="text-[12px] text-[var(--text-faint)] italic">
+        {data.note ?? 'No clips to break down yet.'}
+      </div>
     )
   }
-  const firstHook = data.hooks[0]
+  const analysed = data.clips.filter((c) => !c.unavailableReason)
+  const totalHooks = analysed.reduce((n, c) => n + c.hooks.length, 0)
+  const first = analysed[0]
+  const firstHook = first?.hooks[0]
+  const lead = firstHook?.what ?? first?.summary ?? data.clips[0]?.unavailableReason ?? ''
   return (
     <div className="space-y-1">
       <div className="text-[10px] uppercase tracking-[0.12em] text-[var(--text-faint)] font-semibold">
-        {data.hooks.length} hooks · {data.transitions.length} transitions
+        {data.clips.length} clip{data.clips.length > 1 ? 's' : ''} · {totalHooks} hook
+        {totalHooks === 1 ? '' : 's'}
       </div>
       <p className="text-[12.5px] text-[var(--text-soft)] line-clamp-2" style={{ lineHeight: 1.5 }}>
-        {firstHook ? firstHook.what : data.summary}
+        {lead}
       </p>
     </div>
   )
@@ -968,6 +1037,11 @@ function BriefReadout({
       )}
       {data.channels.length > 0 && (
         <ChannelBlock items={data.channels} onChange={patch('channels')} />
+      )}
+      {(data.video.hooks.length > 0 ||
+        data.video.transitions.length > 0 ||
+        data.video.pacing.trim().length > 0) && (
+        <VideoDirectionBlock data={data.video} onChange={patch('video')} />
       )}
       {data.hooks.length > 0 && <HooksBlock items={data.hooks} onChange={patch('hooks')} />}
       {data.bodyCopy.trim().length > 0 && (
@@ -1500,6 +1574,99 @@ function ChannelBlock({
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+// Video direction — the synthesiser's translation of the Senior Video Editor's
+// reference-clip read into an actionable plan for the brand's own video.
+// Renders only when the brief carries video content (see BriefReadout guard).
+function VideoDirectionBlock({
+  data,
+  onChange,
+}: {
+  data: SynthesisBrief['video']
+  onChange: (value: SynthesisBrief['video']) => void
+}) {
+  const patchHook = (i: number, p: Partial<SynthesisBrief['video']['hooks'][number]>) =>
+    onChange({ ...data, hooks: data.hooks.map((h, j) => (j === i ? { ...h, ...p } : h)) })
+  const patchTransition = (i: number, p: Partial<SynthesisBrief['video']['transitions'][number]>) =>
+    onChange({
+      ...data,
+      transitions: data.transitions.map((t, j) => (j === i ? { ...t, ...p } : t)),
+    })
+  return (
+    <div>
+      <BlockHeading>Video direction</BlockHeading>
+
+      {data.hooks.length > 0 && (
+        <div className="mt-2 space-y-2">
+          <VideoHeading>Hooks to use</VideoHeading>
+          {data.hooks.map((h, i) => (
+            <div
+              key={i}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 'var(--radius)',
+                backgroundColor: 'var(--bg-elevated)',
+              }}
+            >
+              <div className="flex items-baseline gap-2">
+                <Stamp>{h.at}</Stamp>
+                <EditableText
+                  as="span"
+                  value={h.say}
+                  onCommit={(say) => patchHook(i, { say })}
+                  className="text-[12.5px] text-foreground font-medium"
+                />
+              </div>
+              {(h.technique || h.why) && (
+                <div
+                  className="mt-1 text-[11.5px] text-[var(--text-faint)]"
+                  style={{ lineHeight: 1.45 }}
+                >
+                  {h.technique}
+                  {h.technique && h.why ? ' — ' : ''}
+                  {h.why}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.transitions.length > 0 && (
+        <div className="mt-2.5 space-y-1.5">
+          <VideoHeading>Transitions</VideoHeading>
+          {data.transitions.map((t, i) => (
+            <div key={i} className="flex items-baseline gap-2">
+              <Stamp>{t.at}</Stamp>
+              <div className="min-w-0 flex-1">
+                <span className="text-[12.5px] font-medium text-foreground">{t.type}</span>
+                <span className="text-[12.5px] text-[var(--text-soft)]">{' — '}</span>
+                <EditableText
+                  as="span"
+                  value={t.note}
+                  onCommit={(note) => patchTransition(i, { note })}
+                  className="text-[12.5px] text-[var(--text-soft)]"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data.pacing.trim().length > 0 && (
+        <div className="mt-2.5">
+          <VideoHeading>Pacing</VideoHeading>
+          <EditableText
+            value={data.pacing}
+            onCommit={(pacing) => onChange({ ...data, pacing })}
+            multiline
+            className="mt-0.5 text-[12.5px] text-[var(--text-soft)] leading-snug"
+          />
+        </div>
+      )}
     </div>
   )
 }

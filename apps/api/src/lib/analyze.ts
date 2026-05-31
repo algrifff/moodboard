@@ -13,13 +13,14 @@ import type {
   SpotifyTrackData,
   StickyData,
   TextData,
+  VideoClipBreakdown,
   VideoClipData,
   VideoEditorBreakdown,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
 import { getAgent, SYNTHESIZER } from './agents'
-import { analyzeVideoForEditor, GEMINI_VIDEO_MODEL } from './gemini'
+import { GEMINI_VIDEO_MODEL } from './gemini'
 import { isSafeFilename, pdfThumbPath, uploadPath } from './storage'
 import { mimeFromExt } from './upload-validation'
 
@@ -598,26 +599,59 @@ function formatVideoDuration(sec: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`
 }
 
-// Senior Video Editor — finds the first video clip in the group and sends it
-// to Gemini for the craft breakdown. No clip → a clear "add a clip" stub
-// (cache-safe: the group's hash changes the moment a clip is added).
-async function analyzeVideoEditorGroup(objects: CanvasObject[]): Promise<VideoEditorBreakdown> {
-  const clip = objects.find((o) => o.type === 'video-clip' && isVideoClipData(o.data))?.data as
-    | VideoClipData
-    | undefined
-  if (!clip) {
+// ── Senior Video Editor: multi-clip orchestration helpers ──────────────────
+// Each video is watched by Gemini exactly once, ever — the route caches per
+// clip (keyed by videoClipCacheTag + the clip's own hash), independent of the
+// group. These helpers keep the cap, cache key, and assembly in one place; the
+// route owns the DB reads/writes and the bounded-concurrency walk.
+
+// Cap clips analysed per group. Beyond this they're reported as `skipped` and
+// the user can re-run to fold them in — bounds worst-case spend per group.
+export const MAX_VIDEO_CLIPS = 6
+
+// How many clips to send to Gemini at once. Independent calls (unlike the
+// Anthropic parallel-firing 502s), but keep it modest so a big group doesn't
+// open a dozen downloads/uploads at once.
+export const VIDEO_CLIP_CONCURRENCY = 3
+
+// Per-clip cache bucket — distinct from the editor's group tag so one video
+// reuses its breakdown across boards, groups, and re-runs. Bump the version
+// when the per-clip prompt or stored shape changes.
+export function videoClipCacheTag(): string {
+  return `video-clip@${GEMINI_VIDEO_MODEL}@v1`
+}
+
+// Assemble per-clip breakdowns into the agent's output. Empty group → a clear
+// hint; clips dropped by the cap → a `skipped` count the UI surfaces.
+export function assembleVideoEditorBreakdown(
+  clips: VideoClipBreakdown[],
+  skipped: number,
+): VideoEditorBreakdown {
+  if (clips.length === 0) {
     return {
-      summary: '',
-      hooks: [],
-      transitions: [],
-      soundDesign: [],
-      spokenBeats: [],
-      pacing: '',
-      replicationPlaybook: [],
-      unavailableReason: 'Group this agent with a video clip and it will break the video down.',
+      clips: [],
+      note: 'Group this agent with one or more video clips and it will break each one down.',
     }
   }
-  return analyzeVideoForEditor(clip)
+  return skipped > 0 ? { clips, skipped } : { clips }
+}
+
+// Bounded-concurrency map that preserves input order — the per-clip walk wants
+// it, and exporting it keeps the behaviour test-friendly.
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.min(Math.max(limit, 1), items.length) }, async () => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await fn(items[i] as T, i)
+    }
+  })
+  await Promise.all(workers)
+  return results
 }
 
 /**
@@ -629,10 +663,11 @@ export async function analyzeGroup(
   agentId: AgentId,
   depth: AnalysisDepth = DEFAULT_DEPTH,
 ): Promise<unknown> {
-  // The Senior Video Editor doesn't run on Claude — route it to Gemini, which
-  // watches the clip. It needs no Anthropic client, so branch before that check.
+  // The Senior Video Editor doesn't run on Claude — it's analysed per-clip in
+  // the route (getVideoEditorResult) so each video caches independently. Guard
+  // against a misroute landing on the Anthropic path below.
   if (agentId === 'video-editor') {
-    return analyzeVideoEditorGroup(objects)
+    throw new Error('video-editor must be analysed per-clip in the route, not analyzeGroup')
   }
   if (!client) {
     throw new Error('Anthropic client not configured (ANTHROPIC_API_KEY missing)')
@@ -685,7 +720,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   // The Senior Video Editor runs on Gemini, not Claude — its cache bucket is
   // keyed by the Gemini model, independent of the Claude depth setting.
   if (agentId === 'video-editor') {
-    return `video-editor@${GEMINI_VIDEO_MODEL}@v1`
+    // v2 = output reshaped to { clips: [...] }; every clip in the group is
+    //      analysed (each video per-clip cached) rather than just the first.
+    return `video-editor@${GEMINI_VIDEO_MODEL}@v2`
   }
   // Suffix bumps invalidate the on-disk cache when the schema changes.
   // v3 = agent registry introduction (different cache bucket per agent).
@@ -765,7 +802,16 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //       reading them as literal zeros.
   // v16 — Video clips feed into the synth prompt as a reference block
   //       (transcript + title + channel). Bumps in lockstep with the AD.
-  const v = 'v16'
+  // v17 — Senior Video Editor output reshaped to { clips: [...] }; when it's
+  //       one of the synthesised agents its read changes shape, so the synth
+  //       bucket must invalidate.
+  // v18 — brief gained a `video` block (hooks/transitions/pacing distilled
+  //       from the Senior Video Editor's read); synth output schema + prompt
+  //       changed, so the bucket invalidates.
+  // v19 — naming discipline: brief keeps proper names (brands / creators /
+  //       public figures) out of every field except `references`. Re-synth so
+  //       existing briefs that named a video creator get cleaned.
+  const v = 'v19'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

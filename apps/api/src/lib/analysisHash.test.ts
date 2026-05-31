@@ -402,4 +402,41 @@ describe('analysisHash', () => {
     }
     expect(analysisHash([base], 'm1')).toBe(analysisHash([drifted], 'm1'))
   })
+
+  const voiceNote = (id: string, transcript: string, durationSec = 12): CanvasObject => ({
+    id,
+    type: 'voice-note',
+    position: { x: 0, y: 0 },
+    size: { width: 320, height: 160 },
+    rotation: 0,
+    zIndex: 0,
+    data: {
+      url: `/api/files/${id}.webm`,
+      mimeType: 'audio/webm',
+      durationSec,
+      transcript,
+      fetchedAt: '2026-05-30T00:00:00Z',
+    },
+  })
+
+  it('changes when a voice-note transcript changes', () => {
+    expect(analysisHash([voiceNote('a', 'first take')], 'm1')).not.toBe(
+      analysisHash([voiceNote('a', 'second take')], 'm1'),
+    )
+  })
+
+  it('changes when a voice-note duration changes', () => {
+    expect(analysisHash([voiceNote('a', 'same words', 12)], 'm1')).not.toBe(
+      analysisHash([voiceNote('a', 'same words', 14)], 'm1'),
+    )
+  })
+
+  it('does not invalidate when only voice-note fetchedAt drifts', () => {
+    const base = voiceNote('a', 'consistent text')
+    const drifted: CanvasObject = {
+      ...base,
+      data: { ...base.data, fetchedAt: '2026-09-09T00:00:00Z' },
+    }
+    expect(analysisHash([base], 'm1')).toBe(analysisHash([drifted], 'm1'))
+  })
 })

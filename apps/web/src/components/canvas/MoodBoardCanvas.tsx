@@ -49,6 +49,7 @@ import { ImageNode } from './ImageNode'
 import { MarqueeBox } from './MarqueeBox'
 import { PDFNode } from './PDFNode'
 import { showToast } from './Toast'
+import { VoiceRecorderHUD } from './VoiceRecorderHUD'
 
 const PdfPreviewModal = lazy(() =>
   import('./PdfPreviewModal').then((m) => ({ default: m.PdfPreviewModal })),
@@ -917,7 +918,8 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'spotify-playlist' ||
             o.type === 'spotify-track' ||
             o.type === 'spotify-album' ||
-            o.type === 'video-clip',
+            o.type === 'video-clip' ||
+            o.type === 'voice-note',
         )}
         scale={scale}
         offset={offset}
@@ -931,6 +933,8 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       )}
 
       <EmptyStateHint />
+
+      <VoiceRecorderHUD />
 
       {busy && (
         <div className="absolute top-4 right-4 rounded-md bg-white/90 border px-3 py-1.5 text-xs shadow-sm">

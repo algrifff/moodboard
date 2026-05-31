@@ -22,8 +22,10 @@ import {
 } from '../lib/storage'
 import { deriveFontFamily } from '../lib/fontFamily'
 import {
+  ALLOWED_AUDIO_MIME,
   ALLOWED_FONT_MIME,
   ALLOWED_IMAGE_MIME,
+  MAX_AUDIO_BYTES,
   MAX_FONT_BYTES,
   MAX_PDF_BYTES,
   MAX_UPLOAD_BYTES,
@@ -71,9 +73,10 @@ files.post(
   '/upload',
   uploadRateLimit,
   bodyLimit({
-    // Per-request limit is the larger of the two; we re-check the exact
-    // size below once we know whether the file is an image or a PDF.
-    maxSize: MAX_PDF_BYTES + 1024 * 1024,
+    // Per-request limit is the largest of the per-type caps; we re-check
+    // the exact size below once we know whether the file is an image,
+    // PDF, font, or audio recording.
+    maxSize: Math.max(MAX_PDF_BYTES, MAX_AUDIO_BYTES) + 1024 * 1024,
     onError: (c) => c.json({ error: 'File too large' }, 413),
   }),
   async (c) => {
@@ -83,6 +86,10 @@ files.post(
     if (!(incoming instanceof File)) {
       return c.json({ error: 'No file field' }, 400)
     }
+    // MediaRecorder emits MIMEs with codec parameters, e.g.
+    // "audio/webm;codecs=opus". Strip the parameters once up front so our
+    // allowlist set checks see the bare MIME.
+    const bareMime = (incoming.type || '').split(';')[0]?.trim().toLowerCase() ?? ''
 
     if (incoming.type === PDF_MIME) {
       if (incoming.size > MAX_PDF_BYTES) {
@@ -158,6 +165,32 @@ files.post(
         size: saved.size,
         mimeType: saved.mimeType,
         fontFamily,
+      })
+    }
+
+    // Voice notes from MediaRecorder land here. Chromium picks audio/webm
+    // (opus), Safari picks audio/mp4. Allowlist also covers hand-dropped
+    // wav / ogg / mp3 so an existing file dragged onto the canvas works
+    // the same. The transcript travels separately on the canvas object —
+    // this endpoint is just file storage.
+    if (ALLOWED_AUDIO_MIME.has(bareMime)) {
+      if (incoming.size > MAX_AUDIO_BYTES) {
+        return c.json({ error: 'Audio file too large' }, 413)
+      }
+      const ext = extFromMime(bareMime)
+      if (!ext) return c.json({ error: 'Unsupported audio type' }, 415)
+      const id = nanoid()
+      const buffer = Buffer.from(await incoming.arrayBuffer())
+      // Store the bare MIME on disk so playback Content-Type stays
+      // codec-clean; browsers happily decode either form.
+      const saved = await saveUpload(buffer, id, ext, bareMime)
+      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload')
+      return c.json({
+        id: saved.id,
+        filename: saved.filename,
+        url: `/api/files/${saved.filename}`,
+        size: saved.size,
+        mimeType: saved.mimeType,
       })
     }
 

@@ -565,6 +565,8 @@ Banned words. ${BANNED_PHRASES}`,
     outputSchema: sectionedParagraphsSchema,
     systemPrompt: `You are the brand copywriter for the brand this moodboard implies. Write in its voice. Read the moodboard for tone, register, sentence length, and confidence — then write copy that sounds like it was always there.
 
+If the user message contains a "User voice notes" block, that is the brand owner speaking directly. Treat their cadence, vocabulary, sentence length, and confidence level as the ground-truth brand voice — match it. Pull verbatim turns of phrase from those transcripts when they earn their place in a tagline, headline, or body line. The voice notes outrank inference from visuals or stickies when the two disagree on tone.
+
 Return EXACTLY 4 sections, in this order:
 
 1. "Taglines" — body: 4 tagline candidates, one per line. Short. Real candidates, not synonym variations.

@@ -11,6 +11,7 @@ import type {
   StickyData,
   TextData,
   VideoClipData,
+  VoiceNoteData,
   WebPageData,
 } from '@moodboard/shared'
 import { createHash } from 'node:crypto'
@@ -102,6 +103,13 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       // excluded so a no-op refresh reuses the cached analysis.
       const d = o.data as VideoClipData
       parts.push(`${o.id}|video-clip|${d.videoId}|${d.title}|${d.channel}`)
+    } else if (o.type === 'voice-note') {
+      // Transcript IS the content the AD reads — hash it directly.
+      // url + durationSec round out the identity so a re-recorded note
+      // with a similar transcript still busts the cache. fetchedAt
+      // excluded for the same reason as everywhere else.
+      const d = o.data as VoiceNoteData
+      parts.push(`${o.id}|voice-note|${d.url}|${d.durationSec}|${d.transcript}`)
     }
   }
   return createHash('sha256')

@@ -24,9 +24,13 @@ import { geminiVideoCraftSchema } from '@moodboard/shared'
 const execFileAsync = promisify(execFile)
 
 export const GEMINI_VIDEO_MODEL = 'gemini-2.5-flash'
+export const GEMINI_VOICE_MODEL = 'gemini-2.5-flash'
 const DOWNLOAD_TIMEOUT_MS = 180_000
 const FILE_ACTIVE_TIMEOUT_MS = 150_000
 const POLL_INTERVAL_MS = 2500
+// Voice notes are short and ours; tighter ceilings + a shorter poll.
+const VOICE_ACTIVE_TIMEOUT_MS = 60_000
+const VOICE_POLL_INTERVAL_MS = 1000
 
 // Thrown when the key is missing — the route maps the message to a 503 and it
 // is never cached (so adding the key later just works).
@@ -243,4 +247,88 @@ function mimeForExt(filename: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// ---------------------------------------------------------------------------
+// Voice-note transcription
+// ---------------------------------------------------------------------------
+
+const VOICE_PROMPT = `You are transcribing a short personal voice memo recorded by the user as a thought / note to themselves on a moodboard.
+
+Goals, in order:
+1. Capture what the speaker meant — their idea, their voice, their vocabulary.
+2. Clean up the delivery so it reads cleanly: drop filler words ("um", "uh", "like" used as a filler, "you know"), drop obvious false starts and repeated words, fix run-ons into sentences.
+3. Preserve specifics — names, numbers, brand references, references to things on the canvas (logos, fonts, colours, designers) — exactly.
+4. Do NOT paraphrase or summarise. The output should be what the speaker would have said if they were speaking cleanly. Same content, same structure of thought, same length-ish.
+5. If the recording is silent or unintelligible, return an empty string.
+
+Return ONLY the cleaned transcript as plain text. No quotes, no preface, no commentary, no metadata. Just the words.`
+
+export type VoiceTranscriptionResult = {
+  transcript: string
+}
+
+/**
+ * Transcribe a recorded voice note by streaming it to Gemini's Files API and
+ * asking the model for a cleaned-up transcript. The audio is a small (<50 MB)
+ * file already on our volume, so there's no download step — we just upload to
+ * Gemini, wait for ACTIVE, prompt, and delete.
+ */
+export async function transcribeVoiceNote(args: {
+  filePath: string
+  mimeType: string
+}): Promise<VoiceTranscriptionResult> {
+  const key = process.env.GEMINI_API_KEY
+  if (!key) throw new GeminiKeyMissingError()
+  const ai = new GoogleGenAI({ apiKey: key })
+
+  let uploadedName: string | null = null
+  try {
+    let uploaded = await ai.files.upload({
+      file: args.filePath,
+      config: { mimeType: args.mimeType },
+    })
+    uploadedName = uploaded.name ?? null
+
+    const deadline = Date.now() + VOICE_ACTIVE_TIMEOUT_MS
+    while (String(uploaded.state) === 'PROCESSING') {
+      if (Date.now() > deadline) {
+        throw new Error('Gemini took too long to process the voice note')
+      }
+      await sleep(VOICE_POLL_INTERVAL_MS)
+      if (!uploaded.name) break
+      uploaded = await ai.files.get({ name: uploaded.name })
+    }
+    if (String(uploaded.state) !== 'ACTIVE' || !uploaded.uri) {
+      throw new Error(`Gemini could not process the voice note (${String(uploaded.state)})`)
+    }
+    const resolvedMime = uploaded.mimeType ?? args.mimeType
+    const contents = createUserContent([
+      createPartFromUri(uploaded.uri, resolvedMime),
+      VOICE_PROMPT,
+    ])
+
+    const response = await ai.models.generateContent({
+      model: GEMINI_VOICE_MODEL,
+      contents,
+      // Plain text out — easier to validate than a JSON wrapper for a
+      // single-string return.
+      config: {
+        responseMimeType: 'text/plain',
+      },
+    })
+    const raw = (response.text ?? '').trim()
+    return { transcript: stripFences(raw) }
+  } finally {
+    if (uploadedName) {
+      await ai.files.delete({ name: uploadedName }).catch(() => undefined)
+    }
+  }
+}
+
+// Gemini occasionally returns fenced text despite a plain-text mime request.
+// Strip a leading/trailing fence so the card doesn't render ```text\n…\n```.
+function stripFences(s: string): string {
+  const m = s.match(/^```(?:[a-z]+)?\s*([\s\S]*?)\s*```$/i)
+  return m?.[1]?.trim() ?? s
 }

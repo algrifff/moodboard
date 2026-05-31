@@ -202,6 +202,14 @@ export const videoClipDataSchema = z.object({
   fetchedAt: z.string(),
 })
 
+export const voiceNoteDataSchema = z.object({
+  url: z.string(),
+  mimeType: z.string(),
+  durationSec: z.number(),
+  transcript: z.string(),
+  fetchedAt: z.string(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
   type: z.enum([
@@ -218,6 +226,7 @@ export const canvasObjectSchema = z.object({
     'spotify-track',
     'spotify-album',
     'video-clip',
+    'voice-note',
   ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
@@ -237,6 +246,7 @@ export const canvasObjectSchema = z.object({
     spotifyTrackDataSchema,
     spotifyAlbumDataSchema,
     videoClipDataSchema,
+    voiceNoteDataSchema,
   ]),
 })
 
@@ -507,6 +517,7 @@ export const boardPreviewObjectSchema = z.object({
     'spotify-track',
     'spotify-album',
     'video-clip',
+    'voice-note',
   ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),

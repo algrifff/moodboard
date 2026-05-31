@@ -27,6 +27,7 @@ import {
 import { analyzeVideoForEditor } from '../lib/gemini'
 import { analysisHash } from '../lib/analysisHash'
 import { rateLimit } from '../lib/rateLimit'
+import { recordGroupDisplay, type DisplayKind } from '../lib/recordGroupDisplay'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 
@@ -177,6 +178,19 @@ analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
 
   try {
     const { data, cached, cacheKey } = await getAgentResult(group.objects, agentId, depth, force)
+    // Mirror the displayed read into the per-board table so MCP
+    // get_board surfaces it without depending on browser
+    // localStorage. art-director → 'ad'; video-editor → 'video';
+    // everything else → 'sectioned' (matches SlotState mapping).
+    const kind: DisplayKind =
+      agentId === 'art-director' ? 'ad' : agentId === 'video-editor' ? 'video' : 'sectioned'
+    await recordGroupDisplay({
+      boardId,
+      objects: group.objects,
+      agentIds: [agentId],
+      kind,
+      data,
+    }).catch((e) => console.warn('recordGroupDisplay (analyze) failed', e))
     return c.json({ agentId, data, cached, groupKey: cacheKey })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -217,6 +231,16 @@ analyze.post('/boards/:boardId/synthesize', analyzeRateLimit, async (c) => {
       .where(eq(schema.groupAnalysis.cacheKey, synthCacheKey))
       .limit(1)
     if (hit) {
+      // Same mirror as the fresh path — a cache hit still represents
+      // the user re-running this combo, so it's what should surface
+      // server-side.
+      await recordGroupDisplay({
+        boardId,
+        objects: group.objects,
+        agentIds: sortedIds,
+        kind: 'brief',
+        data: hit.analysis,
+      }).catch((e) => console.warn('recordGroupDisplay (synth cache hit) failed', e))
       return c.json({
         agentIds: sortedIds,
         data: hit.analysis,
@@ -241,6 +265,13 @@ analyze.post('/boards/:boardId/synthesize', analyzeRateLimit, async (c) => {
       .insert(schema.groupAnalysis)
       .values({ cacheKey: synthCacheKey, model: synthTag, analysis: data as object })
       .onConflictDoNothing()
+    await recordGroupDisplay({
+      boardId,
+      objects: group.objects,
+      agentIds: sortedIds,
+      kind: 'brief',
+      data,
+    }).catch((e) => console.warn('recordGroupDisplay (synth fresh) failed', e))
 
     return c.json({
       agentIds: sortedIds,

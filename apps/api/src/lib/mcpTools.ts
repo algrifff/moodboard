@@ -3,10 +3,13 @@ import {
   groupId,
   proximityGroups,
   type AgentId,
+  type AIAnalysis,
   type CanvasObject,
+  type SectionedParagraphs,
   type StickyData,
   type SynthesisBrief,
   type TextData,
+  type VideoEditorBreakdown,
 } from '@moodboard/shared'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { and, desc, eq } from 'drizzle-orm'
@@ -18,6 +21,7 @@ import { DEFAULT_DEPTH, modelTag, synthesisModelTag, synthesizeGroup } from './a
 import { analysisHash } from './analysisHash'
 import { nextSpot } from './canvasPlacement'
 import { routeUrlToImporter } from './mcpUrlDispatch'
+import { listGroupDisplays } from './recordGroupDisplay'
 import { saveImageFromUrl } from './saveImageFromUrl'
 import { getAgentResult } from '../routes/analyze'
 
@@ -202,39 +206,85 @@ export function buildMcpServer(userId: string): McpServer {
       const data = (row.data ?? {}) as BoardData
       const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
 
-      // We don't have the per-group brief baked on the server (it lives
-      // in the browser's localStorage today, and on the share row when
-      // a share was minted). For Phase 19, surface anything stored on
-      // the share row if there is one.
-      const [shareRow] = await db
-        .select()
-        .from(schema.share)
-        .where(eq(schema.share.boardId, boardId))
-        .limit(1)
-      const briefs: { groupKey: string; throughline: string }[] = []
-      if (shareRow) {
-        const snap = shareRow.snapshot as {
-          groups?: {
-            key?: string
-            brief?: SynthesisBrief
-            display?: { kind: string; data: unknown }
-          }[]
-        }
-        for (const g of snap.groups ?? []) {
-          const brief = g.brief
-            ? g.brief
-            : g.display?.kind === 'brief'
-              ? (g.display.data as SynthesisBrief)
-              : undefined
-          if (brief?.throughline) {
-            briefs.push({ groupKey: g.key ?? '', throughline: brief.throughline })
+      // Map current groups by their stable key so we can join against
+      // the persisted display table.
+      const idGroups = proximityGroups(objects)
+      const groupKeyToIds = new Map<string, string[]>()
+      for (const ids of idGroups) groupKeyToIds.set(groupId(ids), ids)
+
+      const displays = await listGroupDisplays(boardId)
+      // Filter to displays whose groupKey still corresponds to a live
+      // group on the canvas. Orphans (membership changed → new key)
+      // get hidden here; the table still keeps them for when a group
+      // re-forms with the old composition.
+      const analyses = displays
+        .filter((d) => groupKeyToIds.has(d.groupKey))
+        .map((d) => {
+          const objectIds = groupKeyToIds.get(d.groupKey) ?? []
+          const base = {
+            groupKey: d.groupKey,
+            objectIds,
+            agentIds: d.agentIds,
+            updatedAt: d.updatedAt.toISOString(),
           }
-        }
-      }
+          switch (d.kind) {
+            case 'brief': {
+              const brief = d.data as SynthesisBrief
+              return {
+                ...base,
+                kind: 'brief' as const,
+                throughline: brief.throughline,
+                summary: brief.bodyCopy || '',
+                palette: brief.palette.map((p) => p.hex),
+                references: brief.references,
+                hooks: brief.hooks,
+                statements: brief.statements,
+                fonts: brief.fonts.map((f) => f.name || f.category),
+                audiences: brief.audiences.map((a) => a.label),
+                channels: brief.channels.map((c) => c.name),
+                video: brief.video,
+              }
+            }
+            case 'ad': {
+              const ad = d.data as AIAnalysis
+              return {
+                ...base,
+                kind: 'art-director' as const,
+                headline: ad.headline,
+                summary: ad.summary,
+                mood: ad.mood,
+                tone: ad.tone,
+                palette: ad.palette,
+                adjectives: ad.adjectives,
+                themes: ad.themes,
+                references: ad.references,
+                tensions: ad.tensions,
+                hooks: ad.hooks,
+                statements: ad.statements,
+              }
+            }
+            case 'video': {
+              return {
+                ...base,
+                kind: 'video-editor' as const,
+                data: d.data as VideoEditorBreakdown,
+              }
+            }
+            case 'sectioned':
+            default: {
+              return {
+                ...base,
+                kind: 'sectioned' as const,
+                sections: (d.data as SectionedParagraphs).sections,
+              }
+            }
+          }
+        })
 
       const payload: Record<string, unknown> = {
         ...summary,
-        briefs,
+        groupCount: idGroups.length,
+        analyses,
       }
       if (verbose) payload.objects = objects
       return {

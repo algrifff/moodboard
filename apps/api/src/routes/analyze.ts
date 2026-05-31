@@ -112,6 +112,9 @@ analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
     if (msg.includes('ANTHROPIC_API_KEY')) {
       return c.json({ error: 'Analysis not configured' }, 503)
     }
+    if (msg.includes('GEMINI_API_KEY')) {
+      return c.json({ error: 'Video analysis not configured — set GEMINI_API_KEY' }, 503)
+    }
     console.error('analyze failed', { agentId, error: e })
     return c.json({ error: `Analysis failed: ${msg}` }, 502)
   }

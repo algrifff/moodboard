@@ -2,7 +2,11 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  # Pure-JS at runtime — their install build scripts (codegen / notices) aren't
+  # needed, so skip them. esbuild genuinely needs its native binary built.
+  '@google/genai': false
   esbuild: true
+  protobufjs: false
 overrides:
   react: ^19
   react-dom: ^19

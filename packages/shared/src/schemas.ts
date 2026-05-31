@@ -336,8 +336,35 @@ export const agentIdSchema = z.enum([
   'audience-profiler',
   'channel-strategist',
   'copywriter',
+  'video-editor',
 ])
 export type AgentIdInput = z.infer<typeof agentIdSchema>
+
+// Senior Video Editor agent output (Gemini-produced). Validated server-side
+// after Gemini returns JSON, and on the client when reading agent results.
+export const videoEditorBreakdownSchema = z.object({
+  summary: z.string(),
+  hooks: z.array(
+    z.object({
+      timestamp: z.string(),
+      what: z.string(),
+      whyItWorks: z.string(),
+      howToReplicate: z.string(),
+    }),
+  ),
+  transitions: z.array(
+    z.object({ timestamp: z.string(), type: z.string(), description: z.string() }),
+  ),
+  soundDesign: z.array(
+    z.object({ timestamp: z.string(), element: z.string(), effect: z.string() }),
+  ),
+  spokenBeats: z.array(
+    z.object({ timestamp: z.string(), quote: z.string(), delivery: z.string() }),
+  ),
+  pacing: z.string(),
+  replicationPlaybook: z.array(z.string()),
+  unavailableReason: z.string().optional(),
+})
 
 export const analyzeRequestSchema = z.object({
   objectIds: z.array(z.string()).min(1).max(50),

@@ -3,6 +3,7 @@ import {
   aiAnalysisSchema,
   sectionedParagraphsSchema,
   synthesisBriefSchema,
+  videoEditorBreakdownSchema,
 } from '@moodboard/shared'
 import type { z } from 'zod'
 
@@ -506,6 +507,19 @@ Return EXACTLY 4 sections, in this order:
 Match the moodboard's confidence. If it's a quiet brand, write quietly. If it's loud, write loud. Don't be both.
 
 Banned words. ${BANNED_PHRASES}`,
+  },
+  // The Senior Video Editor is special: it doesn't run on Claude. analyzeGroup
+  // routes it to Gemini (lib/gemini.ts), which watches the video. The
+  // jsonSchema + systemPrompt here are inert placeholders to satisfy the
+  // registry shape; only `label` and `outputSchema` are used (label in the
+  // synthesize route, outputSchema for validating Gemini's JSON).
+  'video-editor': {
+    id: 'video-editor',
+    label: 'Senior Video Editor',
+    maxTokens: 0,
+    jsonSchema: SECTIONED_JSON_SCHEMA,
+    outputSchema: videoEditorBreakdownSchema,
+    systemPrompt: 'Runs on Gemini — see lib/gemini.ts. Not executed via Claude.',
   },
 }
 

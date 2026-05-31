@@ -14,10 +14,12 @@ import type {
   StickyData,
   TextData,
   VideoClipData,
+  VideoEditorBreakdown,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
 import { getAgent, SYNTHESIZER } from './agents'
+import { analyzeVideoForEditor, GEMINI_VIDEO_MODEL } from './gemini'
 import { isSafeFilename, pdfThumbPath, uploadPath } from './storage'
 import { mimeFromExt } from './upload-validation'
 
@@ -98,7 +100,7 @@ function isSpotifyAlbumData(d: CanvasObject['data']): d is SpotifyAlbumData {
   return 'albumId' in d && typeof (d as SpotifyAlbumData).albumId === 'string' && 'releaseDate' in d
 }
 function isVideoClipData(d: CanvasObject['data']): d is VideoClipData {
-  return 'videoId' in d && 'platform' in d && 'transcript' in d
+  return 'videoId' in d && typeof (d as VideoClipData).videoId === 'string' && 'platform' in d
 }
 
 function urlToFilename(url: string): string | null {
@@ -596,6 +598,28 @@ function formatVideoDuration(sec: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`
 }
 
+// Senior Video Editor — finds the first video clip in the group and sends it
+// to Gemini for the craft breakdown. No clip → a clear "add a clip" stub
+// (cache-safe: the group's hash changes the moment a clip is added).
+async function analyzeVideoEditorGroup(objects: CanvasObject[]): Promise<VideoEditorBreakdown> {
+  const clip = objects.find((o) => o.type === 'video-clip' && isVideoClipData(o.data))?.data as
+    | VideoClipData
+    | undefined
+  if (!clip) {
+    return {
+      summary: '',
+      hooks: [],
+      transitions: [],
+      soundDesign: [],
+      spokenBeats: [],
+      pacing: '',
+      replicationPlaybook: [],
+      unavailableReason: 'Group this agent with a video clip and it will break the video down.',
+    }
+  }
+  return analyzeVideoForEditor(clip)
+}
+
 /**
  * Run a single agent against a group. Returns the agent-specific data
  * (validated against the agent's zod schema).
@@ -605,6 +629,11 @@ export async function analyzeGroup(
   agentId: AgentId,
   depth: AnalysisDepth = DEFAULT_DEPTH,
 ): Promise<unknown> {
+  // The Senior Video Editor doesn't run on Claude — route it to Gemini, which
+  // watches the clip. It needs no Anthropic client, so branch before that check.
+  if (agentId === 'video-editor') {
+    return analyzeVideoEditorGroup(objects)
+  }
   if (!client) {
     throw new Error('Anthropic client not configured (ANTHROPIC_API_KEY missing)')
   }
@@ -653,6 +682,11 @@ export async function analyzeGroup(
 }
 
 export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
+  // The Senior Video Editor runs on Gemini, not Claude — its cache bucket is
+  // keyed by the Gemini model, independent of the Claude depth setting.
+  if (agentId === 'video-editor') {
+    return `video-editor@${GEMINI_VIDEO_MODEL}@v1`
+  }
   // Suffix bumps invalidate the on-disk cache when the schema changes.
   // v3 = agent registry introduction (different cache bucket per agent).
   // v4 = AIAnalysis gained logo + fonts fields; prompt + content builder

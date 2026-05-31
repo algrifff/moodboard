@@ -276,6 +276,29 @@ export type VideoClipData = {
   fetchedAt: string
 }
 
+// The Senior Video Editor agent's output — a granular craft breakdown of a
+// video clip produced by Gemini (which watches frames + listens to audio +
+// reads speech together). Every timestamp is a "M:SS" string into the clip.
+export type VideoEditorBreakdown = {
+  // One-paragraph read of the overall edit style + what makes it work.
+  summary: string
+  // The attention hooks and WHY each lands + how to recreate it.
+  hooks: { timestamp: string; what: string; whyItWorks: string; howToReplicate: string }[]
+  // Cuts / transitions and the effect each creates.
+  transitions: { timestamp: string; type: string; description: string }[]
+  // Sound design beats — SFX, music drops, silence, risers.
+  soundDesign: { timestamp: string; element: string; effect: string }[]
+  // What's said + how it's delivered (cadence, emphasis, timing).
+  spokenBeats: { timestamp: string; quote: string; delivery: string }[]
+  // Cut cadence / rhythm / energy curve across the clip — one paragraph.
+  pacing: string
+  // Step-by-step playbook to replicate this clip's style on a new video.
+  replicationPlaybook: string[]
+  // Set when the clip couldn't be analysed (e.g. unsupported platform, no
+  // Gemini key) — a short human-readable reason; the arrays will be empty.
+  unavailableReason?: string
+}
+
 export type CanvasObjectType =
   | 'image'
   | 'sticky'
@@ -452,6 +475,7 @@ export type AgentId =
   | 'audience-profiler'
   | 'channel-strategist'
   | 'copywriter'
+  | 'video-editor'
 
 // What an agent returns. The Art Director is the historical structured
 // shape; everything else returns sectioned paragraphs.
@@ -461,6 +485,7 @@ export type AgentOutput =
       agentId: 'business-analyst' | 'audience-profiler' | 'channel-strategist' | 'copywriter'
       data: SectionedParagraphs
     }
+  | { agentId: 'video-editor'; data: VideoEditorBreakdown }
 
 export type Group = {
   id: string

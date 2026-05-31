@@ -3,10 +3,12 @@ import {
   analyzeResponseSchema,
   sectionedParagraphsSchema,
   synthesizeResponseSchema,
+  videoEditorBreakdownSchema,
   type AgentId,
   type AIAnalysis,
   type SectionedParagraphs,
   type SynthesisBrief,
+  type VideoEditorBreakdown,
 } from '@moodboard/shared'
 
 export type AgentResult =
@@ -17,6 +19,7 @@ export type AgentResult =
       cached: boolean
       groupKey: string
     }
+  | { agentId: 'video-editor'; data: VideoEditorBreakdown; cached: boolean; groupKey: string }
 
 export async function analyzeGroup(
   boardId: string,
@@ -44,6 +47,10 @@ export async function analyzeGroup(
   // Narrow the agent-specific payload here so callers don't have to.
   if (raw.agentId === 'art-director') {
     const data = aiAnalysisSchema.parse(raw.data)
+    return { agentId: raw.agentId, data, cached: raw.cached, groupKey: raw.groupKey }
+  }
+  if (raw.agentId === 'video-editor') {
+    const data = videoEditorBreakdownSchema.parse(raw.data)
     return { agentId: raw.agentId, data, cached: raw.cached, groupKey: raw.groupKey }
   }
   const data = sectionedParagraphsSchema.parse(raw.data)

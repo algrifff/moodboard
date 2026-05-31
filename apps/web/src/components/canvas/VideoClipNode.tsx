@@ -34,6 +34,7 @@ export function VideoClipNode({
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [thumbErrored, setThumbErrored] = useState(false)
+  const [playing, setPlaying] = useState(false)
 
   const HALO = 14
   const interaction = useBoxInteraction(object.id, scale, {
@@ -44,11 +45,21 @@ export function VideoClipNode({
     haloPx: HALO,
   })
 
-  const linkPointerDown = (e: React.PointerEvent) => e.stopPropagation()
+  // YouTube + Vimeo embed cleanly in an iframe; the rest (TikTok / IG / X)
+  // don't, so their play button just opens the source instead.
+  const inlineEmbed = embedUrl(data.platform, data.videoId)
+
+  const controlPointerDown = (e: React.PointerEvent) => e.stopPropagation()
   const openSource = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
     window.open(data.url, '_blank', 'noopener,noreferrer')
+  }
+  const onPlay = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (inlineEmbed) setPlaying(true)
+    else window.open(data.url, '_blank', 'noopener,noreferrer')
   }
 
   const onRefresh = async (e: React.MouseEvent) => {
@@ -113,85 +124,94 @@ export function VideoClipNode({
       >
         <SpawnRing />
 
-        {/* 16:9 thumbnail with play badge — click opens the source. */}
-        <button
-          type="button"
-          onPointerDown={linkPointerDown}
-          onClick={openSource}
-          className="relative block w-full"
+        {/* 16:9 media area. The thumbnail itself is a drag handle (pointer
+            events bubble to the wrapper); only the centred play badge is an
+            interactive button. On play it swaps to an inline iframe player
+            for YouTube/Vimeo (other platforms open the source instead). */}
+        <div
+          className="relative w-full"
           style={{
             aspectRatio: '16 / 9',
             backgroundColor: 'var(--bg-elevated)',
-            cursor: 'pointer',
             flexShrink: 0,
             overflow: 'hidden',
-            border: 'none',
-            padding: 0,
           }}
-          title={`Open in ${platformLabel}`}
         >
-          {showThumb ? (
-            <img
-              src={data.thumbnailUrl}
-              alt=""
-              className="w-full h-full object-cover"
-              draggable={false}
-              onError={() => setThumbErrored(true)}
+          {playing && inlineEmbed ? (
+            <iframe
+              title={data.title || 'Video'}
+              src={inlineEmbed}
+              className="w-full h-full"
+              style={{ border: 'none', display: 'block' }}
+              allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+              allowFullScreen
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <FilmSlate size={28} weight="duotone" style={{ color: 'var(--text-faint)' }} />
-            </div>
+            <>
+              {showThumb ? (
+                <img
+                  src={data.thumbnailUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                  onError={() => setThumbErrored(true)}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <FilmSlate size={28} weight="duotone" style={{ color: 'var(--text-faint)' }} />
+                </div>
+              )}
+              {/* Play badge — the only interactive part of the thumbnail, so
+                  the surrounding image stays a drag handle. */}
+              <button
+                type="button"
+                onPointerDown={controlPointerDown}
+                onClick={onPlay}
+                aria-label={inlineEmbed ? 'Play video here' : `Open in ${platformLabel}`}
+                title={inlineEmbed ? 'Play here' : `Open in ${platformLabel}`}
+                className="absolute flex items-center justify-center transition-transform hover:scale-105"
+                style={{
+                  left: '50%',
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 46,
+                  height: 46,
+                  borderRadius: 999,
+                  backgroundColor: 'rgba(0, 0, 0, 0.58)',
+                  backdropFilter: 'blur(2px)',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <Play size={20} weight="fill" color="#fff" style={{ marginLeft: 2 }} />
+              </button>
+              {data.durationSec > 0 && (
+                <span
+                  className="absolute text-[10.5px] font-medium tabular-nums"
+                  style={{
+                    right: 6,
+                    bottom: 6,
+                    padding: '1px 5px',
+                    borderRadius: 4,
+                    backgroundColor: 'rgba(0, 0, 0, 0.72)',
+                    color: '#fff',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {formatDuration(data.durationSec)}
+                </span>
+              )}
+            </>
           )}
-          {/* Play badge */}
-          <span
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ pointerEvents: 'none' }}
-          >
-            <span
-              className="flex items-center justify-center"
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 999,
-                backgroundColor: 'rgba(0, 0, 0, 0.55)',
-                backdropFilter: 'blur(2px)',
-              }}
-            >
-              <Play size={20} weight="fill" color="#fff" style={{ marginLeft: 2 }} />
-            </span>
-          </span>
-          {data.durationSec > 0 && (
-            <span
-              className="absolute text-[10.5px] font-medium tabular-nums"
-              style={{
-                right: 6,
-                bottom: 6,
-                padding: '1px 5px',
-                borderRadius: 4,
-                backgroundColor: 'rgba(0, 0, 0, 0.72)',
-                color: '#fff',
-              }}
-            >
-              {formatDuration(data.durationSec)}
-            </span>
-          )}
-        </button>
+        </div>
 
-        {/* Body */}
+        {/* Body — title + channel are plain text (drag handle, not links);
+            navigation lives in the play badge + the "Open in" chip. */}
         <div className="flex flex-col gap-1" style={{ padding: '10px 12px', minWidth: 0 }}>
           <div className="flex items-start gap-2">
-            <a
-              href={data.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              onPointerDown={linkPointerDown}
-              onClick={openSource}
-              className="flex-1 min-w-0 text-[13px] font-semibold leading-snug hover:underline"
+            <div
+              className="flex-1 min-w-0 text-[13px] font-semibold leading-snug"
               style={{
-                color: 'inherit',
-                textDecoration: 'none',
-                cursor: 'pointer',
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical',
@@ -200,7 +220,7 @@ export function VideoClipNode({
               title={data.title}
             >
               {data.title || 'Untitled video'}
-            </a>
+            </div>
             <RefreshDot refreshing={refreshing} onClick={onRefresh} />
           </div>
           {data.channel && (
@@ -216,7 +236,7 @@ export function VideoClipNode({
               href={data.url}
               target="_blank"
               rel="noreferrer noopener"
-              onPointerDown={linkPointerDown}
+              onPointerDown={controlPointerDown}
               onClick={openSource}
               className="inline-flex items-center gap-1 text-[10.5px] font-medium hover:underline"
               style={{
@@ -284,6 +304,16 @@ const PLATFORM_LABELS: Record<string, string> = {
   x: 'X',
   vimeo: 'Vimeo',
   other: 'source',
+}
+
+// Inline-player embed URL for platforms that play cleanly in an iframe.
+// YouTube + Vimeo do; TikTok / Instagram / X need their own embed scripts
+// and don't work in a bare iframe, so they return null (play opens source).
+function embedUrl(platform: string, videoId: string): string | null {
+  if (!videoId) return null
+  if (platform === 'youtube') return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
+  if (platform === 'vimeo') return `https://player.vimeo.com/video/${videoId}?autoplay=1`
+  return null
 }
 
 function formatDuration(sec: number): string {

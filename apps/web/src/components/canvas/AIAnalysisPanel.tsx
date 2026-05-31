@@ -407,7 +407,7 @@ function SummaryCard({
 // Renderers — Art Director (existing rich shape) + generic sectioned
 // ---------------------------------------------------------------------------
 
-function ArtDirectorReadout({ data }: { data: AIAnalysis }) {
+export function ArtDirectorReadout({ data }: { data: AIAnalysis }) {
   const hasText = data.tropes.length > 0 || data.hooks.length > 0 || data.statements.length > 0
 
   return (
@@ -507,7 +507,7 @@ function ArtDirectorReadout({ data }: { data: AIAnalysis }) {
   )
 }
 
-function SectionedReadout({ data }: { data: SectionedParagraphs }) {
+export function SectionedReadout({ data }: { data: SectionedParagraphs }) {
   return (
     <div className="space-y-3">
       {data.sections.map((s, i) => (
@@ -530,7 +530,7 @@ function SectionedReadout({ data }: { data: SectionedParagraphs }) {
 // Senior Video Editor — one timestamped craft breakdown per clip in the group.
 // Each video is watched + cached individually, so a group of clips renders a
 // stacked section per clip. Empty group → the agent's `note` hint.
-function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
+export function VideoEditorReadout({ data }: { data: VideoEditorBreakdown }) {
   if (data.clips.length === 0) {
     return (
       <div className="text-[12.5px] text-[var(--text-mute)] italic" style={{ lineHeight: 1.5 }}>
@@ -974,7 +974,7 @@ function FullscreenDrawer({
 // so a 2-agent synthesis doesn't drag empty sections through the page.
 // ---------------------------------------------------------------------------
 
-function BriefReadout({
+export function BriefReadout({
   data,
   logoOverrideOptions,
   onChangeLogos,

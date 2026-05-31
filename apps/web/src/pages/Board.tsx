@@ -1,9 +1,10 @@
-import { ArrowLeft, CornersOut, Minus, Plus } from '@phosphor-icons/react'
+import { ArrowLeft, CornersOut, Minus, Plus, ShareNetwork } from '@phosphor-icons/react'
 import { cubicBezier } from 'framer-motion'
 import { useCallback, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { BoardSync } from '@/components/BoardSync'
 import { MoodBoardCanvas } from '@/components/canvas/MoodBoardCanvas'
+import { ShareDialog } from '@/components/canvas/ShareDialog'
 import { SourcePickerDrawer } from '@/components/canvas/SourcePickerDrawer'
 import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
@@ -36,6 +37,7 @@ export function BoardPage() {
   const boardId = params.id
   const [name, setName] = useState('Untitled board')
   const [editingName, setEditingName] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const scale = useCanvasStore((s) => s.scale)
   const setTransform = useCanvasStore((s) => s.setTransform)
   const tweenCancelRef = useRef<(() => void) | null>(null)
@@ -295,7 +297,25 @@ export function BoardPage() {
               {name}
             </button>
           )}
+          <div className="mx-1 h-4 w-px bg-[var(--border-soft)]" />
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+            title="Share this board"
+            aria-label="Share this board"
+          >
+            <ShareNetwork size={13} weight="regular" />
+            Share
+          </button>
         </div>
+
+        <ShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          boardId={boardId}
+          boardName={name}
+        />
 
         <div
           className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card/95 backdrop-blur-md px-1.5 py-1 text-xs font-mono shadow-[var(--shadow-toast)]"

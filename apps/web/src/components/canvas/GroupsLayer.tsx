@@ -3,55 +3,16 @@ import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupBoundingBox, groupId, proximityGroups } from '@/lib/aabb'
 import { analyzeGroup, synthesizeGroupApi } from '@/lib/analyzeApi'
+import {
+  loadBoardState,
+  saveBoardState,
+  type PersistedBoard,
+} from '@/lib/groupAnalysisStorage'
 import { AIAnalysisPanel, type SlotState } from './AIAnalysisPanel'
 import { ColorPaletteWidget } from './ColorPaletteWidget'
 import { GroupOutline } from './GroupOutline'
 
 const IDLE_SLOT: SlotState = { kind: 'idle' }
-
-// ---------------------------------------------------------------------------
-// Persistence — per-board localStorage so the displayed analysis survives
-// agent-row toggles, board navigation, and full reloads.
-// ---------------------------------------------------------------------------
-
-type PersistedGroup = {
-  // Last completed run for this group. The display is decoupled from the
-  // current agent-row selection — only a fresh run replaces it.
-  display: SlotState
-  // The sorted agent IDs that produced `display`. Drives the play-vs-refresh
-  // icon: refresh when current selection matches, play when it differs.
-  lastRunSelection: AgentId[]
-  // What's currently in the agent row.
-  currentSelection: AgentId[]
-  // Palette hexes pushed to the ColorPaletteWidget (locks every slot).
-  aiPalette: string[]
-}
-type PersistedBoard = Record<string, PersistedGroup>
-
-const STORAGE_PREFIX = 'moodboard:analysis:'
-
-function storageKey(boardId: string): string {
-  return `${STORAGE_PREFIX}${boardId}`
-}
-
-function loadBoardState(boardId: string): PersistedBoard {
-  try {
-    const raw = localStorage.getItem(storageKey(boardId))
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as unknown
-    return parsed && typeof parsed === 'object' ? (parsed as PersistedBoard) : {}
-  } catch {
-    return {}
-  }
-}
-
-function saveBoardState(boardId: string, state: PersistedBoard) {
-  try {
-    localStorage.setItem(storageKey(boardId), JSON.stringify(state))
-  } catch {
-    // Quota exceeded / storage disabled — best-effort, silent.
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Layer

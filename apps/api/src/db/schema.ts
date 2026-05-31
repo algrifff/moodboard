@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm'
-import { boolean, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 // ---------------------------------------------------------------------------
 // better-auth tables (singular names, matches better-auth v1 defaults).
@@ -122,6 +130,41 @@ export const connection = pgTable('connection', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   lastUsedAt: timestamp('last_used_at'),
 })
+
+// Phase 18 — Shareable moodboards. Frozen, immutable snapshot of a board
+// + the per-group synthesis brief, exposed via an unguessable token.
+// One share per (boardId, userId): create/update is upsert; "Update
+// snapshot" replaces snapshot+assetFilenames+capturedAt and nulls out
+// the cached PDF. Token survives updates so existing recipients keep
+// the same URL. assetFilenames gates the public file-streaming endpoint
+// so a token can only reach files that were on the canvas at snapshot
+// time.
+export const share = pgTable(
+  'share',
+  {
+    token: text('token').primaryKey(),
+    boardId: text('board_id')
+      .notNull()
+      .references(() => board.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    // text[] of upload filenames the snapshot references. The public
+    // share-file endpoint requires the requested filename to be in this
+    // allowlist, so a token can't be used to fish unrelated assets.
+    assetFilenames: text('asset_filenames').array().notNull().default(sql`'{}'::text[]`),
+    pdfFilename: text('pdf_filename'),
+    pdfGeneratedAt: timestamp('pdf_generated_at'),
+    capturedAt: timestamp('captured_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    // One share per (board, owner). The share endpoint upserts on this.
+    boardOwnerIdx: uniqueIndex('share_board_user_idx').on(t.boardId, t.userId),
+  }),
+)
 
 // Per-user recent picks across sources. Drives the picker drawer's "Recents"
 // tab without re-querying the provider every time. Capped server-side; old

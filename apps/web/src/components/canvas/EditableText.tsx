@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ElementType } from 'react'
+import { useReadOnly } from '@/lib/readOnlyContext'
 
 // Inline-editable text. Single-click enters edit mode (contentEditable);
 // Enter or blur commits; Escape cancels. Multi-line bodies skip the
@@ -18,6 +19,7 @@ export function EditableText({
   style,
   as = 'div',
   title = 'Click to edit',
+  readOnly = false,
 }: {
   value: string
   onCommit: (next: string) => void
@@ -26,10 +28,34 @@ export function EditableText({
   style?: CSSProperties
   as?: ElementType
   title?: string
+  // Public share viewer renders briefs but mustn't let a viewer edit
+  // them. readOnly returns a plain rendered span without click/hover
+  // affordances; clicks pass through to whatever sits below.
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [hover, setHover] = useState(false)
   const ref = useRef<HTMLElement>(null)
+  // Share viewer wraps the brief in a ReadOnlyProvider — explicit
+  // `readOnly` prop wins when set, otherwise we read context.
+  const ctxReadOnly = useReadOnly()
+  const isReadOnly = readOnly || ctxReadOnly
+
+  if (isReadOnly) {
+    const Tag = as
+    return (
+      <Tag
+        style={{
+          whiteSpace: multiline ? 'pre-wrap' : 'normal',
+          minHeight: '1em',
+          ...style,
+        }}
+        className={className}
+      >
+        {value}
+      </Tag>
+    )
+  }
 
   // When entering edit mode: write the current value into the freshly-
   // mounted contentEditable, focus, and select all. useLayoutEffect

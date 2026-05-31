@@ -437,3 +437,23 @@
     --tw-ring-color: var(--accent);
   }
 }
+
+/* Phase 18 — Share viewer print rules.
+   Applied both when an actual print dialog runs (window.print() from
+   the browser) and via the ?print=1 query that the Playwright PDF
+   renderer uses to flip the page into print mode without firing the
+   media query (Chromium honours `?print=1` via [data-print-mode]). */
+@media print {
+  .share-group {
+    break-before: page;
+  }
+  .share-group:first-of-type {
+    break-before: avoid;
+  }
+}
+html[data-print-mode='1'] .share-group {
+  break-before: page;
+}
+html[data-print-mode='1'] .share-group:first-of-type {
+  break-before: avoid;
+}

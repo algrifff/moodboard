@@ -14,6 +14,7 @@ import { boards } from './routes/boards'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
 import { files } from './routes/files'
+import { boardShare, shares } from './routes/shares'
 import { voice } from './routes/voice'
 
 type AppVariables = {
@@ -96,6 +97,12 @@ const jsonBodyLimit = bodyLimit({
 api.use('/boards', jsonBodyLimit)
 api.use('/boards/*', jsonBodyLimit)
 
+// Owner-side share endpoints — auth-gated upsert / get / delete for the
+// share belonging to a given board. Registered BEFORE the boards router
+// so the more specific path matches first. Public viewer + PDF endpoints
+// mount separately under /shares (no global auth).
+api.route('/boards/:boardId/share', boardShare)
+api.route('/shares', shares)
 api.route('/boards', boards)
 api.route('/connections', connections)
 api.route('/external', external)

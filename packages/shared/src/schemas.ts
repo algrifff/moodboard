@@ -1,8 +1,12 @@
 import { z } from 'zod'
 
+// URLs on canvas objects are typically server-relative `/api/files/<id>`
+// paths, not absolute URLs. The boards endpoint accepts state via
+// z.unknown() so this never bit there — Phase 18 share validation
+// catches it now. Match webPageDataSchema's precedent: plain string.
 export const imageDataSchema = z.object({
-  url: z.string().url(),
-  thumbnailUrl: z.string().url().optional(),
+  url: z.string().min(1),
+  thumbnailUrl: z.string().min(1).optional(),
 })
 
 export const stickyDataSchema = z.object({
@@ -21,14 +25,14 @@ export const textDataSchema = z.object({
 })
 
 export const pdfDataSchema = z.object({
-  url: z.string().url(),
-  thumbnailUrl: z.string().url(),
+  url: z.string().min(1),
+  thumbnailUrl: z.string().min(1),
   extractedText: z.string(),
   pageCount: z.number().optional(),
 })
 
 export const fontDataSchema = z.object({
-  url: z.string().url(),
+  url: z.string().min(1),
   family: z.string(),
   sampleText: z.string().optional(),
 })
@@ -203,7 +207,7 @@ export const videoClipDataSchema = z.object({
 })
 
 export const voiceNoteDataSchema = z.object({
-  url: z.string(),
+  url: z.string().min(1),
   mimeType: z.string(),
   durationSec: z.number(),
   transcript: z.string(),
@@ -698,3 +702,110 @@ export const updateBoardRequestSchema = z.object({
   data: z.unknown().optional(),
 })
 export type UpdateBoardRequest = z.infer<typeof updateBoardRequestSchema>
+
+// ---------------------------------------------------------------------------
+// Phase 18 — shareable moodboards
+// ---------------------------------------------------------------------------
+
+// Discriminated union mirroring SharedAnalysisDisplay in types.ts.
+export const sharedAnalysisDisplaySchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('ad'), data: aiAnalysisSchema }),
+  z.object({ kind: z.literal('sectioned'), data: sectionedParagraphsSchema }),
+  z.object({ kind: z.literal('video'), data: videoEditorBreakdownSchema }),
+  z.object({ kind: z.literal('brief'), data: synthesisBriefSchema }),
+])
+
+export const sharedGroupSnapshotSchema = z.object({
+  key: z.string(),
+  objectIds: z.array(z.string()),
+  bounds: z.object({
+    left: z.number(),
+    top: z.number(),
+    right: z.number(),
+    bottom: z.number(),
+  }),
+  palette: z.array(z.string()),
+  display: sharedAnalysisDisplaySchema.optional(),
+  // Back-compat for pre-`display` shares that only carried briefs.
+  brief: synthesisBriefSchema.optional(),
+})
+
+export const sharedBoardSnapshotSchema = z.object({
+  version: z.literal(1),
+  boardName: z.string().min(1).max(200),
+  capturedAt: z.string(),
+  // Reuse the existing canvas-object schema so the snapshot stays
+  // structurally identical to what the editor stores.
+  objects: z.array(canvasObjectSchema),
+  groups: z.array(sharedGroupSnapshotSchema),
+})
+export type SharedBoardSnapshotInput = z.infer<typeof sharedBoardSnapshotSchema>
+
+export const createShareRequestSchema = z.object({
+  snapshot: sharedBoardSnapshotSchema,
+})
+export type CreateShareRequest = z.infer<typeof createShareRequestSchema>
+
+export const shareViewSchema = z.object({
+  token: z.string(),
+  boardName: z.string(),
+  snapshot: sharedBoardSnapshotSchema,
+  capturedAt: z.string(),
+  updatedAt: z.string(),
+})
+export type ShareViewParsed = z.infer<typeof shareViewSchema>
+
+export const shareResponseSchema = z.object({ share: shareViewSchema })
+export type ShareResponse = z.infer<typeof shareResponseSchema>
+
+// ---------------------------------------------------------------------------
+// Asset walker — pulls every /api/files/<filename> reference out of a
+// SharedBoardSnapshot. Used by the share creator to populate the
+// assetFilenames allowlist that gates the public share-file route.
+// External URLs (Spotify CDN, Notion icons, etc.) pass through unchanged
+// — the viewer requests them directly.
+// ---------------------------------------------------------------------------
+
+const API_FILES_PREFIX = '/api/files/'
+
+function pushIfApiFile(out: Set<string>, value: unknown): void {
+  if (typeof value !== 'string') return
+  if (!value.startsWith(API_FILES_PREFIX)) return
+  const filename = value.slice(API_FILES_PREFIX.length).split('?')[0]?.split('#')[0]
+  if (filename && filename.length > 0) out.add(filename)
+}
+
+export function collectAssetFilenames(snapshot: {
+  objects: { type: string; data: Record<string, unknown> }[]
+}): string[] {
+  const out = new Set<string>()
+  for (const o of snapshot.objects) {
+    const d = o.data
+    if (!d || typeof d !== 'object') continue
+    // The fields that may carry /api/files URLs across object types:
+    //   image.url, image.thumbnailUrl
+    //   pdf.url, pdf.thumbnailUrl
+    //   font.url
+    //   voice-note.url
+    //   video-clip.thumbnailUrl
+    // Walking every string-valued field is safe — other URLs are
+    // external and won't pass the prefix check.
+    for (const key of Object.keys(d)) {
+      pushIfApiFile(out, (d as Record<string, unknown>)[key])
+    }
+    // LogoImages on web-page are nested arrays of {url}. Walk one
+    // level of arrays-of-objects-with-url for completeness.
+    for (const value of Object.values(d)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item && typeof item === 'object') {
+            for (const v of Object.values(item)) {
+              pushIfApiFile(out, v)
+            }
+          }
+        }
+      }
+    }
+  }
+  return Array.from(out).sort()
+}

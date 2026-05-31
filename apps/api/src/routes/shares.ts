@@ -16,13 +16,7 @@ import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
 import { renderSharePdf } from '../lib/pdfRender'
 import { rateLimit } from '../lib/rateLimit'
-import {
-  externalPath,
-  isSafeFilename,
-  pdfPath,
-  pdfThumbPath,
-  uploadPath,
-} from '../lib/storage'
+import { externalPath, isSafeFilename, pdfPath, pdfThumbPath, uploadPath } from '../lib/storage'
 import { mimeFromExt } from '../lib/upload-validation'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }

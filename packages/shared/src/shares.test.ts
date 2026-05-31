@@ -45,10 +45,7 @@ describe('collectAssetFilenames', () => {
           type: 'web-page',
           data: {
             url: 'https://example.com',
-            logoImages: [
-              { url: '/api/files/logo1.png' },
-              { url: 'https://external/logo2.png' },
-            ],
+            logoImages: [{ url: '/api/files/logo1.png' }, { url: 'https://external/logo2.png' }],
           },
         },
       ],

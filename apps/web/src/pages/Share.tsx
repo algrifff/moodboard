@@ -286,8 +286,7 @@ function ShareBody({
             style={{
               marginTop: snapshot.groups.length > 0 ? 64 : 0,
               paddingTop: 28,
-              borderTop:
-                snapshot.groups.length > 0 ? '1px solid var(--border-soft)' : 'none',
+              borderTop: snapshot.groups.length > 0 ? '1px solid var(--border-soft)' : 'none',
             }}
           >
             <SectionLabel>Other sources</SectionLabel>
@@ -655,9 +654,7 @@ function SourceCard({ object }: { object: CanvasObject }) {
             <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-faint)] font-semibold">
               Voice note
             </span>
-            <span className="text-[10px] text-[var(--text-mute)]">
-              · {d.durationSec}s
-            </span>
+            <span className="text-[10px] text-[var(--text-mute)]">· {d.durationSec}s</span>
           </div>
           <audio
             controls
@@ -705,8 +702,7 @@ function SourceCard({ object }: { object: CanvasObject }) {
             </span>
             {d.durationSec > 0 && (
               <span className="text-[10px] text-[var(--text-mute)]">
-                · {Math.floor(d.durationSec / 60)}:
-                {String(d.durationSec % 60).padStart(2, '0')}
+                · {Math.floor(d.durationSec / 60)}:{String(d.durationSec % 60).padStart(2, '0')}
               </span>
             )}
           </div>
@@ -734,9 +730,7 @@ function SourceCard({ object }: { object: CanvasObject }) {
           style={{ ...wrap, display: 'block', textDecoration: 'none', color: 'inherit' }}
         >
           <div className="flex items-center gap-1.5">
-            {d.faviconUrl && (
-              <img src={d.faviconUrl} alt="" style={{ width: 14, height: 14 }} />
-            )}
+            {d.faviconUrl && <img src={d.faviconUrl} alt="" style={{ width: 14, height: 14 }} />}
             <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-faint)] font-semibold">
               {d.host}
             </span>
@@ -843,12 +837,7 @@ function SourceCard({ object }: { object: CanvasObject }) {
           : 'albumCoverUrl' in d
             ? (d as SpotifyTrackData).albumCoverUrl
             : undefined
-      const subtitle =
-        'ownerName' in d
-          ? d.ownerName
-          : 'artists' in d
-            ? d.artists.join(', ')
-            : ''
+      const subtitle = 'ownerName' in d ? d.ownerName : 'artists' in d ? d.artists.join(', ') : ''
       return (
         <a
           href={d.url}

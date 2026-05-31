@@ -1,13 +1,5 @@
 import { sql } from 'drizzle-orm'
-import {
-  boolean,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-} from 'drizzle-orm/pg-core'
+import { boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 // ---------------------------------------------------------------------------
 // better-auth tables (singular names, matches better-auth v1 defaults).
@@ -154,7 +146,10 @@ export const share = pgTable(
     // text[] of upload filenames the snapshot references. The public
     // share-file endpoint requires the requested filename to be in this
     // allowlist, so a token can't be used to fish unrelated assets.
-    assetFilenames: text('asset_filenames').array().notNull().default(sql`'{}'::text[]`),
+    assetFilenames: text('asset_filenames')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     pdfFilename: text('pdf_filename'),
     pdfGeneratedAt: timestamp('pdf_generated_at'),
     capturedAt: timestamp('captured_at').notNull().defaultNow(),

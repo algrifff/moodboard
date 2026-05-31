@@ -12,11 +12,7 @@ import { createPortal } from 'react-dom'
 import { groupBoundingBox, groupId, proximityGroups } from '@/lib/aabb'
 import { loadBoardState, type PersistedGroup } from '@/lib/groupAnalysisStorage'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
-import {
-  createOrUpdateBoardShare,
-  deleteBoardShare,
-  getBoardShare,
-} from '@/lib/sharesApi'
+import { createOrUpdateBoardShare, deleteBoardShare, getBoardShare } from '@/lib/sharesApi'
 import { useCanvasStore } from '@/store/canvas'
 import { showToast } from './Toast'
 
@@ -231,48 +227,48 @@ export function ShareDialog({
                 pointerEvents: 'auto',
               }}
             >
-            <header className="flex items-center justify-between gap-3">
-              <h2
-                className="text-foreground"
-                style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.005em' }}
-              >
-                Share this board
-              </h2>
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close"
-                className="text-[var(--text-mute)] hover:text-foreground transition-colors"
-                style={{ width: 24, height: 24 }}
-              >
-                <X size={14} weight="bold" />
-              </button>
-            </header>
+              <header className="flex items-center justify-between gap-3">
+                <h2
+                  className="text-foreground"
+                  style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.005em' }}
+                >
+                  Share this board
+                </h2>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Close"
+                  className="text-[var(--text-mute)] hover:text-foreground transition-colors"
+                  style={{ width: 24, height: 24 }}
+                >
+                  <X size={14} weight="bold" />
+                </button>
+              </header>
 
-            <div style={{ marginTop: 16 }}>
-              {status.kind === 'loading' && (
-                <p className="text-[13px] text-[var(--text-mute)]">Loading…</p>
-              )}
-              {status.kind === 'error' && (
-                <p className="text-[13px] text-destructive break-words">{status.message}</p>
-              )}
-              {status.kind === 'no-share' && (
-                <CreateState
-                  busy={working === 'create'}
-                  onCreate={() => createOrUpdate('create')}
-                />
-              )}
-              {status.kind === 'has-share' && (
-                <ManageState
-                  share={status.share}
-                  busy={working}
-                  confirmRevoke={confirmRevoke}
-                  setConfirmRevoke={setConfirmRevoke}
-                  onUpdate={() => createOrUpdate('update')}
-                  onRevoke={revoke}
-                />
-              )}
-            </div>
+              <div style={{ marginTop: 16 }}>
+                {status.kind === 'loading' && (
+                  <p className="text-[13px] text-[var(--text-mute)]">Loading…</p>
+                )}
+                {status.kind === 'error' && (
+                  <p className="text-[13px] text-destructive break-words">{status.message}</p>
+                )}
+                {status.kind === 'no-share' && (
+                  <CreateState
+                    busy={working === 'create'}
+                    onCreate={() => createOrUpdate('create')}
+                  />
+                )}
+                {status.kind === 'has-share' && (
+                  <ManageState
+                    share={status.share}
+                    busy={working}
+                    confirmRevoke={confirmRevoke}
+                    setConfirmRevoke={setConfirmRevoke}
+                    onUpdate={() => createOrUpdate('update')}
+                    onRevoke={revoke}
+                  />
+                )}
+              </div>
             </motion.div>
           </div>
         </>
@@ -289,14 +285,11 @@ export function ShareDialog({
 function CreateState({ busy, onCreate }: { busy: boolean; onCreate: () => void }) {
   return (
     <div>
-      <p
-        className="text-[13px] text-[var(--text-soft)]"
-        style={{ lineHeight: 1.55, margin: 0 }}
-      >
-        Creating a share link captures a snapshot of your moodboard as it is now. Anyone with
-        the link can view the board and the synthesis brief — but{' '}
-        <span className="text-foreground font-medium">future edits won't appear</span> until
-        you choose to update the snapshot.
+      <p className="text-[13px] text-[var(--text-soft)]" style={{ lineHeight: 1.55, margin: 0 }}>
+        Creating a share link captures a snapshot of your moodboard as it is now. Anyone with the
+        link can view the board and the synthesis brief — but{' '}
+        <span className="text-foreground font-medium">future edits won't appear</span> until you
+        choose to update the snapshot.
       </p>
       <div style={{ marginTop: 18 }} className="flex justify-end">
         <button
@@ -384,8 +377,8 @@ function ManageState({
       </div>
 
       <p className="text-[11.5px] text-[var(--text-faint)]" style={{ marginTop: 8 }}>
-        Snapshot from {capturedDate}. Future edits won't appear in this share until you update
-        the snapshot.
+        Snapshot from {capturedDate}. Future edits won't appear in this share until you update the
+        snapshot.
       </p>
 
       <div style={{ marginTop: 18 }} className="flex items-center justify-between gap-3">
@@ -451,4 +444,3 @@ function ManageState({
     </div>
   )
 }
-

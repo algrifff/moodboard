@@ -173,6 +173,7 @@ const SYNTHESIS_JSON_SCHEMA = {
     'statements',
     'watchFors',
     'notes',
+    'video',
   ],
   properties: {
     throughline: {
@@ -357,6 +358,76 @@ const SYNTHESIS_JSON_SCHEMA = {
         'Markdown-style bullet points for nuance the structured fields cannot hold — places agents disagreed, tensions to resolve, things to revisit. Used sparingly. 0–3 entries.',
       items: { type: 'string' as const },
     },
+    video: {
+      type: 'object' as const,
+      additionalProperties: false,
+      required: ['hooks', 'transitions', 'pacing'],
+      description:
+        "Video direction distilled from the Senior Video Editor's read of the reference clips, translated into a plan for the brand's OWN video. Populate ONLY when a Senior Video Editor read is present in the inputs; otherwise both arrays empty and pacing an empty string.",
+      properties: {
+        hooks: {
+          type: 'array' as const,
+          description:
+            "Opening hooks the brand should use, adapted from the reference clips' hooks. 2–4 entries when a video read exists, empty otherwise.",
+          items: {
+            type: 'object' as const,
+            additionalProperties: false,
+            required: ['at', 'say', 'technique', 'why'],
+            properties: {
+              at: {
+                type: 'string' as const,
+                description:
+                  'Timing cue in the brand\'s video as "M:SS" (usually "0:00"–"0:03" for an opening hook).',
+              },
+              say: {
+                type: 'string' as const,
+                description:
+                  'The concrete line to SAY or on-screen action to take at this moment — written for the brand, in its voice. Not a description of the reference; the actual move.',
+              },
+              technique: {
+                type: 'string' as const,
+                description:
+                  'The hook technique being borrowed from the reference clip (e.g. "cold-open question", "pattern-interrupt cut", "in-media-res reveal").',
+              },
+              why: {
+                type: 'string' as const,
+                description: 'One clause on why it holds attention for this brand + audience.',
+              },
+            },
+          },
+        },
+        transitions: {
+          type: 'array' as const,
+          description:
+            "Transitions that would work for the brand's video + when to fire them. 2–4 entries when a video read exists, empty otherwise.",
+          items: {
+            type: 'object' as const,
+            additionalProperties: false,
+            required: ['at', 'type', 'note'],
+            properties: {
+              at: {
+                type: 'string' as const,
+                description: 'Where in the brand\'s video to use it, as "M:SS".',
+              },
+              type: {
+                type: 'string' as const,
+                description:
+                  'Transition type (e.g. "whip pan", "match cut", "J-cut", "hard cut on beat", "zoom punch").',
+              },
+              note: {
+                type: 'string' as const,
+                description: 'One clause: the effect it creates and how to execute it here.',
+              },
+            },
+          },
+        },
+        pacing: {
+          type: 'string' as const,
+          description:
+            "One line on cut rhythm / energy curve for the brand's video, drawn from the reference clips' pacing. Empty string when no video read.",
+        },
+      },
+    },
   },
 }
 
@@ -508,11 +579,11 @@ Match the moodboard's confidence. If it's a quiet brand, write quietly. If it's 
 
 Banned words. ${BANNED_PHRASES}`,
   },
-  // The Senior Video Editor is special: it doesn't run on Claude. analyzeGroup
-  // routes it to Gemini (lib/gemini.ts), which watches the video. The
-  // jsonSchema + systemPrompt here are inert placeholders to satisfy the
-  // registry shape; only `label` and `outputSchema` are used (label in the
-  // synthesize route, outputSchema for validating Gemini's JSON).
+  // The Senior Video Editor is special: it doesn't run on Claude. The analyze
+  // route handles it per-clip (getVideoEditorResult → lib/gemini.ts), which
+  // watches each video. jsonSchema / systemPrompt / outputSchema here are inert
+  // placeholders to satisfy the registry shape; only `label` is used at runtime
+  // (in the synthesize route). Gemini output is validated inside lib/gemini.ts.
   'video-editor': {
     id: 'video-editor',
     label: 'Senior Video Editor',
@@ -579,11 +650,18 @@ watchFors — specific things this brand should NOT do. Pull from the Art Direct
 
 notes — 0–3 entries, used sparingly. Markdown-style bullet lines for nuance the structured fields don't hold — places agents disagreed, things to revisit, tensions to resolve. Skip if there's nothing genuinely worth flagging.
 
+video — fill this ONLY when the "Senior Video Editor" read is among the inputs. That read is a craft breakdown of reference clips (hooks, transitions, sound design, spoken beats, pacing, per clip). Your job is NOT to repeat it — it's to translate it into direction for the brand making ITS OWN video. Across all the clips the editor analysed:
+  - video.hooks — 2–4 opening hooks the brand should use. Each: \`at\` (timing in the brand's video, "M:SS", usually "0:00"), \`say\` (the actual line to say or on-screen action — written in THIS brand's voice, using the Copywriter/AD reads for tone; a real move, not a description), \`technique\` (name the MOVE, never the source creator or channel — e.g. "cold-open question", "pattern-interrupt cut", not "a MrBeast-style hook"), \`why\` (one clause on why it holds this audience).
+  - video.transitions — 2–4 transitions that would work for the brand's video. Each: \`at\` ("M:SS"), \`type\` ("whip pan", "match cut", "J-cut", "hard cut on beat"…), \`note\` (the effect + how to execute it here).
+  - video.pacing — one line on cut rhythm / energy curve, drawn from the reference clips' pacing.
+  If there is NO Senior Video Editor read, return empty arrays and an empty pacing string. Don't invent video direction from the static moodboard.
+
 Hard rules:
 - Don't summarise. Extract.
 - Don't invent. If a sample phrase isn't in the agent outputs, leave samples empty.
 - Don't pad. Empty arrays are correct when a specialist didn't run.
 - Every short line is its own entry. Don't collapse multiple hooks into one paragraph.
+- Naming discipline. Keep the brief clean of proper names. Do NOT name specific brands, companies, creators, influencers, YouTubers, or public figures anywhere EXCEPT the \`references\` field (which is the Art Director's curated "in conversation with" list, and may name designers / studios / movements). Everywhere else — throughline, positioning, audiences, channels, hooks, statements, watchFors, notes, bodyCopy, and especially the entire \`video\` block — describe the technique, quality, or approach generically instead of attributing it to a named source. A video clip's channel/creator name (e.g. "MrBeast") must NOT appear: convert "a MrBeast-style hook" into the move itself ("an immediate high-stakes reveal in the first second"). And don't inject names harvested from video clips into \`references\` either — that field is design canon from the Art Director. Use a proper name only when it is genuinely load-bearing and there is no faithful way to say it otherwise.
 
 Banned words. ${BANNED_PHRASES}
 

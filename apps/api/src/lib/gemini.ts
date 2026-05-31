@@ -17,9 +17,9 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { createPartFromUri, createUserContent, GoogleGenAI } from '@google/genai'
-import type { VideoClipData, VideoEditorBreakdown } from '@moodboard/shared'
-import { videoEditorBreakdownSchema } from '@moodboard/shared'
+import { createPartFromUri, createUserContent, GoogleGenAI, MediaResolution } from '@google/genai'
+import type { VideoClipBreakdown, VideoClipData } from '@moodboard/shared'
+import { geminiVideoCraftSchema } from '@moodboard/shared'
 
 const execFileAsync = promisify(execFile)
 
@@ -54,7 +54,7 @@ Return ONLY a JSON object (no prose, no markdown) with EXACTLY this shape:
 
 Aim for 2–5 entries in each array where the video supports it. If a dimension genuinely isn't present (e.g. no spoken word), return an empty array for it. Do not invent moments that aren't there.`
 
-export async function analyzeVideoForEditor(clip: VideoClipData): Promise<VideoEditorBreakdown> {
+export async function analyzeVideoForEditor(clip: VideoClipData): Promise<VideoClipBreakdown> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new GeminiKeyMissingError()
   const ai = new GoogleGenAI({ apiKey: key })
@@ -74,18 +74,46 @@ export async function analyzeVideoForEditor(clip: VideoClipData): Promise<VideoE
     const response = await ai.models.generateContent({
       model: GEMINI_VIDEO_MODEL,
       contents,
-      config: { responseMimeType: 'application/json' },
+      // Low media resolution ~thirds the per-second video token cost — plenty
+      // for short-form craft analysis, and the per-clip cache means we only
+      // pay it once per video anyway.
+      config: {
+        responseMimeType: 'application/json',
+        mediaResolution: MediaResolution.MEDIA_RESOLUTION_LOW,
+      },
     })
     const text = response.text ?? ''
     const json = safeParseJson(text)
     if (!json) {
-      return unavailable('Gemini returned an unreadable response — try re-running.')
+      return videoClipUnavailable(clip, 'Gemini returned an unreadable response — try re-running.')
     }
-    const parsed = videoEditorBreakdownSchema.safeParse(json)
+    const parsed = geminiVideoCraftSchema.safeParse(json)
     if (!parsed.success) {
-      return unavailable("Gemini's analysis didn't match the expected shape — try re-running.")
+      return videoClipUnavailable(
+        clip,
+        "Gemini's analysis didn't match the expected shape — try re-running.",
+      )
     }
-    return parsed.data
+    // Identity comes from the clip object, never the model.
+    return {
+      videoId: clip.videoId,
+      title: clip.title,
+      platform: clip.platform,
+      url: clip.url,
+      ...parsed.data,
+    }
+  } catch (e) {
+    // One bad clip shouldn't 502 the whole group — surface it as an unavailable
+    // entry so the clips that worked still render. The missing-key case is
+    // thrown above (before this try) so it still propagates → 503.
+    console.warn('analyzeVideoForEditor failed', { videoId: clip.videoId, error: e })
+    const m = e instanceof Error ? e.message : String(e)
+    const reason = /too long|timeout/i.test(m)
+      ? 'This clip took too long to process — try a shorter clip or re-run.'
+      : /download|yt-dlp|unsupported|not available|could not/i.test(m)
+        ? "Couldn't download this clip for analysis (the platform may block it)."
+        : 'Couldn’t analyse this clip — try re-running.'
+    return videoClipUnavailable(clip, reason)
   } finally {
     if (cleanup) await cleanup().catch(() => {})
   }
@@ -159,8 +187,15 @@ async function downloadAndUpload(
   }
 }
 
-function unavailable(reason: string): VideoEditorBreakdown {
+// A per-clip breakdown carrying only the clip's identity + a human-readable
+// reason it couldn't be analysed. Not cached by the caller (so re-running
+// retries the clip).
+export function videoClipUnavailable(clip: VideoClipData, reason: string): VideoClipBreakdown {
   return {
+    videoId: clip.videoId,
+    title: clip.title,
+    platform: clip.platform,
+    url: clip.url,
     summary: '',
     hooks: [],
     transitions: [],

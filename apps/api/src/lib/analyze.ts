@@ -426,15 +426,14 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     })
   }
   if (videoBlocks.length > 0) {
-    // Video clips land as reference material — the user pasted a YouTube /
-    // TikTok / Reel because its content or vibe matters. The transcript is
-    // the high-signal part (what's actually said → subject, voice, claims,
-    // audience); title + channel give framing. Read for voice, positioning,
-    // and tonal register. Spoken-word cadence is not a typography signal.
+    // Video clips appear here only as framing (title / channel / platform /
+    // duration). The deep read — hooks, transitions, pacing, sound design,
+    // dialogue — is produced by the Senior Video Editor agent (Gemini) and
+    // reaches the synthesizer through that agent's output, not this block.
     content.push({
       type: 'text',
       text:
-        'Video clips on this board (treat as primary reference — the user pasted these because the content or vibe matters). The transcript is what is actually said in the clip: read it for subject matter, voice, claims, audience, and tonal register. Title + channel give framing. Where a transcript is absent the clip was un-transcribable — work from the title + channel alone.\n\n' +
+        'Video clips on this board (the user pasted these because the content or vibe matters). Treat the title + channel as a topical/voice hint. The detailed video breakdown is handled by the Senior Video Editor agent.\n\n' +
         videoBlocks.join('\n\n'),
     })
   }
@@ -578,23 +577,14 @@ function formatSpotifyAlbum(d: SpotifyAlbumData): string {
   return `--- ${head.join('\n')} ---\nTrack list:\n${trackLines.join('\n')}\n--- end Spotify album ---`
 }
 
-// Cap the transcript fed into the prompt — long videos can run thousands of
-// words and we only need enough to set the tone/subject, not the whole thing.
-const VIDEO_TRANSCRIPT_MAX = 6000
-
 function formatVideoClip(d: VideoClipData): string {
+  // The AD only gets framing here (title / channel / platform / duration).
+  // The deep read — hooks, transitions, pacing, sound, dialogue — comes from
+  // the Senior Video Editor agent (Gemini), which the synthesizer folds in.
   const dur = d.durationSec > 0 ? ` (${formatVideoDuration(d.durationSec)})` : ''
   const platform = d.platform && d.platform !== 'other' ? ` [${d.platform}]` : ''
-  const head = [
-    `Video: "${d.title || 'Untitled'}"${d.channel ? ` by ${d.channel}` : ''}${dur}${platform}`,
-  ]
-  const t = d.transcript.trim()
-  if (!t) {
-    head.push('Transcript: unavailable (could not transcribe — read from title + channel).')
-    return `--- ${head.join('\n')} ---\n--- end video ---`
-  }
-  const transcript = t.length > VIDEO_TRANSCRIPT_MAX ? `${t.slice(0, VIDEO_TRANSCRIPT_MAX)}…` : t
-  return `--- ${head.join('\n')} ---\nTranscript:\n${transcript}\n--- end video ---`
+  const head = `Video: "${d.title || 'Untitled'}"${d.channel ? ` by ${d.channel}` : ''}${dur}${platform}`
+  return `--- ${head} ---\n--- end video ---`
 }
 
 function formatVideoDuration(sec: number): string {

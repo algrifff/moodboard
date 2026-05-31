@@ -1,25 +1,20 @@
-// Video clip extractor — yt-dlp metadata + audio, OpenAI Whisper transcript,
-// platform thumbnail saved to /data like an upload.
+// Video clip extractor — yt-dlp metadata + the platform thumbnail saved to
+// /data like an upload. Lightweight: no audio download, no transcription.
 //
 // Pipeline (extractVideoClip):
-//   1. yt-dlp -J <url>            → metadata (id, title, channel, duration, thumb)
-//   2. yt-dlp -x (mp3, 16k mono)  → audio to a temp dir   [only if transcribing]
-//   3. OpenAI whisper-1           → transcript
-//   4. fetch the platform thumb   → saveUpload → /api/files/<id>.<ext>
-//   5. delete the temp audio
+//   1. yt-dlp -J <url>          → metadata (id, title, channel, duration, thumb)
+//   2. fetch the platform thumb → saveUpload → /api/files/<id>.<ext>
+//
+// Deep analysis (transitions, hooks, pacing, sound, dialogue) is NOT done
+// here — it's the Senior Video Editor agent's job, which sends the clip to
+// Gemini at analysis time (see lib/gemini.ts). Import just lands the card.
 //
 // No connection / OAuth — yt-dlp handles public-content access itself. The
 // URL host is checked against the private-IP guard (shared with web.ts) so a
-// pasted internal URL can't turn this into an SSRF primitive.
-//
-// Everything past metadata degrades gracefully: missing OPENAI_API_KEY, an
-// over-long video, an oversized or failed audio download, or a missing
-// thumbnail each just drop that piece — the import still returns the card.
+// pasted internal URL can't turn this into an SSRF primitive. A missing
+// thumbnail degrades gracefully — the import still returns the card.
 
 import { execFile } from 'node:child_process'
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import type { VideoClipData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
@@ -28,21 +23,9 @@ import { isPrivateHost } from './web'
 
 const execFileAsync = promisify(execFile)
 
-// yt-dlp metadata probe budget. The audio download gets its own longer
-// budget since it actually pulls bytes.
+// yt-dlp metadata probe budget.
 const META_TIMEOUT_MS = 45_000
-const DOWNLOAD_TIMEOUT_MS = 120_000
-const WHISPER_TIMEOUT_MS = 120_000
-
-// Videos longer than this skip transcription (cost + Whisper's 25 MB file
-// cap). Metadata + thumbnail still import. 16 kHz mono mp3 ≈ 0.5 MB/min, so
-// 40 min stays comfortably under the cap.
-const MAX_TRANSCRIBE_SEC = 40 * 60
-// Whisper rejects files > 25 MB; stay under with headroom.
-const AUDIO_MAX_BYTES = 24 * 1024 * 1024
 const THUMB_MAX_BYTES = 8 * 1024 * 1024
-
-const OPENAI_TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
 
 export class VideoExtractError extends Error {
   constructor(
@@ -97,27 +80,11 @@ export async function extractVideoClip(input: string, userId: string): Promise<V
   const channel = (meta.channel ?? meta.uploader ?? meta.uploader_id ?? '').trim()
   const durationSec = typeof meta.duration === 'number' && meta.duration > 0 ? meta.duration : 0
 
-  // Thumbnail + transcript are independent best-effort enrichments.
-  const [thumbnailUrl, transcript] = await Promise.all([
-    saveThumbnail(meta.thumbnail, userId).catch(() => ''),
-    maybeTranscribe(parsed.toString(), durationSec).catch((e) => {
-      console.warn('[video] transcription failed, continuing without:', errMsg(e))
-      return ''
-    }),
-  ])
+  // Best-effort thumbnail — a failure just leaves the card with its glyph.
+  const thumbnailUrl = await saveThumbnail(meta.thumbnail, userId).catch(() => '')
 
   return {
-    data: {
-      platform,
-      url,
-      videoId,
-      title,
-      channel,
-      durationSec,
-      thumbnailUrl,
-      transcript,
-      fetchedAt,
-    },
+    data: { platform, url, videoId, title, channel, durationSec, thumbnailUrl, fetchedAt },
   }
 }
 
@@ -158,62 +125,6 @@ async function probeMetadata(url: string): Promise<YtMeta> {
     return json.entries[0]
   }
   return json
-}
-
-async function maybeTranscribe(url: string, durationSec: number): Promise<string> {
-  const key = process.env.OPENAI_API_KEY
-  if (!key) return '' // transcription is opt-in via the key
-  if (durationSec > 0 && durationSec > MAX_TRANSCRIBE_SEC) return '' // too long — skip
-  const dir = await mkdtemp(path.join(tmpdir(), 'mb-video-'))
-  try {
-    // Pull just the audio, transcoded to 16 kHz mono mp3 — ideal for speech
-    // recognition and small enough to stay under Whisper's 25 MB cap.
-    await execFileAsync(
-      'yt-dlp',
-      [
-        '-x',
-        '--audio-format',
-        'mp3',
-        '--no-playlist',
-        '--no-warnings',
-        '--no-progress',
-        '--postprocessor-args',
-        'ffmpeg:-ar 16000 -ac 1 -b:a 64k',
-        '-o',
-        path.join(dir, 'audio.%(ext)s'),
-        url,
-      ],
-      { timeout: DOWNLOAD_TIMEOUT_MS, maxBuffer: 16 * 1024 * 1024 },
-    )
-    const files = await readdir(dir)
-    const mp3 = files.find((f) => f.endsWith('.mp3'))
-    if (!mp3) return ''
-    const buf = await readFile(path.join(dir, mp3))
-    if (buf.byteLength > AUDIO_MAX_BYTES) return '' // would 413 at Whisper
-    return await transcribeWithOpenAI(buf, key)
-  } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
-async function transcribeWithOpenAI(audio: Buffer, key: string): Promise<string> {
-  const form = new FormData()
-  // Buffer → Uint8Array view keeps the Blob constructor happy under TS.
-  form.append('file', new Blob([new Uint8Array(audio)], { type: 'audio/mpeg' }), 'audio.mp3')
-  form.append('model', 'whisper-1')
-  form.append('response_format', 'text')
-  const res = await fetch(OPENAI_TRANSCRIBE_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-    signal: AbortSignal.timeout(WHISPER_TIMEOUT_MS),
-  })
-  if (!res.ok) {
-    const body = await res.text().catch(() => res.statusText)
-    throw new Error(`Whisper ${res.status}: ${body.slice(0, 200)}`)
-  }
-  // response_format=text returns the transcript as the raw body.
-  return (await res.text()).trim()
 }
 
 // ---------------------------------------------------------------------------

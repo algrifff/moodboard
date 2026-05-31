@@ -363,7 +363,7 @@ describe('analysisHash', () => {
     expect(analysisHash([a], 'm1')).not.toBe(analysisHash([b], 'm1'))
   })
 
-  const videoClip = (id: string, transcript: string, videoId = 'vid1'): CanvasObject => ({
+  const videoClip = (id: string, videoId = 'vid1', title = 'How we built it'): CanvasObject => ({
     id,
     type: 'video-clip',
     position: { x: 0, y: 0 },
@@ -374,29 +374,28 @@ describe('analysisHash', () => {
       platform: 'youtube',
       url: 'https://www.youtube.com/watch?v=vid1',
       videoId,
-      title: 'How we built it',
+      title,
       channel: 'Acme',
       durationSec: 213,
       thumbnailUrl: '/api/files/thumb.jpg',
-      transcript,
       fetchedAt: '2026-05-30T00:00:00Z',
     },
   })
 
-  it('changes when a video-clip transcript changes', () => {
-    expect(analysisHash([videoClip('a', 'we ship fast')], 'm1')).not.toBe(
-      analysisHash([videoClip('a', 'we ship slow and steady')], 'm1'),
+  it('changes when the video id changes (different clip)', () => {
+    expect(analysisHash([videoClip('a', 'vid1')], 'm1')).not.toBe(
+      analysisHash([videoClip('a', 'vid2')], 'm1'),
     )
   })
 
-  it('changes when the video id changes (different clip)', () => {
-    expect(analysisHash([videoClip('a', 'same words', 'vid1')], 'm1')).not.toBe(
-      analysisHash([videoClip('a', 'same words', 'vid2')], 'm1'),
+  it('changes when the video title changes', () => {
+    expect(analysisHash([videoClip('a', 'vid1', 'Old title')], 'm1')).not.toBe(
+      analysisHash([videoClip('a', 'vid1', 'New title')], 'm1'),
     )
   })
 
   it('does not invalidate when only video fetchedAt drifts', () => {
-    const base = videoClip('a', 'identical transcript')
+    const base = videoClip('a')
     const drifted: CanvasObject = {
       ...base,
       data: { ...base.data, fetchedAt: '2026-09-09T00:00:00Z' },

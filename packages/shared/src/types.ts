@@ -273,10 +273,6 @@ export type VideoClipData = {
   durationSec: number
   // Saved thumbnail served from /api/files/… (empty when none was found).
   thumbnailUrl: string
-  // Whisper transcript. Empty when transcription was skipped (no API key,
-  // audio too large, or transcription failed) — the card + AD degrade to
-  // title/channel only in that case.
-  transcript: string
   fetchedAt: string
 }
 

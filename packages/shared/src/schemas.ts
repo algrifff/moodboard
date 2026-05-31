@@ -199,7 +199,6 @@ export const videoClipDataSchema = z.object({
   channel: z.string(),
   durationSec: z.number(),
   thumbnailUrl: z.string(),
-  transcript: z.string(),
   fetchedAt: z.string(),
 })
 

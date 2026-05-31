@@ -230,7 +230,7 @@ export function VideoClipNode({
           )}
           <div className="flex items-center justify-between gap-2 mt-0.5">
             <span className="text-[9.5px] uppercase tracking-[0.08em] text-[var(--text-faint)]">
-              {data.transcript ? 'Transcript captured' : 'No transcript'}
+              {platformLabel}
             </span>
             <a
               href={data.url}

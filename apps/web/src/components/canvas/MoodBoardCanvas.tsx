@@ -576,9 +576,6 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
         const state = useCanvasStore.getState()
         state.commitBeforeAction()
         addObject(createVideoClip(point, state.objects.length, data))
-        if (!data.transcript) {
-          showToast('Video added — no transcript (set OPENAI_API_KEY to enable)')
-        }
       } catch (err) {
         showToast(`Video import failed: ${err instanceof Error ? err.message : 'unknown'}`)
       }

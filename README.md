@@ -1,6 +1,6 @@
 # moodboard.ai
 
-Infinite-canvas mood board. Drop images, sticky notes, text, and PDFs on a canvas — when two or more items come within 24 px of each other in world space they auto-group, a coloured outline draws around them, a palette widget extracts the colours, and Claude reads the group as a brand brief.
+Infinite-canvas mood board. Drop images, sticky notes, text, and PDFs on a canvas — or pull in pages, files, web pages, and music from **Notion, Google Drive, any URL, and Spotify**. When two or more items come within 48 px of each other in world space they auto-group, a coloured outline draws around them, a palette widget extracts the colours, and Claude reads the group as a brand brief.
 
 The "feel" of items snapping into a group is the whole product.
 
@@ -71,14 +71,26 @@ cp apps/web/.env.example apps/web/.env   # currently empty — no client-side en
 
 `apps/api/.env` needs:
 
-| Key                 | What it is                                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------------- |
-| `PORT`              | API port (default 3001).                                                                      |
-| `NODE_ENV`          | `development` locally.                                                                        |
-| `DATABASE_URL`      | Postgres connection string. The example points at docker-compose's local Postgres.            |
-| `AUTH_SECRET`       | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`. |
-| `BETTER_AUTH_URL`   | Base URL for auth callbacks (e.g. `http://localhost:3001`).                                   |
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it.       |
+| Key                 | What it is                                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`              | API port (default 3001).                                                                                                                 |
+| `NODE_ENV`          | `development` locally.                                                                                                                   |
+| `DATABASE_URL`      | Postgres connection string. The example points at docker-compose's local Postgres.                                                       |
+| `AUTH_SECRET`       | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`.                                            |
+| `BETTER_AUTH_URL`   | Base URL for auth callbacks (e.g. `http://localhost:3001`).                                                                              |
+| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it.                                                  |
+| `WEB_ORIGIN`        | Exact origin of the web app (e.g. `https://127.0.0.1:5173`). Used as the `postMessage` target for the OAuth popup handshake — never `*`. |
+
+External knowledge sources (all **optional** — the app boots without them; each unconnected source just won't appear in the picker):
+
+| Key                                               | What it is                                                                                                                                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONNECTION_TOKEN_KEY`                            | 64 hex chars (32 bytes). AES-256-GCM key that encrypts every OAuth token at rest. Required for any source. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. |
+| `NOTION_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Notion public integration (Read content + Read user info). Redirect points at the **frontend** origin: `…/api/connections/notion/callback`.                                                               |
+| `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Google Cloud OAuth (Drive + Sheets + Slides APIs). Redirect: `…/api/connections/drive/callback`.                                                                                                          |
+| `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify app (scopes: `playlist-read-private`, `playlist-read-collaborative`, `user-read-email`). Redirect: `…/api/connections/spotify/callback`.                                                          |
+
+**OAuth needs HTTPS.** Notion requires HTTPS redirect URIs; Spotify accepts `https://…` or the `http://127.0.0.1` loopback. The simplest setup that satisfies all providers is local HTTPS on `https://127.0.0.1:5173` via [mkcert](https://github.com/FiloSottile/mkcert) — see [Local HTTPS](#local-https-for-oauth) below. Set every redirect URI (and `BETTER_AUTH_URL` / `WEB_ORIGIN`) to match.
 
 **Never commit `.env`.** It's in `.gitignore`; verify with `git check-ignore -v apps/api/.env` before any commit. The `.env.example` files document every key with placeholder values only.
 
@@ -100,6 +112,18 @@ This runs `apps/web` (Vite dev server) and `apps/api` (Hono with hot reload) in 
 
 - Web: `http://localhost:5173`
 - API: `http://localhost:3001`
+
+### Local HTTPS (for OAuth)
+
+You only need this to connect external sources (Notion / Drive / Spotify) — plain HTTP works for everything else. OAuth providers require HTTPS redirect URIs (Spotify also accepts the `http://127.0.0.1` loopback). Generate a locally-trusted cert with [mkcert](https://github.com/FiloSottile/mkcert):
+
+```bash
+brew install mkcert && mkcert -install
+mkdir -p apps/web/.certs && cd apps/web/.certs
+mkcert -cert-file localhost.pem -key-file localhost-key.pem localhost 127.0.0.1 ::1
+```
+
+When those cert files exist, the Vite dev server serves HTTPS automatically and the app is reachable at `https://127.0.0.1:5173` — set every OAuth redirect URI, `BETTER_AUTH_URL`, and `WEB_ORIGIN` to that origin. The `.certs/` directory is gitignored. Set `MOODBOARD_HTTPS=0` to force plain HTTP.
 
 ---
 
@@ -128,14 +152,14 @@ There is no ESLint or Biome. **Prettier is the lint; `tsc --strict` is the corre
 
 Why: Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, paste, autocomplete for free. We never use Konva.Text for anything editable.
 
-### Auto-grouping — the 24-px world-space rule
+### Auto-grouping — the 48-px world-space rule
 
-Two items belong to the same group when their bounding boxes are within **24 px in world space** — overlapping, touching, or with a gap ≤ 24 px all count.
+Two items belong to the same group when their bounding boxes are within **48 px in world space** — overlapping, touching, or with a gap ≤ 48 px all count. The threshold is the `GROUP_PROXIMITY_PX` constant in `apps/web/src/lib/aabb.ts`.
 
-- Group computation: build a proximity graph (nodes = items, edges = pairs within 24 px), then connected components = groups.
+- Group computation: build a proximity graph (nodes = items, edges = pairs within 48 px), then connected components = groups.
 - A group requires **≥ 2 items**. Isolated items are not groups.
 - Live during drag: recompute throttled to ~30 Hz. Preview outline appears the moment proximity is entered.
-- An item dropping below 24 px to all other members leaves the group; a group dropping below 2 items dissolves.
+- An item dropping below 48 px to all other members leaves the group; a group dropping below 2 items dissolves.
 
 ### Group outline visuals (canonical)
 
@@ -159,6 +183,26 @@ Two items belong to the same group when their bounding boxes are within **24 px 
 
 - Extraction (`unpdf`) and thumbnailing (`pdfjs-dist` headless) happen **server-side**, never on the main browser thread.
 - Preview modal lazy-loads `pdfjs-dist` (~600 KB chunk) only on demand.
+
+---
+
+## External knowledge sources
+
+Beyond uploads, the canvas pulls real brand context from four sources. Each import snapshots content onto a canvas card that the AI reads alongside the images — so a grouping can mix a logo, a Notion brand doc, the company's homepage, and a playlist, and the Art Director reads all of it.
+
+| Source           | Auth          | What lands on the canvas                                                                                                                                                                                                                      |
+| ---------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Notion**       | OAuth         | Any page → title, icon, cover, and the block tree converted to markdown.                                                                                                                                                                      |
+| **Google Drive** | OAuth         | Docs / Sheets / Slides → extracted text; PDFs and images route through the normal file pipeline; folders → a child preview.                                                                                                                   |
+| **Web URL**      | none (public) | Any homepage → title, computed colour palette, fonts, OG image + favicon + header logos, and readable text.                                                                                                                                   |
+| **Spotify**      | OAuth         | Playlists, albums, and individual tracks → cover, track list, genres (track-weighted from artists), release era, and audio-feature aggregates (energy / valence / danceability / tempo). A single track also gets an inline embed **player**. |
+
+How it hangs together:
+
+- **Connect** via the Sources drawer (toolbar), or just **paste a URL** on the canvas — it auto-detects the provider and runs the right importer, kicking off OAuth first if that source isn't connected yet.
+- OAuth tokens are **encrypted at rest** (AES-256-GCM, `CONNECTION_TOKEN_KEY`) and refreshed transparently. The frontend only ever sees `{ id, provider, accountEmail }`.
+- Every source follows the same shape — a shared data type + Zod schema in `packages/shared`, a `lib/<provider>.ts` adapter, `/<provider>/import` + `/refresh` endpoints in `apps/api/src/routes/external.ts`, a DOM card node, and a content-hash case so the analysis cache invalidates when the snapshot changes. **Refresh** re-pulls a fresh snapshot in place.
+- **Spotify audio features** come from [ReccoBeats](https://reccobeats.com) (free, no-auth), keyed by Spotify track id — Spotify retired `/v1/audio-features` for apps registered after 2024-11-27. Playlist/album cards expand into a per-track table (BPM / energy / valence / genre / year / popularity); coverage gaps and editorial-playlist lockouts degrade gracefully.
 
 ---
 
@@ -234,7 +278,7 @@ See `CLAUDE.md` for the full set.
 
 Vitest covers the deterministic logic — the interaction layer is tested manually phase by phase. Covered at minimum:
 
-- `proximityGroups(objects, threshold = 24)` — including boundary cases (exactly 24 px, overlap, single-item input, crossing the threshold during drag)
+- `proximityGroups(objects, threshold = 48)` — including boundary cases (exactly 48 px, overlap, single-item input, crossing the threshold during drag)
 - `aabbOverlap`, `aabbDistance` — touching edges, identical rects, far apart
 - `worldToScreen` / `screenToWorld` — round-trip identity, edge zoom values (0.1×, 4×)
 - `groupBoundingBox` — empty, single, many

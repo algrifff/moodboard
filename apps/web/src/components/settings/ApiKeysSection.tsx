@@ -266,8 +266,21 @@ function KeyRevealDialog({
     return <DialogShell open={false} onClose={onClose} title="" />
   }
 
-  const origin = typeof window === 'undefined' ? '' : window.location.origin
-  const baseUrl = `${origin}/api/mcp`
+  // In dev the Vite origin (5173) speaks HTTPS via mkcert, whose root
+  // CA isn't trusted by Node-based MCP clients (Claude Code, Cursor).
+  // Point those clients at the API process directly on 3001 (plain
+  // HTTP) so they can connect without us asking the user to install a
+  // root CA. In prod (any non-loopback host) the Vite origin IS the
+  // public deployed origin with a real cert, so we serve the same
+  // URL the rest of the app uses.
+  const baseUrl = (() => {
+    if (typeof window === 'undefined') return '/api/mcp'
+    const { hostname, origin } = window.location
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3001/api/mcp'
+    }
+    return `${origin}/api/mcp`
+  })()
   const combinedUrl = `${baseUrl}/${minted.plaintext}`
 
   const copy = async (text: string, mark: 'combined' | 'url' | 'token') => {

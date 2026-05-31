@@ -5,6 +5,7 @@ import { PageMotion } from '@/components/PageMotion'
 import { RequireAuth } from '@/components/RequireAuth'
 import { BoardPage } from '@/pages/Board'
 import { DashboardPage } from '@/pages/Dashboard'
+import { SettingsPage } from '@/pages/Settings'
 import { SharePage } from '@/pages/Share'
 import { SignInPage } from '@/pages/SignIn'
 import { SignUpPage } from '@/pages/SignUp'
@@ -59,6 +60,16 @@ function AnimatedRoutes() {
             <RequireAuth>
               <PageMotion>
                 <BoardPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <SettingsPage />
               </PageMotion>
             </RequireAuth>
           }

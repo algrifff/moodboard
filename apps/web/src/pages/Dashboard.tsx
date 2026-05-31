@@ -69,7 +69,13 @@ export function DashboardPage() {
         <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
           <h1 className="text-base font-semibold tracking-tight text-foreground">moodboard.ai</h1>
           <div className="flex items-center gap-5 text-sm">
-            <span className="text-muted-foreground">{session?.user?.email}</span>
+            <Link
+              to="/settings"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Settings"
+            >
+              {session?.user?.email}
+            </Link>
             <button
               type="button"
               onClick={handleSignOut}

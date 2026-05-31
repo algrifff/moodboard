@@ -31,7 +31,7 @@ import {
   createSpotifyPlaylist,
   createSpotifyTrack,
 } from '@/lib/objectFactory'
-import { screenToWorld } from '@/lib/transform'
+import { screenToWorld } from '@moodboard/shared'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
 import { DriveLogo, NotionLogo, SpotifyLogo } from './sourceLogos'

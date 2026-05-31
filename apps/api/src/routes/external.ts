@@ -443,14 +443,14 @@ external.post('/refresh', externalImportLimit, async (c) => {
 // Thrown when a connection's stored token can't be decrypted (key rotated,
 // row corrupted). The handler turns this into a 503 so the client can show
 // a "connection no longer available" message rather than a 500.
-class TokenDecryptError extends Error {
+export class TokenDecryptError extends Error {
   constructor() {
     super('TokenDecryptError')
     this.name = 'TokenDecryptError'
   }
 }
 
-async function importNotionPage(args: {
+export async function importNotionPage(args: {
   userId: string
   connectionRow: { id: string; accessTokenEnc: string; workspaceId: string | null }
   pageId: string
@@ -511,7 +511,7 @@ type DriveImportResult =
  * PDFData; images are saved to UPLOADS_DIR and come back as ImageData. The
  * client uses `kind` to decide which factory to call.
  */
-async function importDriveFile(args: {
+export async function importDriveFile(args: {
   userId: string
   connectionRow: {
     id: string
@@ -740,7 +740,7 @@ function buildDisplayTrack(
   return row
 }
 
-async function importSpotifyRef(args: {
+export async function importSpotifyRef(args: {
   userId: string
   connectionRow: {
     id: string

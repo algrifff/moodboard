@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Layer, Stage } from 'react-konva'
 import { cubicBezier } from 'framer-motion'
-import { groupBoundingBox, objectsInMarquee } from '@/lib/aabb'
+import { groupBoundingBox, objectsInMarquee } from '@moodboard/shared'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
 import {
@@ -14,12 +14,15 @@ import {
   importVideoUrl,
   importWebUrl,
 } from '@/lib/connectionsApi'
-import { extractDriveFileId } from '@/lib/driveUrl'
-import { extractSpotifyRef, type SpotifyRef } from '@/lib/spotifyUrl'
-import { extractVideoRef } from '@/lib/videoUrl'
-import { extractWebUrl } from '@/lib/webUrl'
+import {
+  extractDriveFileId,
+  extractNotionPageId,
+  extractSpotifyRef,
+  extractVideoRef,
+  extractWebUrl,
+  type SpotifyRef,
+} from '@moodboard/shared'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
-import { extractNotionPageId } from '@/lib/notionUrl'
 import {
   createDriveFile,
   createDriveFolder,
@@ -37,7 +40,7 @@ import {
   SNAP_CURVE,
   ZOOM_RESET_DURATION_MS,
 } from '@/lib/motion'
-import { screenToWorld, zoomAroundPoint, type Point } from '@/lib/transform'
+import { screenToWorld, zoomAroundPoint, type Point } from '@moodboard/shared'
 import { tweenTransform } from '@/lib/tweenTransform'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'

@@ -161,6 +161,59 @@ export const share = pgTable(
   }),
 )
 
+// Per-board mirror of the analysis that's currently displayed for each
+// group. The web client picks which agent combination to run; the
+// result is cached in `groupAnalysis` keyed by content hash, but
+// nothing tells external surfaces (MCP, future webhook consumers)
+// "this is the read the user has up". Mirroring it here gives the
+// MCP get_board tool a single place to look. Updated on every
+// successful run from analyze + synthesize routes.
+//
+// `groupKey` is the sorted-join of object IDs (mirrors groupId() in
+// packages/shared/src/aabb.ts), so a group's identity is stable
+// across page loads. Membership changes mint a new key — orphaned
+// rows linger until the next analyze run on the new key or a future
+// cleanup job picks them off.
+export const boardGroupDisplay = pgTable(
+  'board_group_display',
+  {
+    id: text('id').primaryKey(),
+    boardId: text('board_id')
+      .notNull()
+      .references(() => board.id, { onDelete: 'cascade' }),
+    groupKey: text('group_key').notNull(),
+    // Mirror of SharedAnalysisDisplay.kind: 'ad' | 'sectioned' | 'video' | 'brief'.
+    kind: text('kind').notNull(),
+    data: jsonb('data').notNull(),
+    agentIds: text('agent_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    boardGroupIdx: uniqueIndex('board_group_display_board_group_idx').on(t.boardId, t.groupKey),
+  }),
+)
+
+// Phase 19 — MCP server API keys. One row per minted key; the plaintext
+// is shown to the user exactly once at creation and never persisted.
+// `hashedKey` is sha256(plaintext); `prefix` is the first 7 chars of
+// the plaintext for display in the dashboard (e.g. "mb_ABC1…").
+// `lastUsedAt` is bumped async on each MCP request so the dashboard
+// can surface idle keys. Cascade-delete with the user.
+export const apiKey = pgTable('api_key', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  prefix: text('prefix').notNull(),
+  hashedKey: text('hashed_key').notNull().unique(),
+  lastUsedAt: timestamp('last_used_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // Per-user recent picks across sources. Drives the picker drawer's "Recents"
 // tab without re-querying the provider every time. Capped server-side; old
 // entries beyond the cap are pruned on insert.

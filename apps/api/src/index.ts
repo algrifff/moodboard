@@ -26,7 +26,17 @@ type AppVariables = {
 
 const app = new Hono<{ Variables: AppVariables }>()
 
-app.use('*', logger())
+// Custom logger that masks the path-based MCP token (`/api/mcp/<token>`)
+// so plaintext tokens never land in stdout / Railway logs. Bearer-header
+// auth is naturally fine since Authorization isn't in the request line.
+app.use(
+  '*',
+  logger((msg, ...rest) => console.log(maskMcpToken(msg), ...rest)),
+)
+
+function maskMcpToken(line: string): string {
+  return line.replace(/(\/api\/mcp\/)[^\s?]+/g, '$1<token>')
+}
 // Allowed dev origins for browser-driven requests. We accept all four
 // localhost-class origins:
 //   - http://localhost:5173  — plain dev

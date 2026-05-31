@@ -21,10 +21,16 @@ function unauthorized(c: McpContext) {
 }
 
 export async function mcpAuth(c: McpContext, next: Next) {
-  const header = c.req.header('Authorization') ?? c.req.header('authorization') ?? ''
-  const match = header.match(/^Bearer\s+(.+)$/i)
-  if (!match) return unauthorized(c)
-  const plaintext = match[1]?.trim() ?? ''
+  // Token resolution order: URL path segment first (paste-one-thing
+  // UX for Claude Code / Claude.ai / Cursor connector dialogs that
+  // don't expose a header field on the main screen), Authorization
+  // header second (kept for clients that prefer the standard form).
+  let plaintext = (c.req.param('token') ?? '').trim()
+  if (!plaintext) {
+    const header = c.req.header('Authorization') ?? c.req.header('authorization') ?? ''
+    const match = header.match(/^Bearer\s+(.+)$/i)
+    plaintext = match?.[1]?.trim() ?? ''
+  }
   if (!plaintext) return unauthorized(c)
 
   const resolved = await resolveApiKey(plaintext)

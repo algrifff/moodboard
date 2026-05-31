@@ -242,11 +242,12 @@ function CreateKeyDialog({
 }
 
 // ---------------------------------------------------------------------------
-// Reveal dialog — URL goes first (it's what every connector UI asks
-// for), token sits below for clients that require an Authorization
-// header. Reading the URL from window.location.origin means dev and
-// prod surface their own correct host without us threading an env
-// var through the SPA.
+// Reveal dialog — one all-in-one URL is the headline. The token is
+// embedded in the path so Claude Code, Claude.ai's connector dialog,
+// Cursor's MCP URL field, etc. all work with a single paste — no
+// "Advanced settings" rabbit hole. The split URL + Authorization-
+// token form is kept under a small disclosure for clients that
+// prefer the standard header pattern.
 // ---------------------------------------------------------------------------
 
 function KeyRevealDialog({
@@ -256,19 +257,26 @@ function KeyRevealDialog({
   minted: MintedApiKey | null
   onClose: () => void
 }) {
+  const [copiedCombined, setCopiedCombined] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [copiedToken, setCopiedToken] = useState(false)
+  const [showHeaderForm, setShowHeaderForm] = useState(false)
 
   if (!minted) {
     return <DialogShell open={false} onClose={onClose} title="" />
   }
 
-  const endpoint = typeof window === 'undefined' ? '/api/mcp' : `${window.location.origin}/api/mcp`
+  const origin = typeof window === 'undefined' ? '' : window.location.origin
+  const baseUrl = `${origin}/api/mcp`
+  const combinedUrl = `${baseUrl}/${minted.plaintext}`
 
-  const copy = async (text: string, mark: 'url' | 'token') => {
+  const copy = async (text: string, mark: 'combined' | 'url' | 'token') => {
     try {
       await navigator.clipboard.writeText(text)
-      if (mark === 'url') {
+      if (mark === 'combined') {
+        setCopiedCombined(true)
+        setTimeout(() => setCopiedCombined(false), 1400)
+      } else if (mark === 'url') {
         setCopiedUrl(true)
         setTimeout(() => setCopiedUrl(false), 1400)
       } else {
@@ -283,11 +291,9 @@ function KeyRevealDialog({
   return (
     <DialogShell open={true} onClose={onClose} title="Your new key">
       <p className="text-[13px] text-[var(--text-soft)]" style={{ lineHeight: 1.55 }}>
-        Paste the URL into your MCP client. If it asks for an Authorization header, use the token
-        below.{' '}
-        <span className="text-foreground font-medium">
-          You won't see the token again after closing this.
-        </span>
+        Paste this into your MCP client's server URL field and you're connected. The token is baked
+        in — treat the URL itself like a password.{' '}
+        <span className="text-foreground font-medium">You won't see it again after closing.</span>
       </p>
 
       <div className="mt-4">
@@ -297,50 +303,93 @@ function KeyRevealDialog({
           </span>
           <button
             type="button"
-            onClick={() => copy(endpoint, 'url')}
+            onClick={() => copy(combinedUrl, 'combined')}
             className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
             style={{ padding: '4px 8px', borderRadius: 'var(--radius)' }}
           >
-            {copiedUrl ? <Check size={12} weight="bold" /> : <Copy size={12} weight="regular" />}
-            {copiedUrl ? 'Copied' : 'Copy'}
+            {copiedCombined ? (
+              <Check size={12} weight="bold" />
+            ) : (
+              <Copy size={12} weight="regular" />
+            )}
+            {copiedCombined ? 'Copied' : 'Copy'}
           </button>
         </div>
         <input
           readOnly
-          value={endpoint}
+          value={combinedUrl}
           onFocus={(e) => e.currentTarget.select()}
           className="w-full bg-[var(--bg-elevated)] text-[12.5px] font-mono text-foreground outline-none"
           style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
         />
       </div>
 
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold">
-            Authorization token
-          </span>
-          <button
-            type="button"
-            onClick={() => copy(minted.plaintext, 'token')}
-            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
-            style={{ padding: '4px 8px', borderRadius: 'var(--radius)' }}
-          >
-            {copiedToken ? <Check size={12} weight="bold" /> : <Copy size={12} weight="regular" />}
-            {copiedToken ? 'Copied' : 'Copy'}
-          </button>
+      <button
+        type="button"
+        onClick={() => setShowHeaderForm((v) => !v)}
+        className="mt-4 inline-flex items-center gap-1 text-[11.5px] font-medium text-[var(--text-mute)] hover:text-foreground transition-colors"
+      >
+        {showHeaderForm ? '−' : '+'} Use an Authorization header instead
+      </button>
+
+      {showHeaderForm && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold">
+                Server URL
+              </span>
+              <button
+                type="button"
+                onClick={() => copy(baseUrl, 'url')}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+                style={{ padding: '4px 8px', borderRadius: 'var(--radius)' }}
+              >
+                {copiedUrl ? (
+                  <Check size={12} weight="bold" />
+                ) : (
+                  <Copy size={12} weight="regular" />
+                )}
+                {copiedUrl ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <input
+              readOnly
+              value={baseUrl}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full bg-[var(--bg-elevated)] text-[12.5px] font-mono text-foreground outline-none"
+              style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
+            />
+          </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[10.5px] uppercase tracking-[0.14em] text-[var(--text-faint)] font-semibold">
+                Authorization
+              </span>
+              <button
+                type="button"
+                onClick={() => copy(`Bearer ${minted.plaintext}`, 'token')}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11.5px] font-medium text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+                style={{ padding: '4px 8px', borderRadius: 'var(--radius)' }}
+              >
+                {copiedToken ? (
+                  <Check size={12} weight="bold" />
+                ) : (
+                  <Copy size={12} weight="regular" />
+                )}
+                {copiedToken ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <input
+              readOnly
+              value={`Bearer ${minted.plaintext}`}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full bg-[var(--bg-elevated)] text-[12px] font-mono text-foreground outline-none"
+              style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
+            />
+          </div>
         </div>
-        <input
-          readOnly
-          value={minted.plaintext}
-          onFocus={(e) => e.currentTarget.select()}
-          className="w-full bg-[var(--bg-elevated)] text-[12px] font-mono text-foreground outline-none"
-          style={{ padding: '9px 12px', borderRadius: 'var(--radius)' }}
-        />
-        <p className="mt-2 text-[11.5px] text-[var(--text-faint)]" style={{ lineHeight: 1.5 }}>
-          Most connector UIs hide this under "Advanced settings" — paste as{' '}
-          <span className="font-mono text-[var(--text-mute)]">Bearer {minted.prefix}…</span>
-        </p>
-      </div>
+      )}
 
       <div className="mt-5 flex justify-end">
         <button

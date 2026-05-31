@@ -1,4 +1,5 @@
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { AuthUser } from '../auth'
 import { mcpAuth } from '../lib/mcpAuth'
@@ -6,6 +7,7 @@ import { buildMcpServer } from '../lib/mcpTools'
 import { rateLimit } from '../lib/rateLimit'
 
 type Variables = { user: AuthUser | null }
+type McpCtx = Context<{ Variables: Variables }>
 
 // MCP route — Streamable HTTP transport from @modelcontextprotocol/sdk
 // in stateless mode. Each request spins up a fresh server with the
@@ -24,7 +26,7 @@ export const mcp = new Hono<{ Variables: Variables }>()
 // Anthropic budget via analyze_board spam.
 const mcpRateLimit = rateLimit({ scope: 'mcp', limit: 60, windowMs: 60_000 })
 
-mcp.all('/', mcpRateLimit, mcpAuth, async (c) => {
+async function handle(c: McpCtx): Promise<Response> {
   const user = c.get('user')!
   const server = buildMcpServer(user.id)
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -38,4 +40,13 @@ mcp.all('/', mcpRateLimit, mcpAuth, async (c) => {
     void transport.close()
     void server.close()
   }
-})
+}
+
+// Two entry points, same handler:
+// - /api/mcp                 → expects Authorization: Bearer mb_…
+// - /api/mcp/<plaintext>     → token in path; clients (Claude Code,
+//                              Claude.ai's connector UI, Cursor) can
+//                              paste the all-in-one URL with no extra
+//                              header config.
+mcp.all('/', mcpRateLimit, mcpAuth, handle)
+mcp.all('/:token', mcpRateLimit, mcpAuth, handle)

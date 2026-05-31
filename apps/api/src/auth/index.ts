@@ -9,7 +9,13 @@ if (!AUTH_SECRET) {
 
 const trustedOrigins = [
   process.env.BETTER_AUTH_URL ?? 'http://localhost:3001',
+  // Dev web origins — accept all four localhost-class variants so the
+  // app stays usable whether the user is on plain http, mkcert https, or
+  // the 127.0.0.1 loopback (Spotify requires that one — see
+  // apps/api/src/routes/connections.ts:spotifyEnv).
   'http://localhost:5173',
+  'https://localhost:5173',
+  'http://127.0.0.1:5173',
 ]
 
 export const auth = betterAuth({

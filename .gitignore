@@ -31,3 +31,7 @@ Thumbs.db
 
 # Railway volume (never commit uploaded user data)
 data/
+
+# Local HTTPS dev certs (mkcert). Each developer generates their own —
+# committing them would be both useless and a private-key leak.
+apps/web/.certs/

@@ -10,8 +10,15 @@ import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
 import { groupBoundingBox } from '@/lib/aabb'
 import { updateBoard } from '@/lib/boardsApi'
-import { importDriveFile, importNotionPage } from '@/lib/connectionsApi'
-import { createDriveFile, createDriveFolder, createNotionPage } from '@/lib/objectFactory'
+import { importDriveFile, importNotionPage, importSpotifyRef } from '@/lib/connectionsApi'
+import {
+  createDriveFile,
+  createDriveFolder,
+  createNotionPage,
+  createSpotifyAlbum,
+  createSpotifyPlaylist,
+  createSpotifyTrack,
+} from '@/lib/objectFactory'
 import { screenToWorld } from '@/lib/transform'
 import {
   EASE_OUT_STANDARD,
@@ -168,6 +175,44 @@ export function BoardPage() {
     }
   }, [boardId])
 
+  // Spotify OAuth — mirrors onConnectNotion / onConnectDrive. Resumes any
+  // pendingPaste { provider: 'spotify' } after the popup completes.
+  const onConnectSpotify = useCallback(async () => {
+    try {
+      await openConnectionPopup('spotify')
+      await useSourcePickerStore.getState().refreshConnections()
+      const pending = useSourcePickerStore.getState().pendingPaste
+      if (pending?.provider === 'spotify' && boardId) {
+        const fresh = useSourcePickerStore.getState()
+        const conn = fresh.connections.find((c) => c.provider === 'spotify')
+        if (conn) {
+          try {
+            const result = await importSpotifyRef(conn.id, pending.ref)
+            const state = useCanvasStore.getState()
+            const center = screenToWorld(
+              { x: state.viewportSize.width / 2, y: state.viewportSize.height / 2 },
+              { scale: state.scale, x: state.offset.x, y: state.offset.y },
+            )
+            state.commitBeforeAction()
+            if (result.kind === 'playlist') {
+              state.addObject(createSpotifyPlaylist(center, state.objects.length, result.data))
+            } else if (result.kind === 'track') {
+              state.addObject(createSpotifyTrack(center, state.objects.length, result.data))
+            } else {
+              state.addObject(createSpotifyAlbum(center, state.objects.length, result.data))
+            }
+            fresh.closePicker()
+          } catch (importErr) {
+            console.error('Resume of Spotify paste failed', importErr)
+          }
+        }
+        useSourcePickerStore.getState().setPendingPaste(null)
+      }
+    } catch (e) {
+      console.error('Spotify connect failed', e)
+    }
+  }, [boardId])
+
   if (!boardId) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6 bg-background">
@@ -209,7 +254,11 @@ export function BoardPage() {
         <MoodBoardCanvas boardId={boardId} />
         <Toolbar />
         <ToastHost />
-        <SourcePickerDrawer onConnectNotion={onConnectNotion} onConnectDrive={onConnectDrive} />
+        <SourcePickerDrawer
+          onConnectNotion={onConnectNotion}
+          onConnectDrive={onConnectDrive}
+          onConnectSpotify={onConnectSpotify}
+        />
 
         <div
           className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"

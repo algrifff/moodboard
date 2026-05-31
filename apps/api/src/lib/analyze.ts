@@ -8,6 +8,9 @@ import type {
   ImageData,
   NotionPageData,
   PDFData,
+  SpotifyAlbumData,
+  SpotifyPlaylistData,
+  SpotifyTrackData,
   StickyData,
   TextData,
   WebPageData,
@@ -79,6 +82,19 @@ function isWebPageData(d: CanvasObject['data']): d is WebPageData {
     'host' in d &&
     typeof (d as WebPageData).host === 'string'
   )
+}
+function isSpotifyPlaylistData(d: CanvasObject['data']): d is SpotifyPlaylistData {
+  return (
+    'playlistId' in d &&
+    typeof (d as SpotifyPlaylistData).playlistId === 'string' &&
+    'snapshotId' in d
+  )
+}
+function isSpotifyTrackData(d: CanvasObject['data']): d is SpotifyTrackData {
+  return 'trackId' in d && typeof (d as SpotifyTrackData).trackId === 'string' && 'albumName' in d
+}
+function isSpotifyAlbumData(d: CanvasObject['data']): d is SpotifyAlbumData {
+  return 'albumId' in d && typeof (d as SpotifyAlbumData).albumId === 'string' && 'releaseDate' in d
 }
 
 function urlToFilename(url: string): string | null {
@@ -188,6 +204,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const driveExcerpts: string[] = []
   const driveFolderLines: string[] = []
   const webExcerpts: string[] = []
+  const spotifyBlocks: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
   // is. PDF / Notion / Drive / Web all share the same cap.
@@ -201,6 +218,9 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   let driveFileCount = 0
   let driveFolderCount = 0
   let webPageCount = 0
+  let spotifyPlaylistCount = 0
+  let spotifyTrackCount = 0
+  let spotifyAlbumCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -274,6 +294,15 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
           : raw
         : '(no readable body text — work from the title, description, palette, and fonts above)'
       webExcerpts.push(`--- ${head.join('\n')} ---\n${body}\n--- end web page ---`)
+    } else if (o.type === 'spotify-playlist' && isSpotifyPlaylistData(o.data)) {
+      spotifyPlaylistCount += 1
+      spotifyBlocks.push(formatSpotifyPlaylist(o.data))
+    } else if (o.type === 'spotify-track' && isSpotifyTrackData(o.data)) {
+      spotifyTrackCount += 1
+      spotifyBlocks.push(formatSpotifyTrack(o.data))
+    } else if (o.type === 'spotify-album' && isSpotifyAlbumData(o.data)) {
+      spotifyAlbumCount += 1
+      spotifyBlocks.push(formatSpotifyAlbum(o.data))
     }
   }
 
@@ -305,13 +334,14 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0 ||
           notionExcerpts.length > 0 ||
           driveExcerpts.length > 0 ||
-          webExcerpts.length > 0
+          webExcerpts.length > 0 ||
+          spotifyBlocks.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -363,6 +393,28 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
         webExcerpts.join('\n\n'),
     })
   }
+  if (spotifyBlocks.length > 0) {
+    // Spotify entries land as a dedicated tonal-signal block. Audio-features
+    // map onto qualitative read directly: high valence = upbeat / happy, low
+    // = melancholy / serious; high energy = loud / intense, low = calm /
+    // introspective; high acousticness = stripped / unplugged, low =
+    // produced / electronic. The AD should fold these into mood + tone +
+    // adjectives + emotions, and they're orthogonal evidence from the
+    // visual signal — neither overrules the other; they triangulate.
+    content.push({
+      type: 'text',
+      text:
+        'Spotify references on this board (treat as TONAL signal — the user dropped these because their feel matters to the brief). Each block surfaces aggregate audio-feature numbers; read them like this:\n' +
+        '  energy 0..1     — perceptual intensity. >0.7 loud/fast, <0.3 calm/sparse.\n' +
+        '  valence 0..1    — musical positivity. >0.7 cheerful/euphoric, <0.3 melancholy/serious.\n' +
+        '  danceability    — 0..1, self-explanatory.\n' +
+        '  acousticness    — 0..1. >0.7 stripped/unplugged, <0.3 produced/electronic.\n' +
+        '  speechiness     — 0..1. >0.66 mostly spoken (podcast / rap).\n' +
+        '  tempo (BPM)     — median across tracks.\n' +
+        "Read for mood, tone, emotion, era, and audience. Audio features are first-class evidence for the AD's mood / tone / emotions / adjectives fields. They do NOT dictate typography, palette, or visual references — those come from the visual sources.\n\n" +
+        spotifyBlocks.join('\n\n'),
+    })
+  }
   content.push({ type: 'text', text: 'Give me the read.' })
   return content
 }
@@ -373,6 +425,134 @@ function driveKindLabel(mimeType: string): string {
   if (mimeType === 'application/vnd.google-apps.spreadsheet') return 'Sheet'
   if (mimeType === 'application/vnd.google-apps.presentation') return 'Slides'
   return 'file'
+}
+
+// Cap how many tracks we list in the prompt. Big playlists already
+// contribute via the audio-feature aggregate; listing 200 tracks is
+// just token-burn for no extra signal. Twelve is enough that the AD
+// can read the playlist's character + era from artist names.
+const SPOTIFY_TRACK_DISPLAY_LIMIT = 12
+
+// Format the era block as a one-line summary. "1990s-dominant (mix: 1990s ×8,
+// 2000s ×3, 2010s ×1)" reads naturally inside the playlist preamble.
+function formatEra(e: SpotifyPlaylistData['era']): string | null {
+  if (!e.dominantDecade || e.decadeBreakdown.length === 0) return null
+  const mix = e.decadeBreakdown
+    .slice(0, 4)
+    .map(({ decade, count }) => `${decade} ×${count}`)
+    .join(', ')
+  const range =
+    e.yearMin != null && e.yearMax != null && e.yearMin !== e.yearMax
+      ? ` (${e.yearMin}–${e.yearMax})`
+      : ''
+  return `Era: ${e.dominantDecade}-dominant${range} — mix: ${mix}`
+}
+
+// Per-track line includes whatever extra signal we have. Compact (one line)
+// to keep the playlist block scannable, but the AD now sees popularity,
+// explicit flag, and album release date alongside the artist name.
+function trackLine(t: SpotifyPlaylistData['tracks'][number]): string {
+  const parts = [`- ${t.name} — ${t.artists.join(', ')}`]
+  const meta: string[] = []
+  if (t.albumName) meta.push(t.albumName)
+  if (t.albumReleaseDate) meta.push(t.albumReleaseDate.slice(0, 4))
+  if (typeof t.popularity === 'number') meta.push(`pop ${t.popularity}`)
+  if (t.explicit) meta.push('explicit')
+  if (t.audioFeatures) {
+    const af = t.audioFeatures
+    meta.push(`E${af.energy.toFixed(2)}/V${af.valence.toFixed(2)}/${Math.round(af.tempo)}BPM`)
+  }
+  if (meta.length > 0) parts.push(`[${meta.join(' · ')}]`)
+  return parts.join(' ')
+}
+
+function formatSpotifyPlaylist(d: SpotifyPlaylistData): string {
+  const af = d.audioFeatures
+  const head = [`Spotify playlist: "${d.name}" by ${d.ownerName} (${d.trackCount} tracks)`]
+  // Description first — this is where the owner literally wrote what the
+  // playlist is *for*. It's the highest-signal mood input we have.
+  // Strip HTML/entities Spotify allows in playlist descriptions.
+  const desc = stripPlaylistHtml(d.description)
+  if (desc) head.push(`Owner's description: "${desc}"`)
+  // Audio features may be zeroed when Spotify denied the audio-features
+  // endpoint (Nov 2024 access lock for newly-registered apps). Suppress
+  // the row in that case so the AD doesn't read it as "this playlist has
+  // zero energy" — the absence is informational, not a value.
+  if (af.trackCount > 0) {
+    head.push(
+      `Audio-feature aggregate (across ${af.trackCount} tracks): energy ${af.avgEnergy}, valence ${af.avgValence}, danceability ${af.avgDanceability}, acousticness ${af.avgAcousticness}, speechiness ${af.avgSpeechiness}, median tempo ${af.medianTempo} BPM`,
+    )
+  } else {
+    head.push(
+      'Audio-feature aggregate: unavailable (Spotify did not return audio features for this playlist — read mood from artist genres + track titles + description).',
+    )
+  }
+  if (d.topGenres.length > 0) {
+    head.push(`Top genres (track-weighted, primary artist): ${d.topGenres.join(', ')}`)
+  }
+  const eraLine = formatEra(d.era)
+  if (eraLine) head.push(eraLine)
+  // Empty playlist body (editorial / curated playlist on a post-cutoff
+  // app) — be explicit so the AD doesn't hallucinate track names.
+  if (d.tracks.length === 0) {
+    head.push(
+      'Track list unavailable: Spotify withheld the playlist body. Read the mood from the description + playlist name alone.',
+    )
+    return `--- ${head.join('\n')} ---\n--- end Spotify playlist ---`
+  }
+  const trackLines = d.tracks.slice(0, SPOTIFY_TRACK_DISPLAY_LIMIT).map(trackLine)
+  if (d.tracks.length > SPOTIFY_TRACK_DISPLAY_LIMIT) {
+    trackLines.push(`(…and ${d.trackCount - SPOTIFY_TRACK_DISPLAY_LIMIT} more)`)
+  }
+  return `--- ${head.join('\n')} ---\nTrack list:\n${trackLines.join('\n')}\n--- end Spotify playlist ---`
+}
+
+// Spotify lets owners include limited HTML + entities in playlist
+// descriptions. Strip so the AD reads plain text.
+function stripPlaylistHtml(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function formatSpotifyTrack(d: SpotifyTrackData): string {
+  const head = [`Spotify track: "${d.name}" by ${d.artists.join(', ')} (${d.albumName})`]
+  if (d.albumReleaseDate) head.push(`Released: ${d.albumReleaseDate}`)
+  if (d.genres.length > 0) head.push(`Genres: ${d.genres.join(', ')}`)
+  if (typeof d.popularity === 'number') head.push(`Popularity (0–100): ${d.popularity}`)
+  if (d.explicit) head.push('Explicit content')
+  if (d.audioFeatures) {
+    const af = d.audioFeatures
+    head.push(
+      `Audio features: energy ${af.energy}, valence ${af.valence}, danceability ${af.danceability}, acousticness ${af.acousticness}, speechiness ${af.speechiness}, tempo ${Math.round(af.tempo)} BPM`,
+    )
+  }
+  return `--- ${head.join('\n')} ---\n--- end Spotify track ---`
+}
+
+function formatSpotifyAlbum(d: SpotifyAlbumData): string {
+  const af = d.audioFeatures
+  const head = [
+    `Spotify album: "${d.name}" by ${d.artists.join(', ')} (${d.releaseDate}, ${d.trackCount} tracks)`,
+    `Audio-feature aggregate: energy ${af.avgEnergy}, valence ${af.avgValence}, danceability ${af.avgDanceability}, acousticness ${af.avgAcousticness}, median tempo ${af.medianTempo} BPM`,
+  ]
+  if (d.topGenres.length > 0) {
+    head.push(`Genres: ${d.topGenres.join(', ')}`)
+  }
+  const eraLine = formatEra(d.era)
+  if (eraLine) head.push(eraLine)
+  const trackLines = d.tracks.slice(0, SPOTIFY_TRACK_DISPLAY_LIMIT).map(trackLine)
+  if (d.tracks.length > SPOTIFY_TRACK_DISPLAY_LIMIT) {
+    trackLines.push(`(…and ${d.tracks.length - SPOTIFY_TRACK_DISPLAY_LIMIT} more)`)
+  }
+  return `--- ${head.join('\n')} ---\nTrack list:\n${trackLines.join('\n')}\n--- end Spotify album ---`
 }
 
 /**
@@ -462,7 +642,18 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      palette + typography hints surfaced inline. Header counts gain
   //      a web page(s) line. Cache invalidates so groups that already
   //      contained a web-page object re-run with the new block.
-  const v = 'v12'
+  // v13 = Spotify (Phase 15) playlists/tracks/albums feed in as a
+  //      dedicated tonal block with audio-feature aggregates surfaced
+  //      to the AD. Header counts gain Spotify lines.
+  // v14 = Spotify blocks now carry track-weighted top genres, decade
+  //      era aggregate, and per-track explicit/popularity/album-year
+  //      metadata. The AD reads genre vibe + era directly.
+  // v15 = Spotify playlists surface the owner's description prominently
+  //      and suppress zero-valued audio-feature lines when Spotify did
+  //      not actually return them (Nov 2024 access lock fallback). The
+  //      AD now has explicit "track list unavailable" wording for
+  //      editorial playlists so it doesn't hallucinate tracks.
+  const v = 'v15'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -488,7 +679,14 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   //       weight to PDFs / Notion.
   // v12 — Web pages feed into the synth prompt with palette + typography
   //       hints in the excerpt headers.
-  const v = 'v12'
+  // v13 — Spotify playlists/tracks/albums feed into the synth prompt with
+  //       audio-feature aggregates in a tonal-signal block.
+  // v14 — Spotify blocks gain top-genre + era + per-track meta. Synth
+  //       reads from the same prompt so the version bumps in lockstep.
+  // v15 — Spotify playlist prompt now leads with the owner's
+  //       description and suppresses zero audio-features instead of
+  //       reading them as literal zeros.
+  const v = 'v15'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

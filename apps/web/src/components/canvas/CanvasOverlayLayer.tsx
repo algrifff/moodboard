@@ -2,6 +2,7 @@ import type { CanvasObject } from '@moodboard/shared'
 import { DriveNode } from './DriveNode'
 import { FontNode } from './FontNode'
 import { NotionPageNode } from './NotionPageNode'
+import { SpotifyNode } from './SpotifyNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
 import { WebPageNode } from './WebPageNode'
@@ -98,6 +99,23 @@ export function CanvasOverlayLayer({
           if (o.type === 'web-page' && boardId) {
             return (
               <WebPageNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
+              />
+            )
+          }
+          if (
+            (o.type === 'spotify-playlist' ||
+              o.type === 'spotify-track' ||
+              o.type === 'spotify-album') &&
+            boardId
+          ) {
+            return (
+              <SpotifyNode
                 key={o.id}
                 object={o}
                 scale={scale}

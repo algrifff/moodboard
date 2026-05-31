@@ -15,6 +15,7 @@ import { listConnections } from '@/lib/connectionsApi'
 export type PendingPaste =
   | { provider: 'notion'; pageId: string }
   | { provider: 'drive'; fileId: string }
+  | { provider: 'spotify'; ref: { kind: 'playlist' | 'track' | 'album'; id: string } }
 
 type SourcePickerState = {
   open: boolean

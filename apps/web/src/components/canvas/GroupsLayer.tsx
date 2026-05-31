@@ -1,7 +1,7 @@
 import type { AgentId, CanvasObject, SynthesisBrief } from '@moodboard/shared'
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { groupBoundingBox, groupId, proximityGroups } from '@/lib/aabb'
+import { groupBoundingBox, groupId, proximityGroups } from '@moodboard/shared'
 import { analyzeGroup, synthesizeGroupApi } from '@/lib/analyzeApi'
 import { loadBoardState, saveBoardState, type PersistedBoard } from '@/lib/groupAnalysisStorage'
 import { AIAnalysisPanel, type SlotState } from './AIAnalysisPanel'

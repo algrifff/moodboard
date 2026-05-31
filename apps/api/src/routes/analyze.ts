@@ -74,7 +74,7 @@ async function loadGroupObjects(
 }
 
 // Shared: get an agent's result, hitting cache first.
-async function getAgentResult(
+export async function getAgentResult(
   objects: CanvasObject[],
   agentId: AgentId,
   depth: AnalysisDepth,

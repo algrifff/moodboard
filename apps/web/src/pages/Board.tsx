@@ -9,7 +9,7 @@ import { SourcePickerDrawer } from '@/components/canvas/SourcePickerDrawer'
 import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
-import { groupBoundingBox } from '@/lib/aabb'
+import { groupBoundingBox } from '@moodboard/shared'
 import { updateBoard } from '@/lib/boardsApi'
 import { importDriveFile, importNotionPage, importSpotifyRef } from '@/lib/connectionsApi'
 import {
@@ -20,7 +20,7 @@ import {
   createSpotifyPlaylist,
   createSpotifyTrack,
 } from '@/lib/objectFactory'
-import { screenToWorld } from '@/lib/transform'
+import { screenToWorld } from '@moodboard/shared'
 import {
   EASE_OUT_STANDARD,
   FIT_ALL_DURATION_MS,

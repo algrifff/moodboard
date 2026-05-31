@@ -1,4 +1,4 @@
-import type { Point } from '@/lib/transform'
+import type { Point } from '@moodboard/shared'
 
 export function MarqueeBox({
   start,

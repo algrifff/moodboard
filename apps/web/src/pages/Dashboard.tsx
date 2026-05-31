@@ -3,6 +3,7 @@ import { Plus, SignOut, Trash } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ensureFontLoaded } from '@/components/canvas/FontNode'
+import { ApiKeysCard } from '@/components/dashboard/ApiKeysCard'
 import { useSession, signOut } from '@/lib/authClient'
 import { createBoard, deleteBoard, listBoards } from '@/lib/boardsApi'
 
@@ -156,6 +157,10 @@ export function DashboardPage() {
             ))}
           </ul>
         )}
+
+        <div className="mt-10">
+          <ApiKeysCard />
+        </div>
       </main>
     </div>
   )

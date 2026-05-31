@@ -161,6 +161,24 @@ export const share = pgTable(
   }),
 )
 
+// Phase 19 — MCP server API keys. One row per minted key; the plaintext
+// is shown to the user exactly once at creation and never persisted.
+// `hashedKey` is sha256(plaintext); `prefix` is the first 7 chars of
+// the plaintext for display in the dashboard (e.g. "mb_ABC1…").
+// `lastUsedAt` is bumped async on each MCP request so the dashboard
+// can surface idle keys. Cascade-delete with the user.
+export const apiKey = pgTable('api_key', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  prefix: text('prefix').notNull(),
+  hashedKey: text('hashed_key').notNull().unique(),
+  lastUsedAt: timestamp('last_used_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // Per-user recent picks across sources. Drives the picker drawer's "Recents"
 // tab without re-querying the provider every time. Capped server-side; old
 // entries beyond the cap are pruned on insert.

@@ -10,10 +10,12 @@ import { db } from './db'
 import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
 import { analyze } from './routes/analyze'
+import { apiKeys } from './routes/apiKeys'
 import { boards } from './routes/boards'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
 import { files } from './routes/files'
+import { mcp } from './routes/mcp'
 import { boardShare, shares } from './routes/shares'
 import { voice } from './routes/voice'
 
@@ -104,6 +106,11 @@ api.use('/boards/*', jsonBodyLimit)
 api.route('/boards/:boardId/share', boardShare)
 api.route('/shares', shares)
 api.route('/boards', boards)
+// Phase 19 — MCP server. Bearer-auth via its own middleware (not the
+// cookie session). /api/keys is the cookie-auth dashboard surface for
+// minting + revoking the Bearer tokens that /api/mcp accepts.
+api.route('/keys', apiKeys)
+api.route('/mcp', mcp)
 api.route('/connections', connections)
 api.route('/external', external)
 api.route('/voice', voice)

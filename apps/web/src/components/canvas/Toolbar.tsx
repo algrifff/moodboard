@@ -18,7 +18,7 @@ import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/i
 import { TOOLBAR_PRESS_DURATION } from '@/lib/motion'
 import { createFont, createSticky } from '@/lib/objectFactory'
 import { useTheme, type ThemePref } from '@/lib/theme'
-import { screenToWorld } from '@/lib/transform'
+import { screenToWorld } from '@moodboard/shared'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
 import { nanoid } from 'nanoid'

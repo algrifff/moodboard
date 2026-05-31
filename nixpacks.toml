@@ -1,0 +1,11 @@
+# Nixpacks build config for the Railway api service.
+#
+# Phase 16 (Video) needs two system binaries at runtime:
+#   - yt-dlp : pulls public video metadata + audio (YouTube/TikTok/IG/X/Vimeo)
+#   - ffmpeg : yt-dlp's audio post-processor (transcode to 16 kHz mono mp3)
+#
+# These aren't npm packages, so they're declared here as Nix packages. The
+# web service ignores this (it's a static build); only the api service runs
+# the video importer.
+[phases.setup]
+nixPkgs = ['yt-dlp', 'ffmpeg']

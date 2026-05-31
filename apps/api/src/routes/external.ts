@@ -41,6 +41,7 @@ import {
   trackFeaturesWithAggregate,
 } from '../lib/spotify'
 import { savePdf, savePdfThumbnail, saveUpload } from '../lib/storage'
+import { extractVideoClip, VideoExtractError } from '../lib/video'
 import { extractWebPage, WebExtractError } from '../lib/web'
 import { loadConnection } from './connections'
 
@@ -142,6 +143,41 @@ external.post('/web/import', externalImportLimit, async (c) => {
               : e.code === 'NOT_HTML'
                 ? 415
                 : 502
+      return c.json({ error: e.message, code: e.code }, status)
+    }
+    throw e
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /api/external/video/import
+//
+// Public-URL video importer (YouTube / TikTok / Instagram / X / Vimeo). No
+// connection — yt-dlp handles public-content access. Pulls metadata + the
+// platform thumbnail, and (if OPENAI_API_KEY is set) the audio → a Whisper
+// transcript. Returns a single VideoClipData the client mounts as a
+// VideoClipNode.
+// ---------------------------------------------------------------------------
+external.post('/video/import', externalImportLimit, async (c) => {
+  const user = c.get('user')!
+  const body = (await c.req.json().catch(() => ({}))) as { url?: unknown }
+  const url = typeof body.url === 'string' ? body.url : null
+  if (!url) {
+    return c.json({ error: 'url is required' }, 400)
+  }
+  try {
+    const result = await extractVideoClip(url, user.id)
+    return c.json({ data: result.data })
+  } catch (e) {
+    if (e instanceof VideoExtractError) {
+      const status =
+        e.code === 'BAD_URL' || e.code === 'PRIVATE_HOST'
+          ? 400
+          : e.code === 'TIMEOUT'
+            ? 504
+            : e.code === 'YTDLP_MISSING'
+              ? 501
+              : 502
       return c.json({ error: e.message, code: e.code }, status)
     }
     throw e
@@ -376,6 +412,22 @@ external.post('/refresh', externalImportLimit, async (c) => {
           return c.json({ error: 'Spotify connection no longer authorised' }, 409)
         }
         return c.json({ error: e.message }, 502)
+      }
+      throw e
+    }
+  }
+
+  if (object.type === 'video-clip') {
+    const d = object.data as { url?: string }
+    if (!d.url) {
+      return c.json({ error: 'Object has no source URL' }, 400)
+    }
+    try {
+      const result = await extractVideoClip(d.url, user.id)
+      return c.json({ kind: 'video-clip', data: result.data })
+    } catch (e) {
+      if (e instanceof VideoExtractError) {
+        return c.json({ error: e.message, code: e.code }, 502)
       }
       throw e
     }

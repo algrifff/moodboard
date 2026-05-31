@@ -362,4 +362,45 @@ describe('analysisHash', () => {
     ])
     expect(analysisHash([a], 'm1')).not.toBe(analysisHash([b], 'm1'))
   })
+
+  const videoClip = (id: string, transcript: string, videoId = 'vid1'): CanvasObject => ({
+    id,
+    type: 'video-clip',
+    position: { x: 0, y: 0 },
+    size: { width: 320, height: 290 },
+    rotation: 0,
+    zIndex: 0,
+    data: {
+      platform: 'youtube',
+      url: 'https://www.youtube.com/watch?v=vid1',
+      videoId,
+      title: 'How we built it',
+      channel: 'Acme',
+      durationSec: 213,
+      thumbnailUrl: '/api/files/thumb.jpg',
+      transcript,
+      fetchedAt: '2026-05-30T00:00:00Z',
+    },
+  })
+
+  it('changes when a video-clip transcript changes', () => {
+    expect(analysisHash([videoClip('a', 'we ship fast')], 'm1')).not.toBe(
+      analysisHash([videoClip('a', 'we ship slow and steady')], 'm1'),
+    )
+  })
+
+  it('changes when the video id changes (different clip)', () => {
+    expect(analysisHash([videoClip('a', 'same words', 'vid1')], 'm1')).not.toBe(
+      analysisHash([videoClip('a', 'same words', 'vid2')], 'm1'),
+    )
+  })
+
+  it('does not invalidate when only video fetchedAt drifts', () => {
+    const base = videoClip('a', 'identical transcript')
+    const drifted: CanvasObject = {
+      ...base,
+      data: { ...base.data, fetchedAt: '2026-09-09T00:00:00Z' },
+    }
+    expect(analysisHash([base], 'm1')).toBe(analysisHash([drifted], 'm1'))
+  })
 })

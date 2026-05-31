@@ -254,6 +254,32 @@ export type SpotifyAlbumData = {
   fetchedAt: string
 }
 
+// A video clip imported from a public URL (YouTube, TikTok, Instagram Reel,
+// X, Vimeo). yt-dlp pulls the metadata + audio; OpenAI Whisper transcribes
+// the audio; the platform thumbnail is saved to /data like an upload. The
+// transcript is the high-signal mood input the AD reads — what's actually
+// said in the clip — alongside the title + channel.
+export type VideoClipData = {
+  // Normalised platform label ('youtube' | 'tiktok' | 'instagram' | 'x' |
+  // 'vimeo' | 'other') — drives the "Open in …" chip + logging.
+  platform: string
+  // The canonical/webpage URL (yt-dlp's resolved `webpage_url`).
+  url: string
+  // Stable platform video id (yt-dlp `id`) — refresh + hash identity.
+  videoId: string
+  title: string
+  channel: string
+  // Duration in whole seconds (0 when unknown — some platforms omit it).
+  durationSec: number
+  // Saved thumbnail served from /api/files/… (empty when none was found).
+  thumbnailUrl: string
+  // Whisper transcript. Empty when transcription was skipped (no API key,
+  // audio too large, or transcription failed) — the card + AD degrade to
+  // title/channel only in that case.
+  transcript: string
+  fetchedAt: string
+}
+
 export type CanvasObjectType =
   | 'image'
   | 'sticky'
@@ -267,6 +293,7 @@ export type CanvasObjectType =
   | 'spotify-playlist'
   | 'spotify-track'
   | 'spotify-album'
+  | 'video-clip'
 
 export type CanvasObject = {
   id: string
@@ -288,6 +315,7 @@ export type CanvasObject = {
     | SpotifyPlaylistData
     | SpotifyTrackData
     | SpotifyAlbumData
+    | VideoClipData
 }
 
 export type AIAnalysis = {

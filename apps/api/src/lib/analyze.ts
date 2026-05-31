@@ -13,6 +13,7 @@ import type {
   SpotifyTrackData,
   StickyData,
   TextData,
+  VideoClipData,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
@@ -95,6 +96,9 @@ function isSpotifyTrackData(d: CanvasObject['data']): d is SpotifyTrackData {
 }
 function isSpotifyAlbumData(d: CanvasObject['data']): d is SpotifyAlbumData {
   return 'albumId' in d && typeof (d as SpotifyAlbumData).albumId === 'string' && 'releaseDate' in d
+}
+function isVideoClipData(d: CanvasObject['data']): d is VideoClipData {
+  return 'videoId' in d && 'platform' in d && 'transcript' in d
 }
 
 function urlToFilename(url: string): string | null {
@@ -205,6 +209,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const driveFolderLines: string[] = []
   const webExcerpts: string[] = []
   const spotifyBlocks: string[] = []
+  const videoBlocks: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
   // is. PDF / Notion / Drive / Web all share the same cap.
@@ -221,6 +226,7 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   let spotifyPlaylistCount = 0
   let spotifyTrackCount = 0
   let spotifyAlbumCount = 0
+  let videoCount = 0
   for (const o of objects) {
     if (o.type === 'sticky' && isStickyData(o.data)) {
       stickyCount += 1
@@ -303,6 +309,9 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
     } else if (o.type === 'spotify-album' && isSpotifyAlbumData(o.data)) {
       spotifyAlbumCount += 1
       spotifyBlocks.push(formatSpotifyAlbum(o.data))
+    } else if (o.type === 'video-clip' && isVideoClipData(o.data)) {
+      videoCount += 1
+      videoBlocks.push(formatVideoClip(o.data))
     }
   }
 
@@ -334,14 +343,15 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0 ||
           notionExcerpts.length > 0 ||
           driveExcerpts.length > 0 ||
           webExcerpts.length > 0 ||
-          spotifyBlocks.length > 0
+          spotifyBlocks.length > 0 ||
+          videoBlocks.length > 0
         ? ''
         : '\n(No text content — work purely from the images and sticky colours.)',
     ...textLines,
@@ -413,6 +423,19 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
         '  tempo (BPM)     — median across tracks.\n' +
         "Read for mood, tone, emotion, era, and audience. Audio features are first-class evidence for the AD's mood / tone / emotions / adjectives fields. They do NOT dictate typography, palette, or visual references — those come from the visual sources.\n\n" +
         spotifyBlocks.join('\n\n'),
+    })
+  }
+  if (videoBlocks.length > 0) {
+    // Video clips land as reference material — the user pasted a YouTube /
+    // TikTok / Reel because its content or vibe matters. The transcript is
+    // the high-signal part (what's actually said → subject, voice, claims,
+    // audience); title + channel give framing. Read for voice, positioning,
+    // and tonal register. Spoken-word cadence is not a typography signal.
+    content.push({
+      type: 'text',
+      text:
+        'Video clips on this board (treat as primary reference — the user pasted these because the content or vibe matters). The transcript is what is actually said in the clip: read it for subject matter, voice, claims, audience, and tonal register. Title + channel give framing. Where a transcript is absent the clip was un-transcribable — work from the title + channel alone.\n\n' +
+        videoBlocks.join('\n\n'),
     })
   }
   content.push({ type: 'text', text: 'Give me the read.' })
@@ -555,6 +578,34 @@ function formatSpotifyAlbum(d: SpotifyAlbumData): string {
   return `--- ${head.join('\n')} ---\nTrack list:\n${trackLines.join('\n')}\n--- end Spotify album ---`
 }
 
+// Cap the transcript fed into the prompt — long videos can run thousands of
+// words and we only need enough to set the tone/subject, not the whole thing.
+const VIDEO_TRANSCRIPT_MAX = 6000
+
+function formatVideoClip(d: VideoClipData): string {
+  const dur = d.durationSec > 0 ? ` (${formatVideoDuration(d.durationSec)})` : ''
+  const platform = d.platform && d.platform !== 'other' ? ` [${d.platform}]` : ''
+  const head = [
+    `Video: "${d.title || 'Untitled'}"${d.channel ? ` by ${d.channel}` : ''}${dur}${platform}`,
+  ]
+  const t = d.transcript.trim()
+  if (!t) {
+    head.push('Transcript: unavailable (could not transcribe — read from title + channel).')
+    return `--- ${head.join('\n')} ---\n--- end video ---`
+  }
+  const transcript = t.length > VIDEO_TRANSCRIPT_MAX ? `${t.slice(0, VIDEO_TRANSCRIPT_MAX)}…` : t
+  return `--- ${head.join('\n')} ---\nTranscript:\n${transcript}\n--- end video ---`
+}
+
+function formatVideoDuration(sec: number): string {
+  const s = Math.round(sec)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const r = s % 60
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`
+  return `${m}:${r.toString().padStart(2, '0')}`
+}
+
 /**
  * Run a single agent against a group. Returns the agent-specific data
  * (validated against the agent's zod schema).
@@ -653,7 +704,9 @@ export function modelTag(agentId: AgentId, depth: AnalysisDepth): string {
   //      not actually return them (Nov 2024 access lock fallback). The
   //      AD now has explicit "track list unavailable" wording for
   //      editorial playlists so it doesn't hallucinate tracks.
-  const v = 'v15'
+  // v16 = Video clips (Phase 16) feed in as a reference block — Whisper
+  //      transcript + title + channel. Header counts gain a video line.
+  const v = 'v16'
   return `${agentId}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }
 
@@ -686,7 +739,9 @@ export function synthesisModelTag(agentIds: AgentId[], depth: AnalysisDepth): st
   // v15 — Spotify playlist prompt now leads with the owner's
   //       description and suppresses zero audio-features instead of
   //       reading them as literal zeros.
-  const v = 'v15'
+  // v16 — Video clips feed into the synth prompt as a reference block
+  //       (transcript + title + channel). Bumps in lockstep with the AD.
+  const v = 'v16'
   const sorted = [...agentIds].sort().join(',')
   return `synth:${sorted}@${depth === 'fast' ? FAST_MODEL : DEEP_MODEL}@${v}`
 }

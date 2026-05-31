@@ -11,10 +11,12 @@ import {
   importDriveFile,
   importNotionPage,
   importSpotifyRef,
+  importVideoUrl,
   importWebUrl,
 } from '@/lib/connectionsApi'
 import { extractDriveFileId } from '@/lib/driveUrl'
 import { extractSpotifyRef, type SpotifyRef } from '@/lib/spotifyUrl'
+import { extractVideoRef } from '@/lib/videoUrl'
 import { extractWebUrl } from '@/lib/webUrl'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
 import { extractNotionPageId } from '@/lib/notionUrl'
@@ -26,6 +28,7 @@ import {
   createSpotifyPlaylist,
   createSpotifyTrack,
   createText,
+  createVideoClip,
   createWebPage,
 } from '@/lib/objectFactory'
 import {
@@ -563,6 +566,26 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
+  // Video paste handler — no connection (yt-dlp handles public access). The
+  // import is slow (download + Whisper transcription), so we toast up front.
+  const handleVideoPasteUrl = useCallback(
+    async (url: string, point: Point) => {
+      showToast('Downloading video… this can take a moment')
+      try {
+        const data = await importVideoUrl(url)
+        const state = useCanvasStore.getState()
+        state.commitBeforeAction()
+        addObject(createVideoClip(point, state.objects.length, data))
+        if (!data.transcript) {
+          showToast('Video added — no transcript (set OPENAI_API_KEY to enable)')
+        }
+      } catch (err) {
+        showToast(`Video import failed: ${err instanceof Error ? err.message : 'unknown'}`)
+      }
+    },
+    [addObject],
+  )
+
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return
@@ -643,6 +666,15 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             await handleDrivePasteUrl(driveFileId, viewportCenterWorld())
             return
           }
+          // Video platforms (YouTube / TikTok / Instagram / X / Vimeo).
+          // Runs before the generic web-page catch-all below, which would
+          // otherwise swallow these (they're all http(s) URLs).
+          const videoRef = extractVideoRef(trimmed)
+          if (videoRef) {
+            e.preventDefault()
+            await handleVideoPasteUrl(videoRef.url, viewportCenterWorld())
+            return
+          }
         }
 
         // 4b. data:image and URLs whose path obviously points at an image
@@ -701,6 +733,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     handleDrivePasteUrl,
     handleNotionPasteUrl,
     handleSpotifyPasteUrl,
+    handleVideoPasteUrl,
     handleWebPasteUrl,
     viewportCenterWorld,
   ])

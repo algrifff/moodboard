@@ -13,3 +13,6 @@ export * from './webUrl'
 // analyze_board grouping.
 export * from './aabb'
 export * from './transform'
+
+// Phase 21 — agent sidebar threads, messages, stream events.
+export * from './agent'

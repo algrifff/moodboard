@@ -308,3 +308,44 @@ export const rateLimit = pgTable('rate_limit', {
   windowStart: timestamp('window_start').notNull(),
   count: integer('count').notNull(),
 })
+
+// Phase 21 — agent sidebar threads. Team-visible like boards: `createdBy`
+// is attribution only. Scoped to a board for now; client-scoped threads
+// (Phase 22) will add a nullable client_id alongside.
+export const agentThread = pgTable(
+  'agent_thread',
+  {
+    id: text('id').primaryKey(),
+    boardId: text('board_id')
+      .notNull()
+      .references(() => board.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    boardUpdatedIdx: index('agent_thread_board_updated_idx').on(t.boardId, t.updatedAt),
+    createdByIdx: index('agent_thread_created_by_idx').on(t.createdBy),
+  }),
+)
+
+// One row per Messages API turn, in Anthropic content-block form (text,
+// tool_use, tool_result) so a thread replays straight back to the model.
+// `seq` is the ordering key — timestamps can tie within one request.
+// `isError` rows are server-written notices, never replayed to the model.
+export const agentMessage = pgTable(
+  'agent_message',
+  {
+    id: text('id').primaryKey(),
+    threadId: text('thread_id')
+      .notNull()
+      .references(() => agentThread.id, { onDelete: 'cascade' }),
+    seq: integer('seq').generatedAlwaysAsIdentity().notNull(),
+    role: text('role').notNull(),
+    content: jsonb('content').notNull(),
+    isError: boolean('is_error').notNull().default(false),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({ threadSeqIdx: index('agent_message_thread_seq_idx').on(t.threadId, t.seq) }),
+)

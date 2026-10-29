@@ -502,7 +502,7 @@ async function downloadAndSaveImage(
   // Asset row is what makes GET /api/files/{filename} reachable for this
   // user — the route enforces ownership via the asset table, so a file
   // on disk without a row is effectively 404'd. Mirrors the same pattern
-  // as the Drive image-import branch in routes/external.ts:recordAsset.
+  // as the Drive image-import branch in lib/importers/assets.ts:recordAsset.
   // db is imported lazily so unit tests (which exercise the pure
   // helpers below without env vars) don't try to dial Postgres at
   // module load.

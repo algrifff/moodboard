@@ -11,6 +11,7 @@ import { runMigrations } from './db/migrate'
 import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
+import { agent } from './routes/agent'
 import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
 import { boardGroups } from './routes/boardGroups'
@@ -120,6 +121,7 @@ api.use('/boards/*', jsonBodyLimit)
 // mount separately under /shares (no global auth).
 api.route('/boards/:boardId/share', boardShare)
 api.route('/boards/:boardId/groups', boardGroups)
+api.route('/boards/:boardId/agent', agent)
 api.route('/shares', shares)
 api.route('/boards', boards)
 // Phase 19 — MCP server. Bearer-auth via its own middleware (not the

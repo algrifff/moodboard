@@ -190,19 +190,17 @@ export const share = pgTable(
   }),
 )
 
-// Per-board mirror of the analysis that's currently displayed for each
-// group. The web client picks which agent combination to run; the
-// result is cached in `groupAnalysis` keyed by content hash, but
-// nothing tells external surfaces (MCP, future webhook consumers)
-// "this is the read the user has up". Mirroring it here gives the
-// MCP get_board tool a single place to look. Updated on every
-// successful run from analyze + synthesize routes.
+// Per-group analysis-panel state for a board, shared by the team: the
+// displayed analysis (`kind` + `data`, null until a run completes), the
+// agents that produced it, the agent-row selection, and the palette the
+// widget locks to. Analyze/synthesize routes write the display on
+// completion; the client writes selection and inline edits. MCP get_board
+// reads it.
 //
-// `groupKey` is the sorted-join of object IDs (mirrors groupId() in
-// packages/shared/src/aabb.ts), so a group's identity is stable
-// across page loads. Membership changes mint a new key — orphaned
-// rows linger until the next analyze run on the new key or a future
-// cleanup job picks them off.
+// `groupKey` is the sorted-join of object IDs (groupId() in
+// packages/shared/src/aabb.ts). Membership changes mint a new key; rows
+// whose key references a deleted object can never match again and are
+// pruned by the orphan cleanup.
 export const boardGroupDisplay = pgTable(
   'board_group_display',
   {
@@ -212,9 +210,17 @@ export const boardGroupDisplay = pgTable(
       .references(() => board.id, { onDelete: 'cascade' }),
     groupKey: text('group_key').notNull(),
     // Mirror of SharedAnalysisDisplay.kind: 'ad' | 'sectioned' | 'video' | 'brief'.
-    kind: text('kind').notNull(),
-    data: jsonb('data').notNull(),
+    kind: text('kind'),
+    data: jsonb('data'),
     agentIds: text('agent_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    selectedAgentIds: text('selected_agent_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    aiPalette: text('ai_palette')
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),

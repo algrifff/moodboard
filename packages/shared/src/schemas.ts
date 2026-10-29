@@ -708,6 +708,38 @@ export const sharedAnalysisDisplaySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('brief'), data: synthesisBriefSchema }),
 ])
 
+// Per-group panel state, shared by the team. `display` is the analysis
+// the panel shows (with any inline brief edits); `agentIds` produced it;
+// `selectedAgentIds` is the agent row; `aiPalette` locks the palette
+// widget. Display data is passed through loosely on read — rows written
+// by older agent versions shouldn't fail the whole board.
+export const groupStateSchema = z.object({
+  groupKey: z.string(),
+  display: z
+    .object({ kind: z.enum(['ad', 'sectioned', 'video', 'brief']), data: z.unknown() })
+    .nullable(),
+  agentIds: z.array(agentIdSchema),
+  selectedAgentIds: z.array(agentIdSchema),
+  aiPalette: z.array(z.string()),
+  updatedAt: z.string(),
+})
+export type GroupState = z.infer<typeof groupStateSchema>
+
+export const groupStatesResponseSchema = z.object({ groups: z.array(groupStateSchema) })
+
+// Every field optional: omitted = leave as is. A display write must carry
+// the agents that produced it.
+export const putGroupStateRequestSchema = z.object({
+  display: sharedAnalysisDisplaySchema.optional(),
+  agentIds: z.array(agentIdSchema).optional(),
+  selectedAgentIds: z.array(agentIdSchema).optional(),
+  aiPalette: z
+    .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
+    .max(12)
+    .optional(),
+})
+export type PutGroupStateRequest = z.infer<typeof putGroupStateRequestSchema>
+
 export const sharedGroupSnapshotSchema = z.object({
   key: z.string(),
   objectIds: z.array(z.string()),

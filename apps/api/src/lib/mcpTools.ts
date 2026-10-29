@@ -22,7 +22,7 @@ import { analysisHash } from './analysisHash'
 import { insertBoardObject, loadBoardObjects, loadObjectsByBoard } from './boardObjects'
 import { nextSpot } from './canvasPlacement'
 import { routeUrlToImporter } from './mcpUrlDispatch'
-import { listGroupDisplays } from './recordGroupDisplay'
+import { listGroupStates } from './groupState'
 import { saveImageFromUrl } from './saveImageFromUrl'
 import { getAgentResult } from '../routes/analyze'
 
@@ -202,20 +202,20 @@ export function buildMcpServer(userId: string): McpServer {
       const groupKeyToIds = new Map<string, string[]>()
       for (const ids of idGroups) groupKeyToIds.set(groupId(ids), ids)
 
-      const displays = await listGroupDisplays(boardId)
-      // Filter to displays whose groupKey still corresponds to a live
-      // group on the canvas. Orphans (membership changed → new key)
-      // get hidden here; the table still keeps them for when a group
-      // re-forms with the old composition.
-      const analyses = displays
-        .filter((d) => groupKeyToIds.has(d.groupKey))
-        .map((d) => {
-          const objectIds = groupKeyToIds.get(d.groupKey) ?? []
+      const states = await listGroupStates(boardId)
+      // Only groups that still exist on the canvas and have a completed
+      // analysis. Orphans (membership changed → new key) are hidden.
+      const analyses = states
+        .filter((g) => groupKeyToIds.has(g.groupKey))
+        .flatMap((g) => (g.display ? [{ ...g, display: g.display }] : []))
+        .map((g) => {
+          const objectIds = groupKeyToIds.get(g.groupKey) ?? []
+          const d = g.display
           const base = {
-            groupKey: d.groupKey,
+            groupKey: g.groupKey,
             objectIds,
-            agentIds: d.agentIds,
-            updatedAt: d.updatedAt.toISOString(),
+            agentIds: g.agentIds,
+            updatedAt: g.updatedAt,
           }
           switch (d.kind) {
             case 'brief': {

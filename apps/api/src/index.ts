@@ -11,6 +11,7 @@ import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
 import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
+import { boardGroups } from './routes/boardGroups'
 import { boards } from './routes/boards'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
@@ -114,6 +115,7 @@ api.use('/boards/*', jsonBodyLimit)
 // so the more specific path matches first. Public viewer + PDF endpoints
 // mount separately under /shares (no global auth).
 api.route('/boards/:boardId/share', boardShare)
+api.route('/boards/:boardId/groups', boardGroups)
 api.route('/shares', shares)
 api.route('/boards', boards)
 // Phase 19 — MCP server. Bearer-auth via its own middleware (not the

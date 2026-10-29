@@ -78,6 +78,13 @@
       "when": 1793313513511,
       "tag": "0010_drop_board_data",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793314010621,
+      "tag": "0011_group_state",
+      "breakpoints": true
     }
   ]
 }

@@ -48,11 +48,6 @@ export function SpotifyNode({
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
 
-  // All three kinds expand: playlists/albums into a per-track table, a
-  // single track into its full audio-feature breakdown. Every detail view
-  // carries a Spotify embed player so the user can hear it.
-  const canExpand = true
-
   const HALO = 14
   const interaction = useBoxInteraction(object.id, scale, {
     panMode,

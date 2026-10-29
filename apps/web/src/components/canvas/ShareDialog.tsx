@@ -1,6 +1,6 @@
 import type {
   CanvasObject,
-  SharedAnalysisDisplay,
+  GroupState,
   SharedBoardSnapshotInput,
   SharedGroupSnapshot,
   ShareViewParsed,
@@ -10,7 +10,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { groupBoundingBox, groupId, proximityGroups } from '@moodboard/shared'
-import { loadBoardState, type PersistedGroup } from '@/lib/groupAnalysisStorage'
+import { displayFromSlot, listGroupStates, slotFromDisplay } from '@/lib/groupStateApi'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
 import { createOrUpdateBoardShare, deleteBoardShare, getBoardShare } from '@/lib/sharesApi'
 import { useCanvasStore } from '@/store/canvas'
@@ -18,58 +18,34 @@ import { showToast } from './Toast'
 
 // ---------------------------------------------------------------------------
 // Snapshot builder — assembles the SharedBoardSnapshot from the live
-// canvas store + the per-group analysis localStorage that GroupsLayer
-// writes. The brief field is "the displayed brief at share-time", which
-// captures any inline edits the user made via BriefReadout. Groups
-// without a synthesised brief simply omit the field.
+// canvas store + the team's per-group panel state on the server. The brief
+// field is "the displayed brief at share-time", which captures any inline
+// edits made via BriefReadout. Groups without a completed read simply omit
+// the field.
 // ---------------------------------------------------------------------------
-
-// Translate the per-group SlotState into the wire-shape that survives
-// freezing. ready-* slots map onto the four SharedAnalysisDisplay
-// kinds; idle/loading/error → undefined (nothing to bake).
-function extractDisplay(group: PersistedGroup | undefined): SharedAnalysisDisplay | undefined {
-  const slot = group?.display
-  if (!slot) return undefined
-  switch (slot.kind) {
-    case 'ready-ad':
-      return { kind: 'ad', data: slot.data }
-    case 'ready-sec':
-      return { kind: 'sectioned', data: slot.data }
-    case 'ready-video':
-      return { kind: 'video', data: slot.data }
-    case 'ready-brief':
-      return { kind: 'brief', data: slot.data }
-    default:
-      return undefined
-  }
-}
-
-function extractPaletteFromPersisted(group: PersistedGroup | undefined): string[] {
-  return Array.isArray(group?.aiPalette) ? group!.aiPalette : []
-}
 
 export function buildSnapshot({
   boardName,
-  boardId,
   objects,
+  groupStates,
 }: {
   boardName: string
-  boardId: string
   objects: CanvasObject[]
+  groupStates: GroupState[]
 }): SharedBoardSnapshotInput {
-  const persisted = loadBoardState(boardId)
+  const stateByKey = new Map(groupStates.map((g) => [g.groupKey, g]))
   const idGroups = proximityGroups(objects)
   const byId = new Map(objects.map((o) => [o.id, o]))
   const groups: SharedGroupSnapshot[] = idGroups.map((ids) => {
     const items = ids.map((id) => byId.get(id)!).filter(Boolean)
     const key = groupId(ids)
-    const stored = persisted[key]
-    const display = extractDisplay(stored)
+    const stored = stateByKey.get(key)
+    const display = displayFromSlot(slotFromDisplay(stored?.display ?? null) ?? undefined)
     return {
       key,
       objectIds: ids,
       bounds: groupBoundingBox(items, 20),
-      palette: extractPaletteFromPersisted(stored),
+      palette: stored?.aiPalette ?? [],
       ...(display ? { display } : {}),
     }
   })
@@ -144,7 +120,8 @@ export function ShareDialog({
       setWorking(mode)
       try {
         const objects = useCanvasStore.getState().objects
-        const snapshot = buildSnapshot({ boardName, boardId, objects })
+        const groupStates = await listGroupStates(boardId)
+        const snapshot = buildSnapshot({ boardName, objects, groupStates })
         const next = await createOrUpdateBoardShare(boardId, snapshot)
         setStatus({ kind: 'has-share', share: next })
         showToast(mode === 'create' ? 'Share link created' : 'Snapshot updated')

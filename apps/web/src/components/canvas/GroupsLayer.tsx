@@ -1,14 +1,20 @@
-import type { AgentId, CanvasObject, SynthesisBrief } from '@moodboard/shared'
+import type { AgentId, CanvasObject, PutGroupStateRequest, SynthesisBrief } from '@moodboard/shared'
 import { AnimatePresence } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupBoundingBox, groupId, proximityGroups } from '@moodboard/shared'
 import { analyzeGroup, synthesizeGroupApi } from '@/lib/analyzeApi'
-import { loadBoardState, saveBoardState, type PersistedBoard } from '@/lib/groupAnalysisStorage'
+import {
+  displayFromSlot,
+  listGroupStates,
+  putGroupState,
+  slotFromDisplay,
+} from '@/lib/groupStateApi'
 import { AIAnalysisPanel, type SlotState } from './AIAnalysisPanel'
 import { ColorPaletteWidget } from './ColorPaletteWidget'
 import { GroupOutline } from './GroupOutline'
 
 const IDLE_SLOT: SlotState = { kind: 'idle' }
+const GROUP_STATE_SAVE_DEBOUNCE_MS = 400
 
 // ---------------------------------------------------------------------------
 // Layer
@@ -60,10 +66,12 @@ export function GroupsLayer({
   const visibleKeysRef = useRef<Set<string>>(new Set())
   // Per-group request queue so multiple rapid clicks serialise.
   const queueByGroup = useRef<Map<string, Promise<void>>>(new Map())
-  // Tracks which boardId we've already hydrated for, so a re-render with
-  // the same boardId doesn't trample fresh in-memory state with the (now
-  // stale) localStorage snapshot.
-  const hydratedForBoardRef = useRef<string | null>(null)
+  // Set once the server state for this boardId has been merged in. Saving
+  // waits for it so an empty first render can't overwrite the team's state.
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null)
+  // Last body PUT per group key, so only groups that actually changed are
+  // re-sent.
+  const lastSentRef = useRef<Map<string, string>>(new Map())
   // Once we've ever seen objects on the canvas, the purge effect is
   // allowed to drop keys that no longer have a corresponding group.
   // Without this, the first render after mount runs with objects=[] (the
@@ -77,73 +85,99 @@ export function GroupsLayer({
   // group's key but most members are the same — transfer instead of
   // dropping).
   const allActiveKeysRef = useRef<Set<string>>(new Set())
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
-  // Hydrate from localStorage when boardId changes. Loading kinds are
-  // dropped — they're transient and shouldn't survive a reload.
+  // Hydrate from the server when boardId changes. Local state wins for any
+  // key the user already touched before the fetch resolved.
   useEffect(() => {
     if (!boardId) return
-    if (hydratedForBoardRef.current === boardId) return
-    hydratedForBoardRef.current = boardId
-
-    const persisted = loadBoardState(boardId)
-    const nextDisplay: Record<string, SlotState> = {}
-    const nextLastRun: Record<string, AgentId[]> = {}
-    const nextSelected: Record<string, AgentId[]> = {}
-    const nextPalette: Record<string, string[]> = {}
-    for (const [key, group] of Object.entries(persisted)) {
-      if (group.display && group.display.kind !== 'loading') {
-        nextDisplay[key] = group.display
-      }
-      if (Array.isArray(group.lastRunSelection)) {
-        nextLastRun[key] = group.lastRunSelection
-      }
-      if (Array.isArray(group.currentSelection)) {
-        nextSelected[key] = group.currentSelection
-      }
-      if (Array.isArray(group.aiPalette) && group.aiPalette.length > 0) {
-        nextPalette[key] = group.aiPalette
-      }
+    let cancelled = false
+    setHydratedFor(null)
+    lastSentRef.current = new Map()
+    listGroupStates(boardId)
+      .then((states) => {
+        if (cancelled) return
+        const display: Record<string, SlotState> = {}
+        const lastRun: Record<string, AgentId[]> = {}
+        const selected: Record<string, AgentId[]> = {}
+        const palette: Record<string, string[]> = {}
+        for (const g of states) {
+          const slot = slotFromDisplay(g.display)
+          if (slot) display[g.groupKey] = slot
+          lastRun[g.groupKey] = g.agentIds
+          selected[g.groupKey] = g.selectedAgentIds
+          if (g.aiPalette.length > 0) palette[g.groupKey] = g.aiPalette
+          lastSentRef.current.set(
+            g.groupKey,
+            JSON.stringify(
+              persistedBody(slot ?? undefined, g.agentIds, g.selectedAgentIds, g.aiPalette),
+            ),
+          )
+        }
+        setDisplayByGroup((prev) => ({ ...display, ...prev }))
+        setLastRunSelectionByGroup((prev) => ({ ...lastRun, ...prev }))
+        setSelectedByGroup((prev) => ({ ...selected, ...prev }))
+        setAiPaletteByGroup((prev) => ({ ...palette, ...prev }))
+        setHydratedFor(boardId)
+      })
+      .catch((e) => console.error('loading group state failed', e))
+    return () => {
+      cancelled = true
     }
-    setDisplayByGroup(nextDisplay)
-    setLastRunSelectionByGroup(nextLastRun)
-    setSelectedByGroup(nextSelected)
-    setAiPaletteByGroup(nextPalette)
   }, [boardId])
 
-  // Save to localStorage on every persisted-field change. Synchronous, no
-  // debounce — none of these fields change at high frequency (selection
-  // toggles, run start/end, palette push) so the cost is microseconds per
-  // write. The earlier debounced version cancelled its pending save in
-  // the cleanup, which meant navigating away before the 200ms elapsed
-  // dropped the most recent state on the floor.
-  //
-  // Skipped until hydration completes for this boardId so we don't
-  // overwrite the stored state with an empty initial in-memory state on
-  // first mount.
+  // Persist changed groups, debounced. Only completed reads are stored —
+  // a loading/error slot sends no display, leaving the last good one.
   useEffect(() => {
-    if (!boardId) return
-    if (hydratedForBoardRef.current !== boardId) return
-    const state: PersistedBoard = {}
-    const allKeys = new Set<string>([
+    if (!boardId || hydratedFor !== boardId) return
+    const pending = new Map<string, PutGroupStateRequest>()
+    const keys = new Set<string>([
       ...Object.keys(displayByGroup),
       ...Object.keys(lastRunSelectionByGroup),
       ...Object.keys(selectedByGroup),
       ...Object.keys(aiPaletteByGroup),
     ])
-    for (const key of allKeys) {
-      const display = displayByGroup[key] ?? IDLE_SLOT
-      // Don't persist the loading state — it would deadlock the panel
-      // if the user closes the tab mid-run.
-      if (display.kind === 'loading') continue
-      state[key] = {
-        display,
-        lastRunSelection: lastRunSelectionByGroup[key] ?? [],
-        currentSelection: selectedByGroup[key] ?? [],
-        aiPalette: aiPaletteByGroup[key] ?? [],
-      }
+    for (const key of keys) {
+      const body = persistedBody(
+        displayByGroup[key],
+        lastRunSelectionByGroup[key] ?? [],
+        selectedByGroup[key] ?? [],
+        aiPaletteByGroup[key] ?? [],
+      )
+      if (lastSentRef.current.get(key) !== JSON.stringify(body)) pending.set(key, body)
     }
-    saveBoardState(boardId, state)
-  }, [boardId, displayByGroup, lastRunSelectionByGroup, selectedByGroup, aiPaletteByGroup])
+    if (pending.size === 0) return
+    const flush = (keepalive: boolean) => {
+      for (const [key, body] of pending) {
+        lastSentRef.current.set(key, JSON.stringify(body))
+        putGroupState(boardId, key, body, { keepalive }).catch((e) => {
+          lastSentRef.current.delete(key)
+          console.error('saving group state failed', e)
+        })
+      }
+      pending.clear()
+    }
+    const timer = setTimeout(() => flush(false), GROUP_STATE_SAVE_DEBOUNCE_MS)
+    return () => {
+      clearTimeout(timer)
+      // Unmount (navigation) — send now rather than drop the edit. On a
+      // re-render the next effect run recomputes and re-schedules instead.
+      if (pending.size > 0 && !mountedRef.current) flush(true)
+    }
+  }, [
+    boardId,
+    hydratedFor,
+    displayByGroup,
+    lastRunSelectionByGroup,
+    selectedByGroup,
+    aiPaletteByGroup,
+  ])
 
   // Once we've seen objects on the canvas, the purge effect is allowed
   // to run. See objectsArrivedRef comment above for why.
@@ -340,7 +374,6 @@ export function GroupsLayer({
           }
         }
 
-        // Patches the brief's logo URL in place. Persists via the existing
         // Patch the entire brief in place. Used by inline edits in the
         // BriefReadout — the user double-clicks a text field, types,
         // and the edit propagates up through the prop chain. The save
@@ -357,8 +390,8 @@ export function GroupsLayer({
           })
         }
 
-        // localStorage save effect. Only applies when the displayed slot
-        // is a ready-brief (synthesis output). Preserves the AD's
+        // Patches the brief's logo set in place; the save effect persists
+        // it. Only applies when the displayed slot is a ready-brief (synthesis output). Preserves the AD's
         // `reason` for URLs that were already in the logo set; new URLs
         // (user-added overrides) get an empty reason.
         const handleChangeLogos = (newUrls: string[]) => {
@@ -435,4 +468,18 @@ export function GroupsLayer({
       })}
     </div>
   )
+}
+
+function persistedBody(
+  slot: SlotState | undefined,
+  agentIds: AgentId[],
+  selectedAgentIds: AgentId[],
+  aiPalette: string[],
+): PutGroupStateRequest {
+  const display = displayFromSlot(slot)
+  return {
+    ...(display ? { display, agentIds } : {}),
+    selectedAgentIds,
+    aiPalette,
+  }
 }

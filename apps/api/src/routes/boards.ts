@@ -6,7 +6,6 @@ import {
 } from '@moodboard/shared'
 import { desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
@@ -113,13 +112,6 @@ boards.use('*', async (c, next) => {
   await next()
 })
 
-// Generous: a save carries full objects, and web-page/video cards embed
-// long text excerpts.
-const saveBodyLimit = bodyLimit({
-  maxSize: 8 * 1024 * 1024,
-  onError: (c) => c.json({ error: 'Save too large' }, 413),
-})
-
 async function fullBoard(row: typeof schema.board.$inferSelect): Promise<FullBoard> {
   const objects = await loadBoardObjects(row.id)
   return {
@@ -190,7 +182,7 @@ boards.patch('/:id', async (c) => {
 
 // Object-level autosave. Writes that lost a race with a teammate come back
 // in `conflicts` with the server's copy; the client adopts it.
-boards.post('/:id/objects', saveBodyLimit, async (c) => {
+boards.post('/:id/objects', async (c) => {
   const user = c.get('user')!
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => null)

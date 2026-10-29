@@ -28,7 +28,7 @@ import { analyzeVideoForEditor } from '../lib/gemini'
 import { analysisHash } from '../lib/analysisHash'
 import { loadBoardObjects } from '../lib/boardObjects'
 import { rateLimit } from '../lib/rateLimit'
-import { recordGroupDisplay, type DisplayKind } from '../lib/recordGroupDisplay'
+import { recordGroupDisplay, type DisplayKind } from '../lib/groupState'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 

@@ -607,13 +607,13 @@ Template (HTML + data-slot markers + CSS reading --kit-* vars) ◀── skinned
 
 Already on Postgres; this makes it production-grade and ready for structured design data.
 
-- [ ] Remove the Notion integration (node, picker section, OAuth, `lib/notion.ts`, URL parsing, hash/analyse branches); migration to drop Notion connections/objects
-- [ ] Single-team access: drop per-user filters on boards/assets/shares; add `createdBy`; sign-up gated by an email-domain allowlist env var
-- [ ] `board_object` table (one row per item) replacing the `board.data` blob; object-level PATCH; `version` column for optimistic concurrency (no silent last-write-wins — matters more now everyone shares boards)
-- [ ] `board_group_display` becomes source of truth for the analysis panel; delete `groupAnalysisStorage.ts` localStorage cache
-- [ ] Postgres-backed rate limiter (in-memory `Map` breaks with >1 instance)
-- [ ] `drizzle-kit migrate` on deploy; drop `db:push` from docs
-- [ ] Indexes on FK columns; cleanup job for orphaned `board_group_display` rows
+- [x] Remove the Notion integration (node, picker section, OAuth, `lib/notion.ts`, URL parsing, hash/analyse branches); migration to drop Notion connections/objects
+- [x] Single-team access: drop per-user filters on boards/assets/shares; add `createdBy`; sign-up gated by an email-domain allowlist env var
+- [x] `board_object` table (one row per item) replacing the `board.data` blob; object-level save (`POST /api/boards/:id/objects`); `version` column for optimistic concurrency (no silent last-write-wins — matters more now everyone shares boards)
+- [x] `board_group_display` becomes source of truth for the analysis panel; delete `groupAnalysisStorage.ts` localStorage cache
+- [x] Postgres-backed rate limiter (in-memory `Map` breaks with >1 instance)
+- [x] Migrations run on API start (advisory-locked); drop `db:push` from docs
+- [x] Indexes on FK columns; cleanup job for orphaned `board_group_display` rows
 - [ ] Split oversized files: `AIAnalysisPanel.tsx`, `SourcePickerDrawer.tsx`, `routes/external.ts`, `lib/analyze.ts`
 
 **Deliverable:** Same app minus Notion, everyone sees everything, two people editing one board can't clobber each other.

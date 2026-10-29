@@ -85,6 +85,8 @@ export type CreateAgentThreadRequest = z.infer<typeof createAgentThreadRequestSc
 export const AGENT_MESSAGE_MAX_CHARS = 8000
 export const postAgentMessageRequestSchema = z.object({
   text: z.string().trim().min(1).max(AGENT_MESSAGE_MAX_CHARS),
+  // Ids selected on the sender's canvas — what "these" refers to.
+  selection: z.array(z.string().min(1)).max(200).optional(),
 })
 export type PostAgentMessageRequest = z.infer<typeof postAgentMessageRequestSchema>
 
@@ -111,6 +113,24 @@ export const agentStreamEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('done') }),
 ])
 export type AgentStreamEvent = z.infer<typeof agentStreamEventSchema>
+
+// The canvas selection rides along as its own text block on the user's
+// message, so the model reads it and a replayed thread keeps it. The
+// sidebar renders it as a chip rather than text.
+const SELECTION_PREFIX = '[Selected on canvas: '
+
+export function selectionBlock(ids: string[]): AgentTextBlock {
+  return { type: 'text', text: `${SELECTION_PREFIX}${ids.join(', ')}]` }
+}
+
+export function parseSelectionBlock(block: AgentContentBlock): string[] | null {
+  if (block.type !== 'text' || !block.text.startsWith(SELECTION_PREFIX)) return null
+  return block.text
+    .slice(SELECTION_PREFIX.length, -1)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 
 // First line of the opening message, cut at a word boundary.
 export function deriveThreadTitle(text: string, max = 60): string {

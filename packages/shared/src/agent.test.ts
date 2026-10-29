@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { agentStreamEventSchema, deriveThreadTitle } from './agent'
+import {
+  agentStreamEventSchema,
+  deriveThreadTitle,
+  parseSelectionBlock,
+  selectionBlock,
+} from './agent'
 
 describe('deriveThreadTitle', () => {
   it('keeps a short first line as-is', () => {
@@ -42,5 +47,15 @@ describe('agentStreamEventSchema', () => {
 
   it('rejects unknown event types', () => {
     expect(agentStreamEventSchema.safeParse({ type: 'nope' }).success).toBe(false)
+  })
+})
+
+describe('selection blocks', () => {
+  it('round-trips ids', () => {
+    expect(parseSelectionBlock(selectionBlock(['a', 'b c', 'd']))).toEqual(['a', 'b c', 'd'])
+  })
+
+  it('ignores ordinary text', () => {
+    expect(parseSelectionBlock({ type: 'text', text: 'Selected on canvas' })).toBeNull()
   })
 })

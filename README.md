@@ -96,11 +96,13 @@ External knowledge sources (all **optional** — the app boots without them; eac
 
 ### Database
 
-Run Drizzle migrations:
+The API applies pending Drizzle migrations on startup (guarded by a Postgres advisory lock, so several instances booting together migrate once). To run them by hand:
 
 ```bash
-pnpm --filter @moodboard/api db:push    # if defined; otherwise: pnpm --filter @moodboard/api exec drizzle-kit push
+pnpm --filter @moodboard/api db:migrate
 ```
+
+Schema changes: edit `apps/api/src/db/schema.ts`, then `pnpm --filter @moodboard/api db:generate --name=<change>` and commit the generated SQL. Never `db:push` against a shared database — it skips the migration history.
 
 ### Dev
 

@@ -7,6 +7,8 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { auth, type AuthSession, type AuthUser } from './auth'
 import { db } from './db'
+import { runMigrations } from './db/migrate'
+import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
 import { analyze } from './routes/analyze'
@@ -133,7 +135,9 @@ app.route('/api', api)
 
 const port = Number(process.env.PORT ?? 3001)
 
+await runMigrations(process.env.DATABASE_URL!)
 await ensureDataDirs()
+startMaintenance()
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`)

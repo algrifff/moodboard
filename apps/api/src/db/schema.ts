@@ -27,36 +27,44 @@ export const user = pgTable('user', {
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
 
-export const session = pgTable('session', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  token: text('token').notNull().unique(),
-  expiresAt: timestamp('expires_at').notNull(),
-  ipAddress: text('ip_address'),
-  userAgent: text('user_agent'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const session = pgTable(
+  'session',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    token: text('token').notNull().unique(),
+    expiresAt: timestamp('expires_at').notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ userIdx: index('session_user_id_idx').on(t.userId) }),
+)
 
-export const account = pgTable('account', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  accountId: text('account_id').notNull(),
-  providerId: text('provider_id').notNull(),
-  accessToken: text('access_token'),
-  refreshToken: text('refresh_token'),
-  idToken: text('id_token'),
-  accessTokenExpiresAt: timestamp('access_token_expires_at'),
-  refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
-  scope: text('scope'),
-  password: text('password'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const account = pgTable(
+  'account',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    accountId: text('account_id').notNull(),
+    providerId: text('provider_id').notNull(),
+    accessToken: text('access_token'),
+    refreshToken: text('refresh_token'),
+    idToken: text('id_token'),
+    accessTokenExpiresAt: timestamp('access_token_expires_at'),
+    refreshTokenExpiresAt: timestamp('refresh_token_expires_at'),
+    scope: text('scope'),
+    password: text('password'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ userIdx: index('account_user_id_idx').on(t.userId) }),
+)
 
 export const verification = pgTable('verification', {
   id: text('id').primaryKey(),
@@ -74,13 +82,17 @@ export const verification = pgTable('verification', {
 // Single internal team: every signed-in user sees and edits every board,
 // asset and share. `createdBy` is attribution only; it survives the
 // creator's account being deleted as null.
-export const board = pgTable('board', {
-  id: text('id').primaryKey(),
-  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
-  name: text('name').notNull(),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
+export const board = pgTable(
+  'board',
+  {
+    id: text('id').primaryKey(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ updatedAtIdx: index('board_updated_at_idx').on(t.updatedAt) }),
+)
 
 // One row per canvas object. `object` is the full CanvasObject (geometry +
 // per-type data); `type` is lifted out so queries can filter without
@@ -108,18 +120,22 @@ export const boardObject = pgTable(
   }),
 )
 
-export const asset = pgTable('asset', {
-  id: text('id').primaryKey(),
-  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
-  filename: text('filename').notNull(),
-  mimeType: text('mime_type').notNull(),
-  size: integer('size').notNull(),
-  // 'upload' (images on UPLOADS_DIR), 'pdf' (PDFs on PDF_DIR),
-  // 'pdf-thumb' (server-rendered first-page PNG on PDF_THUMB_DIR).
-  // Drives which directory /api/files/:filename serves from.
-  kind: text('kind').notNull().default('upload'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-})
+export const asset = pgTable(
+  'asset',
+  {
+    id: text('id').primaryKey(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    filename: text('filename').notNull(),
+    mimeType: text('mime_type').notNull(),
+    size: integer('size').notNull(),
+    // 'upload' (images on UPLOADS_DIR), 'pdf' (PDFs on PDF_DIR),
+    // 'pdf-thumb' (server-rendered first-page PNG on PDF_THUMB_DIR).
+    // Drives which directory /api/files/:filename serves from.
+    kind: text('kind').notNull().default('upload'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({ filenameIdx: index('asset_filename_idx').on(t.filename) }),
+)
 
 // Cache for AI group analyses. Key = sha256 of (sorted object IDs +
 // per-object content hash + model tag). Same content → same key → reuse.
@@ -134,25 +150,29 @@ export const groupAnalysis = pgTable('group_analysis', {
 // account) — a user may connect multiple Google accounts and we treat each as a separate connection. Tokens are encrypted at
 // rest with AES-GCM using CONNECTION_TOKEN_KEY (server-side); the frontend
 // only ever sees `id`, `provider`, and `accountEmail`.
-export const connection = pgTable('connection', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  provider: text('provider').notNull(), // 'drive' | 'spotify'
-  accountEmail: text('account_email').notNull(),
-  // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
-  accessTokenEnc: text('access_token_enc').notNull(),
-  refreshTokenEnc: text('refresh_token_enc'),
-  expiresAt: timestamp('expires_at'),
-  scopes: text('scopes').notNull(),
-  // Org/workspace the account belongs to, for providers that have one.
-  // Flat columns so we can index/filter cheaply.
-  workspaceId: text('workspace_id'),
-  workspaceName: text('workspace_name'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  lastUsedAt: timestamp('last_used_at'),
-})
+export const connection = pgTable(
+  'connection',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(), // 'drive' | 'spotify'
+    accountEmail: text('account_email').notNull(),
+    // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
+    accessTokenEnc: text('access_token_enc').notNull(),
+    refreshTokenEnc: text('refresh_token_enc'),
+    expiresAt: timestamp('expires_at'),
+    scopes: text('scopes').notNull(),
+    // Org/workspace the account belongs to, for providers that have one.
+    // Flat columns so we can index/filter cheaply.
+    workspaceId: text('workspace_id'),
+    workspaceName: text('workspace_name'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at'),
+  },
+  (t) => ({ userIdx: index('connection_user_id_idx').on(t.userId) }),
+)
 
 // Phase 18 — Shareable moodboards. Frozen, immutable snapshot of a board
 // + the per-group synthesis brief, exposed via an unguessable token.
@@ -237,33 +257,54 @@ export const boardGroupDisplay = pgTable(
 // the plaintext for display in the dashboard (e.g. "mb_ABC1…").
 // `lastUsedAt` is bumped async on each MCP request so the dashboard
 // can surface idle keys. Cascade-delete with the user.
-export const apiKey = pgTable('api_key', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  prefix: text('prefix').notNull(),
-  hashedKey: text('hashed_key').notNull().unique(),
-  lastUsedAt: timestamp('last_used_at'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-})
+export const apiKey = pgTable(
+  'api_key',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    prefix: text('prefix').notNull(),
+    hashedKey: text('hashed_key').notNull().unique(),
+    lastUsedAt: timestamp('last_used_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({ userIdx: index('api_key_user_id_idx').on(t.userId) }),
+)
 
 // Per-user recent picks across sources. Drives the picker drawer's "Recents"
 // tab without re-querying the provider every time. Capped server-side; old
 // entries beyond the cap are pruned on insert.
-export const recentExternal = pgTable('recent_external', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  connectionId: text('connection_id')
-    .notNull()
-    .references(() => connection.id, { onDelete: 'cascade' }),
-  externalId: text('external_id').notNull(), // pageId / fileId / folderId
-  kind: text('kind').notNull(), // 'page' | 'file' | 'folder'
-  title: text('title').notNull(),
-  iconUrl: text('icon_url'),
-  mimeType: text('mime_type'), // Spotify stores its sub-kind here
-  lastUsedAt: timestamp('last_used_at').notNull().defaultNow(),
+export const recentExternal = pgTable(
+  'recent_external',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => connection.id, { onDelete: 'cascade' }),
+    externalId: text('external_id').notNull(), // pageId / fileId / folderId
+    kind: text('kind').notNull(), // 'page' | 'file' | 'folder'
+    title: text('title').notNull(),
+    iconUrl: text('icon_url'),
+    mimeType: text('mime_type'), // Spotify stores its sub-kind here
+    lastUsedAt: timestamp('last_used_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('recent_external_user_id_idx').on(t.userId),
+    connectionIdx: index('recent_external_connection_id_idx').on(t.connectionId),
+  }),
+)
+
+// Fixed-window request counters for lib/rateLimit.ts. Lives in Postgres so
+// limits hold across API instances. One row per (scope, client); the
+// window resets in place. Ephemeral — the table is UNLOGGED and stale rows
+// are pruned by lib/maintenance.ts.
+export const rateLimit = pgTable('rate_limit', {
+  key: text('key').primaryKey(),
+  windowStart: timestamp('window_start').notNull(),
+  count: integer('count').notNull(),
 })

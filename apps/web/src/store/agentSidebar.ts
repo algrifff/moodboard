@@ -88,21 +88,25 @@ function markAnalysesStarted(message: AgentMessage): void {
   }
 }
 
+function restoreAnalysis(toolUseId: string): void {
+  const pending = pendingAnalyses.get(toolUseId)
+  if (!pending) return
+  pendingAnalyses.delete(toolUseId)
+  const { groupKey, previous } = pending
+  useGroupPanelStore.getState().setDisplay((d) => {
+    if (d[groupKey]?.kind !== 'loading') return d
+    const next = { ...d }
+    if (previous) next[groupKey] = previous
+    else delete next[groupKey]
+    return next
+  })
+}
+
 function settleAnalyses(message: AgentMessage): void {
   for (const block of message.content) {
     if (block.type !== 'tool_result') continue
-    const pending = pendingAnalyses.get(block.tool_use_id)
-    if (!pending) continue
-    pendingAnalyses.delete(block.tool_use_id)
-    if (!block.is_error) continue
-    const { groupKey, previous } = pending
-    useGroupPanelStore.getState().setDisplay((d) => {
-      if (d[groupKey]?.kind !== 'loading') return d
-      const next = { ...d }
-      if (previous) next[groupKey] = previous
-      else delete next[groupKey]
-      return next
-    })
+    if (block.is_error) restoreAnalysis(block.tool_use_id)
+    else pendingAnalyses.delete(block.tool_use_id)
   }
 }
 
@@ -283,7 +287,8 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
         }
       } finally {
         if (get().run?.controller === controller) set({ run: null })
-        pendingAnalyses.clear()
+        // A stopped or failed run never settles its analyses.
+        for (const id of [...pendingAnalyses.keys()]) restoreAnalysis(id)
       }
       // A stopped run finishes persisting on the server after we hang up;
       // reload so the thread shows exactly what was kept.

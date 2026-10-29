@@ -620,14 +620,31 @@ Already on Postgres; this makes it production-grade and ready for structured des
 
 ### Phase 21 — Left agent sidebar (T3-chat style)
 
-- [ ] Docked left sidebar: thread list, streaming chat, collapsible; threads scoped to a board or a client
-- [ ] `agent_thread` / `agent_message` tables; threads persist and resume, visible to the whole team
-- [ ] Orchestrator agent (Claude tool-use) with canvas tools reused from `mcpTools.ts` (add/move items, read groups, run analysts)
-- [ ] Specialist analysts (art director, copywriter, …) become tools the orchestrator calls, not a manual agent row
-- [ ] Tool calls render as inline cards (brief, palette, placed items) with "jump to on canvas"
-- [ ] Floating per-group panel slims to a glance; full brief opens in the sidebar
+- [x] Docked left sidebar: thread list, streaming chat, collapsible; threads scoped to a board (client scoping lands with the `client` table in Phase 22)
+- [x] `agent_thread` / `agent_message` tables; threads persist and resume, visible to the whole team
+- [x] Orchestrator agent (Claude tool-use) with canvas tools reused from `mcpTools.ts` (add/move items, read groups, run analysts)
+- [x] Specialist analysts (art director, copywriter, …) become tools the orchestrator calls, not a manual agent row
+- [x] Tool calls render as inline cards (brief, palette, placed items) with "jump to on canvas"
+- [x] Floating per-group panel slims to a glance; full brief opens in the sidebar
 
 **Deliverable:** Chat with the board. "Pull these into a group and give me a brief" works end to end.
+
+**How it fits together:**
+
+- Canvas tools live once in `apps/api/src/lib/canvasTools.ts` (`get_board`, `add_note`, `add_text`, `add_url`, `add_image`, `move_objects`, `group_objects`, `analyze_group`). The MCP server adds a `boardId` argument; the orchestrator binds the open board. New tools go in `CANVAS_TOOLS` and appear on both transports.
+- `lib/orchestrator.ts` is the tool-use loop (`DEEP_MODEL`, ≤8 tool rounds, cached system prompt + tool definitions + history). Model client, tools, persistence and the event sink are injected; `orchestrator.test.ts` drives it with a fake streaming client.
+- `POST /api/boards/:id/agent/threads/:threadId/messages` streams `AgentStreamEvent`s (SSE). Every turn is persisted in Anthropic content-block form; server notices (`isError`) are shown but never replayed.
+- The sender's canvas selection travels as a `[Selected on canvas: …]` block on their message — that's what "these" means.
+- Tool writes come back as `{ object, version }`; the client folds them into the autosave's synced state (`foldServerObjects`) before `applyRemote`, so they neither re-save nor conflict. Group panel rows merge into `store/groupPanels.ts`.
+- Moves are versioned writes (`saveBoardObjects` with the version just read): a teammate's concurrent edit wins and the tool reports it.
+
+**Deferred / notes:**
+
+- No live model run has been exercised (no API key in the build environment). The full path — SSE, real tools, persistence, live canvas update, cards — was verified with a scripted fake model client; the first real run should be watched for prompt/tool-choice quality.
+- One run per thread is enforced per API instance (in-memory); a multi-instance deploy would need a Postgres advisory lock.
+- Closing the request (stop button, navigating away) stops the run; there's no background continuation yet.
+- Teammates don't see each other's threads update live — the thread list and messages refresh on open/switch.
+- No adaptive thinking on the orchestrator yet (kept off for chat latency); worth trying once real runs are observable.
 
 ### Phase 22 — Clients, Style Kits, Asset Library, Linear
 

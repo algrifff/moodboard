@@ -573,6 +573,104 @@ const snapWithAnticipation = (t: number, b: number, c: number, d: number) => {
 
 ---
 
+## Roadmap — Agent-Driven Design System (Phase 20+)
+
+**Direction:** moodboard.ai grows from "analyse a mood board" into a Canva-light that agents drive. A user says _"I need X for client Y, they're asking Z"_; agents pick the client's style kit, the right template, the right assets, and return a finished design (thumbnail, deck, PDF, eventually video). Mood boards stay the input — they're where styles and templates get built.
+
+### Core model
+
+```
+Client ── owns ──▶ Mood boards ── distil ──▶ Style Kit (versioned)
+   │                                            │
+   └── owns ──▶ Asset Library ◀── connected sources (Drive, Notion, Figma, uploads…)
+                                                │
+Template (format + slots + constraints) ◀───────┘ applied to
+   │
+   └── instantiated as ──▶ Design (frames → layers) ── render ──▶ PNG / PDF / PPTX / MP4
+```
+
+- **Client** — tenant-level container for boards, kits, assets, designs. "For this client" resolves here.
+- **Style Kit** — structured, versioned distillation of a group's SynthesisBrief: palette, fonts, logo variants, voice, imagery rules, do/don't. Rigid on purpose so users don't redesign every time.
+- **Template** — a fixed-size format (e.g. 1280×720 thumbnail, 16:9 deck page, A4 page) with named slots (`headline`, `hero-image`, `logo`, `cta`) and layout constraints. Style-agnostic; the kit skins it.
+- **Design** — an instance: template + kit + filled slots + free layers. Scene graph lives in `packages/shared`.
+- **One renderer.** The design canvas renders with Konva in the browser; export renders the same component headless via Playwright (already a dep) → PNG/PDF. No second layout engine.
+
+### Phase 20 — Cleanup + Postgres hardening
+
+Already on Postgres; this makes it production-grade and ready for structured design data.
+
+- [ ] `board_object` table (one row per item) replacing the `board.data` blob; object-level PATCH; `version` column for optimistic concurrency (no silent last-write-wins)
+- [ ] `board_group_display` becomes source of truth for the analysis panel; delete `groupAnalysisStorage.ts` localStorage cache
+- [ ] Postgres-backed rate limiter (in-memory `Map` breaks with >1 instance)
+- [ ] `drizzle-kit migrate` on deploy; drop `db:push` from docs
+- [ ] Indexes on `user_id` / `board_id` FKs; cleanup job for orphaned `board_group_display` rows
+- [ ] Split oversized files: `AIAnalysisPanel.tsx`, `SourcePickerDrawer.tsx`, `routes/external.ts`, `lib/analyze.ts`
+
+**Deliverable:** Same app, no behaviour change, two tabs editing one board can't clobber each other.
+
+### Phase 21 — Left agent sidebar (T3-chat style)
+
+- [ ] Docked left sidebar: thread list per board, streaming chat, collapsible
+- [ ] `agent_thread` / `agent_message` tables; threads persist and resume
+- [ ] Orchestrator agent (Claude tool-use) with canvas tools reused from `mcpTools.ts` (add/move items, read groups, run analysts)
+- [ ] Tool calls render as inline cards (brief, palette, placed items) with "jump to on canvas"
+- [ ] Specialist analysts (art director, copywriter, …) become tools the orchestrator calls, not a manual agent row
+- [ ] Floating per-group panel slims to a glance; full brief opens in the sidebar
+
+**Deliverable:** Chat with the board. "Pull these into a group and give me a brief" works end to end.
+
+### Phase 22 — Clients, Style Kits, Asset Library
+
+- [ ] `client` table; boards/assets/kits scoped to a client; client switcher
+- [ ] "Save as Style Kit" from a group brief; kits versioned and editable
+- [ ] Asset library: every uploaded/imported asset tagged (AI captions, colours, kind) and searchable
+- [ ] Agent tools: `search_assets`, `get_style_kit`, `list_kits`
+- [ ] Connected-library search via existing Drive/Notion connections
+
+**Deliverable:** "Use the Acme kit" means something concrete and repeatable.
+
+### Phase 23 — Designs + Templates + export
+
+- [ ] Design scene graph in `packages/shared` (frames, image/text/shape layers, slot bindings)
+- [ ] Design canvas mode: fixed-size frames, layer selection, DOM text editing (same rules as the mood board)
+- [ ] Templates: save a design as a template (layers → slots); starter set (YouTube thumbnail, IG post, deck page, one-pager)
+- [ ] Apply kit → template restyles palette/fonts/logo
+- [ ] Headless export via Playwright: PNG, PDF; files to `/data/exports/`
+
+**Deliverable:** Hand-build a thumbnail from a template + kit and export it.
+
+### Phase 24 — Thumbnail agent (first vertical slice)
+
+- [ ] Intake: agent asks only what's missing (client, format, message, audience)
+- [ ] Loop: pick kit → pick template → fill slots from asset search → render → Claude vision critique → revise (bounded iterations)
+- [ ] Returns 2–3 variants in the sidebar; user picks, tweaks on the design canvas
+- [ ] Same AI cache discipline: hash of (brief + kit version + template + asset IDs)
+
+**Deliverable:** "Thumbnail for Acme's launch video, punchy, dark" → three exportable options.
+
+### Phase 25 — Deck + PDF agents
+
+- [ ] Multi-frame designs (pages); outline-first planning, then per-page fill
+- [ ] PPTX export (new dep — needs sign-off)
+
+### Phase 26 — Figma link
+
+- [ ] Import Figma frames as templates / kit sources (REST API, read-only)
+- [ ] Push designs back to Figma (REST can't write; needs a Figma plugin or Figma MCP)
+
+### Phase 27 — Video agent
+
+- [ ] Scope TBD: storyboard/animatic from kit + clips vs. real edit/render (Remotion or similar — new dep, needs sign-off). Builds on the existing Gemini video-editor analysis.
+
+### Open decisions
+
+- **Image generation** — in scope? Claude can't generate images; Gemini is already in the stack.
+- **Teams** — do clients/kits get shared across users (better-auth organizations) or stay single-user?
+- **Realtime multiplayer** — not planned; Phase 20's versioned object table keeps the door open.
+- **New deps needing sign-off** — PPTX writer, video renderer, possibly `pgvector` for semantic asset search.
+
+---
+
 ## Implementation Notes
 
 ### Canvas transform tracking

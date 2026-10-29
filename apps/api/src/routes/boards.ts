@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
 import { loadBoardObjects, loadObjectsByBoard, saveBoardObjects } from '../lib/boardObjects'
+import { clientExists } from '../lib/clients'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 
@@ -119,6 +120,7 @@ async function fullBoard(row: typeof schema.board.$inferSelect): Promise<FullBoa
     name: row.name,
     objects: objects.map((o) => o.object),
     versions: Object.fromEntries(objects.map((o) => [o.object.id, o.version])),
+    clientId: row.clientId,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -131,6 +133,7 @@ boards.get('/', async (c) => {
     boards: rows.map((r) => ({
       id: r.id,
       name: r.name,
+      clientId: r.clientId,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
       preview: buildPreview(objectsByBoard.get(r.id) ?? []),
@@ -145,12 +148,16 @@ boards.post('/', async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
   }
+  if (parsed.data.clientId && !(await clientExists(parsed.data.clientId))) {
+    return c.json({ error: 'Client not found' }, 404)
+  }
   const [row] = await db
     .insert(schema.board)
     .values({
       id: nanoid(),
       createdBy: user.id,
       name: parsed.data.name ?? 'Untitled board',
+      clientId: parsed.data.clientId ?? null,
     })
     .returning()
   if (!row) return c.json({ error: 'Insert failed' }, 500)
@@ -171,9 +178,17 @@ boards.patch('/:id', async (c) => {
   if (!parsed.success) {
     return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
   }
+  if (parsed.data.clientId && !(await clientExists(parsed.data.clientId))) {
+    return c.json({ error: 'Client not found' }, 404)
+  }
+  // Assigning a client isn't an edit to the canvas, so it leaves the
+  // "edited" time alone.
   const [row] = await db
     .update(schema.board)
-    .set({ name: parsed.data.name, updatedAt: new Date() })
+    .set({
+      ...(parsed.data.name !== undefined ? { name: parsed.data.name, updatedAt: new Date() } : {}),
+      ...(parsed.data.clientId !== undefined ? { clientId: parsed.data.clientId } : {}),
+    })
     .where(eq(schema.board.id, id))
     .returning()
   if (!row) return c.json({ error: 'Not found' }, 404)

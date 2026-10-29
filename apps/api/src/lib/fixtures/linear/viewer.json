@@ -1,0 +1,6 @@
+{
+  "data": {
+    "viewer": { "id": "user-1", "name": "Ada Lovelace", "email": "ada@acme.test" },
+    "organization": { "id": "org-1", "name": "Acme Studio" }
+  }
+}

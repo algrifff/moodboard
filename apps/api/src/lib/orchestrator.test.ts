@@ -188,6 +188,23 @@ describe('runOrchestrator', () => {
     expect(tools[0]!.cache_control).toBeUndefined()
   })
 
+  it('adds run-specific context after the cached system block', async () => {
+    const h = harness([{ text: 'ok' }])
+    await runOrchestrator({
+      ...h,
+      history: [userMessage('hi')],
+      context: 'This board belongs to the client Acme.',
+    })
+    const system = h.calls[0]!.system as Anthropic.TextBlockParam[]
+    expect(system).toHaveLength(2)
+    expect(system[0]!.cache_control).toEqual({ type: 'ephemeral' })
+    expect(system[1]).toEqual({ type: 'text', text: 'This board belongs to the client Acme.' })
+
+    const bare = harness([{ text: 'ok' }])
+    await runOrchestrator({ ...bare, history: [userMessage('hi')] })
+    expect(bare.calls[0]!.system as unknown[]).toHaveLength(1)
+  })
+
   it('stops after the iteration bound with a visible notice', async () => {
     const h = harness([{ tools: [{ id: 'tu', name: 'get_board', input: {} }] }])
     await runOrchestrator({ ...h, history: [userMessage('loop')], maxIterations: 3 })

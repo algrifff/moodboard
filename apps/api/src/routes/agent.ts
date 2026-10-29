@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import {
   createAgentThreadRequestSchema,
   deriveThreadTitle,
+  linearIssueBlock,
   postAgentMessageRequestSchema,
   selectionBlock,
   type AgentStreamEvent,
@@ -22,7 +23,10 @@ import {
   listThreads,
   setThreadTitle,
 } from '../lib/agentThreads'
+import { boardContext } from '../lib/agentContext'
 import { boardToolset } from '../lib/agentToolset'
+import { LinearApiError } from '../lib/linear'
+import { clientNameFor, getIssueDetail, LinearUnavailableError } from '../lib/linearConnection'
 import { anthropicModelClient, runOrchestrator, type ModelClient } from '../lib/orchestrator'
 import { rateLimit } from '../lib/rateLimit'
 
@@ -106,6 +110,23 @@ export function agentRoutes(modelClient: ModelClient | null) {
     if (runningThreads.has(thread.id)) {
       return c.json({ error: 'The agent is already working in this thread' }, 409)
     }
+
+    // The issue the person picked rides along as the brief. Fetched before
+    // the run starts so a Linear problem is a clear error, not a half thread.
+    let issueBlock: ReturnType<typeof linearIssueBlock> | null = null
+    if (parsed.data.linearIssue) {
+      try {
+        const issue = await getIssueDetail(user.id, parsed.data.linearIssue)
+        if (!issue)
+          return c.json({ error: `No Linear issue matches “${parsed.data.linearIssue}”` }, 404)
+        issueBlock = linearIssueBlock(issue, await clientNameFor(issue.clientId))
+      } catch (e) {
+        if (e instanceof LinearUnavailableError)
+          return c.json({ error: e.message, code: e.code }, 409)
+        if (e instanceof LinearApiError) return c.json({ error: `Linear: ${e.message}` }, 502)
+        throw e
+      }
+    }
     runningThreads.add(thread.id)
 
     return streamSSE(c, async (stream) => {
@@ -123,6 +144,7 @@ export function agentRoutes(modelClient: ModelClient | null) {
         const { text, selection } = parsed.data
         const userMessage = await appendMessage(thread.id, 'user', [
           { type: 'text', text },
+          ...(issueBlock ? [issueBlock] : []),
           ...(selection && selection.length > 0 ? [selectionBlock(selection)] : []),
         ])
         emit({ type: 'message', message: userMessage })
@@ -139,6 +161,7 @@ export function agentRoutes(modelClient: ModelClient | null) {
           },
           emit,
           signal: controller.signal,
+          context: await boardContext(boardId),
         })
       } catch (e) {
         console.error('agent run failed', e)

@@ -99,6 +99,13 @@
       "when": 1793315266708,
       "tag": "0013_agent_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793317296135,
+      "tag": "0014_clients_kits_library",
+      "breakpoints": true
     }
   ]
 }

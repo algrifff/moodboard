@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '../db'
+import { enrichPending } from './assetEnrich'
 
 const MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000
 
@@ -34,6 +35,10 @@ export async function runMaintenance(): Promise<void> {
   if (rateLimits + groups > 0) {
     console.log(`[maintenance] pruned ${rateLimits} rate-limit rows, ${groups} orphan group states`)
   }
+  // Library metadata for assets recorded before the library existed, or
+  // whose in-request enrichment didn't finish.
+  const enriched = await enrichPending()
+  if (enriched > 0) console.log(`[maintenance] enriched ${enriched} library assets`)
 }
 
 export function startMaintenance(): void {

@@ -62,6 +62,12 @@ How to work:
 - Analysis results are cached and already shown on the canvas panel — don't paste the whole brief back. Summarise in two or three lines (the throughline and what stands out) and point the user to the brief card.
 - If a tool fails, read the error, fix the call if you can, otherwise tell the user plainly what blocked you.
 
+Clients, kits, assets and Linear:
+- Work is done for a client. list_clients shows the studio's clients and which one this board belongs to. A client's style kit holds its palette, fonts, logos, voice and imagery rules; "use the Acme kit" means get_style_kit with client "Acme". Read the kit before choosing colours or writing copy, and keep to its voice and its don'ts. list_kits shows what exists.
+- search_assets finds images, PDFs and fonts already in the asset library (by words, client or kind). Prefer library assets to inventing imagery.
+- A message may begin with a "[Linear issue LIN-123] …" block: that issue is the brief for the thread. Take the client from it (the block names the client when its team or project is mapped; otherwise use the board's client or ask), read that client's kit, and say what you would make before making it. get_linear_issue re-reads an issue or reads another. Linear is read-only here — never claim to have updated an issue.
+- If a client or kit can't be found, say so and list what does exist instead of guessing.
+
 Style: brief, specific, designer-to-designer. Plain sentences, light markdown at most, no headings, no emoji.`
 
 // Persisted blocks → Messages API params. Server notices are skipped, and a
@@ -140,10 +146,14 @@ export async function runOrchestrator({
   store,
   emit,
   signal,
+  context,
   maxIterations = MAX_TOOL_ITERATIONS,
 }: {
   // The full thread, ending with the user's new message.
   history: AgentMessage[]
+  // Facts about this board that change between runs (its client…). Kept out
+  // of the cached system block.
+  context?: string
   client: ModelClient | null
   tools: OrchestratorTools
   store: OrchestratorStore
@@ -186,7 +196,10 @@ export async function runOrchestrator({
         {
           model: DEEP_MODEL,
           max_tokens: MAX_TOKENS,
-          system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+          system: [
+            { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+            ...(context ? [{ type: 'text' as const, text: context }] : []),
+          ],
           tools: toolDefs,
           messages,
           // Caches the growing history across the tool-loop iterations.

@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -79,6 +80,22 @@ export const verification = pgTable('verification', {
 // App tables
 // ---------------------------------------------------------------------------
 
+// Phase 22 — a client is what boards, style kits and library assets belong
+// to. Team-visible; `slug` is the stable handle agents and URLs use (it
+// survives a rename).
+export const client = pgTable(
+  'client',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ slugIdx: uniqueIndex('client_slug_idx').on(t.slug) }),
+)
+
 // Single internal team: every signed-in user sees and edits every board,
 // asset and share. `createdBy` is attribution only; it survives the
 // creator's account being deleted as null.
@@ -88,10 +105,16 @@ export const board = pgTable(
     id: text('id').primaryKey(),
     createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
+    // Optional: a board may belong to a client. Deleting the client leaves
+    // the board, unassigned.
+    clientId: text('client_id').references(() => client.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
-  (t) => ({ updatedAtIdx: index('board_updated_at_idx').on(t.updatedAt) }),
+  (t) => ({
+    updatedAtIdx: index('board_updated_at_idx').on(t.updatedAt),
+    clientIdx: index('board_client_id_idx').on(t.clientId),
+  }),
 )
 
 // One row per canvas object. `object` is the full CanvasObject (geometry +
@@ -120,6 +143,17 @@ export const boardObject = pgTable(
   }),
 )
 
+const tsvector = customType<{ data: string }>({
+  dataType() {
+    return 'tsvector'
+  },
+})
+
+// Every upload or import. `kind` is the storage location (which directory
+// serves the file); `mediaKind` is what the library shows. The library
+// columns (dimensions, colours, caption) are filled by lib/assetLibrary.ts:
+// at record time when cheap, otherwise by the maintenance tick — `enrichedAt`
+// null means "not looked at yet".
 export const asset = pgTable(
   'asset',
   {
@@ -133,8 +167,35 @@ export const asset = pgTable(
     // Drives which directory /api/files/:filename serves from.
     kind: text('kind').notNull().default('upload'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
+    // Phase 22 — library metadata.
+    originalName: text('original_name'),
+    mediaKind: text('media_kind').notNull().default('other'),
+    width: integer('width'),
+    height: integer('height'),
+    colors: text('colors')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    caption: text('caption'),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    clientId: text('client_id').references(() => client.id, { onDelete: 'set null' }),
+    enrichedAt: timestamp('enriched_at'),
+    // Original name (punctuation split so "brand_logo-v2.png" matches "logo"), tags
+    // and caption. asset_tags_text is an IMMUTABLE wrapper — array_to_string
+    // is only STABLE, which generated columns reject.
+    search: tsvector('search').generatedAlwaysAs(
+      sql`setweight(to_tsvector('english', regexp_replace(coalesce(original_name, ''), '[._-]+', ' ', 'g')), 'A') || setweight(to_tsvector('english', asset_tags_text(tags)), 'A') || setweight(to_tsvector('english', coalesce(caption, '')), 'B')`,
+    ),
   },
-  (t) => ({ filenameIdx: index('asset_filename_idx').on(t.filename) }),
+  (t) => ({
+    filenameIdx: index('asset_filename_idx').on(t.filename),
+    clientIdx: index('asset_client_id_idx').on(t.clientId),
+    createdAtIdx: index('asset_created_at_idx').on(t.createdAt),
+    searchIdx: index('asset_search_idx').using('gin', t.search),
+  }),
 )
 
 // Cache for AI group analyses. Key = sha256 of (sorted object IDs +
@@ -157,7 +218,7 @@ export const connection = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    provider: text('provider').notNull(), // 'drive' | 'spotify'
+    provider: text('provider').notNull(), // 'drive' | 'spotify' | 'linear'
     accountEmail: text('account_email').notNull(),
     // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
     accessTokenEnc: text('access_token_enc').notNull(),
@@ -348,4 +409,63 @@ export const agentMessage = pgTable(
     createdAt: timestamp('created_at').notNull().defaultNow(),
   },
   (t) => ({ threadSeqIdx: index('agent_message_thread_seq_idx').on(t.threadId, t.seq) }),
+)
+
+// Phase 22 — style kits. A kit belongs to a client and is edited by adding
+// versions: each version is an immutable KitTokens document (see
+// packages/shared/src/kits.ts) and the kit points at its latest number.
+export const styleKit = pgTable(
+  'style_kit',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => client.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    latestVersion: integer('latest_version').notNull().default(1),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ clientIdx: index('style_kit_client_id_idx').on(t.clientId) }),
+)
+
+export const styleKitVersion = pgTable(
+  'style_kit_version',
+  {
+    id: text('id').primaryKey(),
+    kitId: text('kit_id')
+      .notNull()
+      .references(() => styleKit.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    tokens: jsonb('tokens').notNull(),
+    note: text('note').notNull().default(''),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    kitVersionIdx: uniqueIndex('style_kit_version_kit_version_idx').on(t.kitId, t.version),
+  }),
+)
+
+// Which client a Linear team or project belongs to, so an issue resolves to
+// a client automatically. Team-wide (not per user): the mapping is how the
+// studio is organised, not a personal preference.
+export const linearMapping = pgTable(
+  'linear_mapping',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(), // 'team' | 'project'
+    linearId: text('linear_id').notNull(),
+    linearName: text('linear_name').notNull(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => client.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    linearIdx: uniqueIndex('linear_mapping_kind_linear_id_idx').on(t.kind, t.linearId),
+    clientIdx: index('linear_mapping_client_id_idx').on(t.clientId),
+  }),
 )

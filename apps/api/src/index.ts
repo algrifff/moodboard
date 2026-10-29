@@ -16,9 +16,13 @@ import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
 import { boardGroups } from './routes/boardGroups'
 import { boards } from './routes/boards'
+import { clients } from './routes/clients'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
 import { files } from './routes/files'
+import { kits } from './routes/kits'
+import { library } from './routes/library'
+import { linear } from './routes/linear'
 import { mcp } from './routes/mcp'
 import { boardShare, shares } from './routes/shares'
 import { voice } from './routes/voice'
@@ -130,6 +134,10 @@ api.route('/boards', boards)
 api.route('/keys', apiKeys)
 api.route('/mcp', mcp)
 api.route('/connections', connections)
+api.route('/clients', clients)
+api.route('/kits', kits)
+api.route('/library', library)
+api.route('/linear', linear)
 api.route('/external', external)
 api.route('/voice', voice)
 api.route('/', analyze)

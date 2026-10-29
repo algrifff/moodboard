@@ -1,0 +1,20 @@
+{
+  "data": {
+    "teams": {
+      "nodes": [
+        {
+          "id": "team-launch",
+          "key": "LIN",
+          "name": "Launch",
+          "projects": {
+            "nodes": [
+              { "id": "proj-rebrand", "name": "Acme rebrand" },
+              { "id": "proj-site", "name": "Globex site" }
+            ]
+          }
+        },
+        { "id": "team-ops", "key": "OPS", "name": "Operations", "projects": { "nodes": [] } }
+      ]
+    }
+  }
+}

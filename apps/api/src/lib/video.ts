@@ -157,14 +157,9 @@ async function saveThumbnail(thumbUrl: string | undefined, userId: string): Prom
   // Asset row makes GET /api/files/<filename> reachable (the route enforces
   // ownership via this table). Lazy db import mirrors web.ts so the pure
   // helpers stay importable in unit tests without a DATABASE_URL.
-  const { db, schema } = await import('../db')
-  await db.insert(schema.asset).values({
-    id: nanoid(),
-    createdBy: userId,
-    filename: saved.filename,
-    mimeType: mime,
-    size: saved.size,
-    kind: 'upload',
+  const { recordAsset } = await import('./assetLibrary')
+  await recordAsset(userId, saved.filename, mime, saved.size, 'upload', {
+    originalName: 'Video thumbnail',
   })
   return `/api/files/${saved.filename}`
 }

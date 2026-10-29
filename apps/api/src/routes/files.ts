@@ -8,6 +8,9 @@ import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
+import { recordAsset } from '../lib/assetLibrary'
+import { nameFromUrl } from '../lib/assetSearch'
+import { clientExists } from '../lib/clients'
 import { processPdf } from '../lib/pdfProcessing'
 import { rateLimit } from '../lib/rateLimit'
 import {
@@ -49,25 +52,6 @@ files.use('*', async (c, next) => {
 const uploadRateLimit = rateLimit({ scope: 'upload', limit: 30, windowMs: 60_000 })
 const proxyRateLimit = rateLimit({ scope: 'proxy', limit: 30, windowMs: 60_000 })
 
-type AssetKind = 'upload' | 'pdf' | 'pdf-thumb'
-
-async function recordAsset(
-  userId: string,
-  filename: string,
-  mimeType: string,
-  size: number,
-  kind: AssetKind = 'upload',
-): Promise<void> {
-  await db.insert(schema.asset).values({
-    id: nanoid(),
-    createdBy: userId,
-    filename,
-    mimeType,
-    size,
-    kind,
-  })
-}
-
 files.post(
   '/upload',
   uploadRateLimit,
@@ -89,6 +73,13 @@ files.post(
     // "audio/webm;codecs=opus". Strip the parameters once up front so our
     // allowlist set checks see the bare MIME.
     const bareMime = (incoming.type || '').split(';')[0]?.trim().toLowerCase() ?? ''
+    // Library metadata: the name the person gave it, and optionally the
+    // client it's for (the library page uploads with one selected).
+    const clientField = typeof body.clientId === 'string' ? body.clientId : ''
+    const meta = {
+      originalName: incoming.name,
+      clientId: clientField && (await clientExists(clientField)) ? clientField : null,
+    }
 
     if (incoming.type === PDF_MIME) {
       if (incoming.size > MAX_PDF_BYTES) {
@@ -104,7 +95,7 @@ files.post(
         return c.json({ error: msg }, 400)
       }
       const savedPdf = await savePdf(buffer, id)
-      await recordAsset(user.id, savedPdf.filename, PDF_MIME, savedPdf.size, 'pdf')
+      await recordAsset(user.id, savedPdf.filename, PDF_MIME, savedPdf.size, 'pdf', meta)
 
       let thumbnailUrl: string | undefined
       if (result.thumbnailPng) {
@@ -151,7 +142,7 @@ files.post(
       const buffer = Buffer.from(await incoming.arrayBuffer())
       const mimeType = mimeFromExt(ext)
       const saved = await saveUpload(buffer, id, ext, mimeType)
-      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload')
+      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload', meta)
       // Derive a family name from the original filename — strip extension
       // and any common weight/style decorators so "AktivGrotesk-Bold.woff2"
       // becomes "AktivGrotesk Bold". Good enough as a default; user can
@@ -183,7 +174,7 @@ files.post(
       // Store the bare MIME on disk so playback Content-Type stays
       // codec-clean; browsers happily decode either form.
       const saved = await saveUpload(buffer, id, ext, bareMime)
-      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload')
+      await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload', meta)
       return c.json({
         id: saved.id,
         filename: saved.filename,
@@ -205,7 +196,7 @@ files.post(
     const id = nanoid()
     const buffer = Buffer.from(await incoming.arrayBuffer())
     const saved = await saveUpload(buffer, id, ext, incoming.type)
-    await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload')
+    await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload', meta)
     return c.json({
       id: saved.id,
       filename: saved.filename,
@@ -328,7 +319,9 @@ files.get('/proxy', proxyRateLimit, async (c) => {
   if (!ext) return c.json({ error: 'Unsupported type' }, 415)
   const id = nanoid()
   const saved = await saveUpload(buffer, id, ext, contentType)
-  await recordAsset(user.id, saved.filename, saved.mimeType, saved.size)
+  await recordAsset(user.id, saved.filename, saved.mimeType, saved.size, 'upload', {
+    originalName: nameFromUrl(parsed),
+  })
   return c.json({
     id: saved.id,
     filename: saved.filename,

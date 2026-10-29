@@ -614,7 +614,7 @@ Already on Postgres; this makes it production-grade and ready for structured des
 - [x] Postgres-backed rate limiter (in-memory `Map` breaks with >1 instance)
 - [x] Migrations run on API start (advisory-locked); drop `db:push` from docs
 - [x] Indexes on FK columns; cleanup job for orphaned `board_group_display` rows
-- [ ] Split oversized files: `AIAnalysisPanel.tsx`, `SourcePickerDrawer.tsx`, `routes/external.ts`, `lib/analyze.ts`
+- [x] Split oversized files: `AIAnalysisPanel.tsx`, `SourcePickerDrawer.tsx`, `routes/external.ts`, `lib/analyze.ts`
 
 **Deliverable:** Same app minus Notion, everyone sees everything, two people editing one board can't clobber each other.
 

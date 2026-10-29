@@ -63,9 +63,11 @@ app.use(
 )
 
 // Tighten the auth handler against credential stuffing. The bucket size lets a
-// legitimate user retype once or twice without hitting the wall.
+// legitimate user retype once or twice without hitting the wall. Only POSTs
+// (sign-in, sign-up, …) count — session reads happen on every page load.
 const authRateLimit = rateLimit({ scope: 'auth', limit: 10, windowMs: 60_000 })
-app.all('/api/auth/*', authRateLimit, (c) => auth.handler(c.req.raw))
+app.post('/api/auth/*', authRateLimit)
+app.all('/api/auth/*', (c) => auth.handler(c.req.raw))
 
 // Session middleware — populate c.var.user / c.var.session for downstream routes.
 app.use('*', async (c, next) => {

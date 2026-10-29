@@ -20,12 +20,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { ReadOnlyProvider } from '@/lib/readOnlyContext'
 import { getShareByToken, rewriteAssetUrl } from '@/lib/sharesApi'
-import {
-  ArtDirectorReadout,
-  BriefReadout,
-  SectionedReadout,
-  VideoEditorReadout,
-} from '@/components/canvas/AIAnalysisPanel'
+import { ArtDirectorReadout } from '@/components/canvas/readouts/ArtDirectorReadout'
+import { BriefReadout } from '@/components/canvas/readouts/BriefReadout'
+import { SectionedReadout } from '@/components/canvas/readouts/SectionedReadout'
+import { VideoEditorReadout } from '@/components/canvas/readouts/VideoEditorReadout'
 import { SnapshotCanvas } from '@/components/canvas/SnapshotCanvas'
 
 // ---------------------------------------------------------------------------

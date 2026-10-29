@@ -7,8 +7,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Any base branch, so stacked phase PRs get CI too.
   pull_request:
-    branches: [main]
 
 # Cancel an in-flight run when a new commit lands on the same ref. Keeps
 # Actions usage down on PRs that get force-pushed.

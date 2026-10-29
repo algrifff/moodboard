@@ -50,6 +50,20 @@
       "when": 1793313135110,
       "tag": "0006_drop_notion",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793313223632,
+      "tag": "0007_team_created_by",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793313238539,
+      "tag": "0008_team_drop_user_id",
+      "breakpoints": true
     }
   ]
 }

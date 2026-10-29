@@ -61,11 +61,12 @@ export const verification = pgTable('verification', {
 // App tables
 // ---------------------------------------------------------------------------
 
+// Single internal team: every signed-in user sees and edits every board,
+// asset and share. `createdBy` is attribution only; it survives the
+// creator's account being deleted as null.
 export const board = pgTable('board', {
   id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
+  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   data: jsonb('data')
     .notNull()
@@ -76,9 +77,7 @@ export const board = pgTable('board', {
 
 export const asset = pgTable('asset', {
   id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
+  createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
   filename: text('filename').notNull(),
   mimeType: text('mime_type').notNull(),
   size: integer('size').notNull(),
@@ -124,7 +123,7 @@ export const connection = pgTable('connection', {
 
 // Phase 18 — Shareable moodboards. Frozen, immutable snapshot of a board
 // + the per-group synthesis brief, exposed via an unguessable token.
-// One share per (boardId, userId): create/update is upsert; "Update
+// One share per board: create/update is upsert; "Update
 // snapshot" replaces snapshot+assetFilenames+capturedAt and nulls out
 // the cached PDF. Token survives updates so existing recipients keep
 // the same URL. assetFilenames gates the public file-streaming endpoint
@@ -137,9 +136,7 @@ export const share = pgTable(
     boardId: text('board_id')
       .notNull()
       .references(() => board.id, { onDelete: 'cascade' }),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     snapshot: jsonb('snapshot').notNull(),
     // text[] of upload filenames the snapshot references. The public
@@ -155,8 +152,8 @@ export const share = pgTable(
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => ({
-    // One share per (board, owner). The share endpoint upserts on this.
-    boardOwnerIdx: uniqueIndex('share_board_user_idx').on(t.boardId, t.userId),
+    // One share per board. The share endpoint upserts on this.
+    boardIdx: uniqueIndex('share_board_idx').on(t.boardId),
   }),
 )
 

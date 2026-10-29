@@ -1,10 +1,17 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { APIError } from 'better-auth/api'
 import { db, schema } from '../db'
+import { isEmailAllowed, parseAllowedDomains } from '../lib/emailDomain'
 
 const AUTH_SECRET = process.env.AUTH_SECRET
 if (!AUTH_SECRET) {
   throw new Error('AUTH_SECRET is required')
+}
+
+const allowedEmailDomains = parseAllowedDomains(process.env.ALLOWED_EMAIL_DOMAINS)
+if (allowedEmailDomains.length === 0 && process.env.NODE_ENV === 'production') {
+  console.warn('[auth] ALLOWED_EMAIL_DOMAINS is unset — anyone can sign up')
 }
 
 const trustedOrigins = [
@@ -36,6 +43,18 @@ export const auth = betterAuth({
     autoSignIn: true,
     requireEmailVerification: false,
     minPasswordLength: 8,
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!isEmailAllowed(user.email, allowedEmailDomains)) {
+            throw new APIError('FORBIDDEN', { message: 'Sign-up is limited to team email domains' })
+          }
+          return { data: user }
+        },
+      },
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 30, // 30 days

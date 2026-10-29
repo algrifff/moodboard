@@ -509,7 +509,7 @@ async function downloadAndSaveImage(
   const { db, schema } = await import('../db')
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename: saved.filename,
     mimeType: sniffedMime,
     size: saved.size,

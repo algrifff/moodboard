@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
@@ -60,7 +60,7 @@ async function recordAsset(
 ): Promise<void> {
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename,
     mimeType,
     size,
@@ -339,16 +339,16 @@ files.get('/proxy', proxyRateLimit, async (c) => {
 })
 
 files.get('/files/:filename', async (c) => {
-  const user = c.get('user')!
   const filename = c.req.param('filename')
   if (!isSafeFilename(filename)) {
     return c.json({ error: 'Bad filename' }, 400)
   }
-  // Enforce ownership: only the user who uploaded the asset can serve it.
+  // Any signed-in team member can read any asset; the row lookup still
+  // gates access to files we actually recorded.
   const [row] = await db
     .select()
     .from(schema.asset)
-    .where(and(eq(schema.asset.filename, filename), eq(schema.asset.userId, user.id)))
+    .where(eq(schema.asset.filename, filename))
     .limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
 

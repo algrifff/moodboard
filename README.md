@@ -71,15 +71,16 @@ cp apps/web/.env.example apps/web/.env   # currently empty — no client-side en
 
 `apps/api/.env` needs:
 
-| Key                 | What it is                                                                                                                               |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`              | API port (default 3001).                                                                                                                 |
-| `NODE_ENV`          | `development` locally.                                                                                                                   |
-| `DATABASE_URL`      | Postgres connection string. The example points at docker-compose's local Postgres.                                                       |
-| `AUTH_SECRET`       | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`.                                            |
-| `BETTER_AUTH_URL`   | Base URL for auth callbacks (e.g. `http://localhost:3001`).                                                                              |
-| `ANTHROPIC_API_KEY` | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it.                                                  |
-| `WEB_ORIGIN`        | Exact origin of the web app (e.g. `https://127.0.0.1:5173`). Used as the `postMessage` target for the OAuth popup handshake — never `*`. |
+| Key                     | What it is                                                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                  | API port (default 3001).                                                                                                                 |
+| `NODE_ENV`              | `development` locally.                                                                                                                   |
+| `DATABASE_URL`          | Postgres connection string. The example points at docker-compose's local Postgres.                                                       |
+| `AUTH_SECRET`           | Random 32+ char string for better-auth session signing. Generate with `openssl rand -hex 32`.                                            |
+| `BETTER_AUTH_URL`       | Base URL for auth callbacks (e.g. `http://localhost:3001`).                                                                              |
+| `ALLOWED_EMAIL_DOMAINS` | Comma-separated sign-up allowlist (e.g. `acme.com,acme.studio`). Unset allows any domain. Everyone signed in shares every board.         |
+| `ANTHROPIC_API_KEY`     | `sk-ant-api03-…` — required for AI analysis only. The rest of the app works without it.                                                  |
+| `WEB_ORIGIN`            | Exact origin of the web app (e.g. `https://127.0.0.1:5173`). Used as the `postMessage` target for the OAuth popup handshake — never `*`. |
 
 External knowledge sources (all **optional** — the app boots without them; each unconnected source just won't appear in the picker):
 

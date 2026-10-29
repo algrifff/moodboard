@@ -266,7 +266,7 @@ external.post('/refresh', externalImportLimit, async (c) => {
   const [boardRow] = await db
     .select({ data: schema.board.data })
     .from(schema.board)
-    .where(and(eq(schema.board.id, boardId), eq(schema.board.userId, user.id)))
+    .where(eq(schema.board.id, boardId))
     .limit(1)
   if (!boardRow) return c.json({ error: 'Board not found' }, 404)
 
@@ -848,7 +848,7 @@ async function recordAsset(
 ): Promise<void> {
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename,
     mimeType,
     size,

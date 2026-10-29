@@ -8,7 +8,7 @@ import {
   type ShareResponse,
   type ShareView,
 } from '@moodboard/shared'
-import { and, eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
@@ -67,17 +67,16 @@ boardShare.use('*', async (c, next) => {
 // Create-or-update. Token stays stable across updates so existing
 // recipients keep their URL. `assetFilenames` is recomputed server-side
 // from the incoming snapshot — never trusted from the client — and
-// every name is checked against the owner's `asset` table to ensure
-// they aren't pointing the share at files they don't own.
+// every name is checked against the `asset` table so a share can only
+// expose files we actually recorded.
 boardShare.post('/', shareCreateRateLimit, snapshotBodyLimit, async (c) => {
   const user = c.get('user')!
   const boardId = c.req.param('boardId') as string
 
-  // Ownership check on the board before we accept a snapshot for it.
   const [boardRow] = await db
     .select({ id: schema.board.id, name: schema.board.name })
     .from(schema.board)
-    .where(and(eq(schema.board.id, boardId), eq(schema.board.userId, user.id)))
+    .where(eq(schema.board.id, boardId))
     .limit(1)
   if (!boardRow) return c.json({ error: 'Not found' }, 404)
 
@@ -94,18 +93,15 @@ boardShare.post('/', shareCreateRateLimit, snapshotBodyLimit, async (c) => {
 
   const assetFilenames = collectAssetFilenames(snapshot)
   if (assetFilenames.length > 0) {
-    // Every referenced filename must belong to this user. Otherwise an
-    // attacker who controls a victim's board could mint a share that
-    // exposes the victim's other files — even though they'd already
-    // have access to the originals through the editor, the share URL
-    // makes them public.
-    const owned = await db
+    // Every referenced filename must be a recorded asset, so a crafted
+    // snapshot can't make arbitrary paths public.
+    const known = await db
       .select({ filename: schema.asset.filename })
       .from(schema.asset)
-      .where(eq(schema.asset.userId, user.id))
-    const ownedSet = new Set(owned.map((r) => r.filename))
+      .where(inArray(schema.asset.filename, assetFilenames))
+    const knownSet = new Set(known.map((r) => r.filename))
     for (const f of assetFilenames) {
-      if (!ownedSet.has(f)) {
+      if (!knownSet.has(f)) {
         return c.json({ error: `Unknown asset: ${f}` }, 400)
       }
     }
@@ -115,7 +111,7 @@ boardShare.post('/', shareCreateRateLimit, snapshotBodyLimit, async (c) => {
   const [existing] = await db
     .select()
     .from(schema.share)
-    .where(and(eq(schema.share.boardId, boardId), eq(schema.share.userId, user.id)))
+    .where(eq(schema.share.boardId, boardId))
     .limit(1)
 
   let row: ShareRow
@@ -150,7 +146,7 @@ boardShare.post('/', shareCreateRateLimit, snapshotBodyLimit, async (c) => {
       .values({
         token: nanoid(TOKEN_LENGTH),
         boardId,
-        userId: user.id,
+        createdBy: user.id,
         name: boardRow.name,
         snapshot,
         assetFilenames,
@@ -167,12 +163,11 @@ boardShare.post('/', shareCreateRateLimit, snapshotBodyLimit, async (c) => {
 })
 
 boardShare.delete('/', async (c) => {
-  const user = c.get('user')!
   const boardId = c.req.param('boardId') as string
   const [existing] = await db
     .select({ token: schema.share.token, pdfFilename: schema.share.pdfFilename })
     .from(schema.share)
-    .where(and(eq(schema.share.boardId, boardId), eq(schema.share.userId, user.id)))
+    .where(eq(schema.share.boardId, boardId))
     .limit(1)
   if (!existing) return c.json({ error: 'Not found' }, 404)
   if (existing.pdfFilename) {
@@ -186,15 +181,14 @@ boardShare.delete('/', async (c) => {
   return c.json({ ok: true })
 })
 
-// Lets the owner peek at the current share without minting a new one —
+// Lets the team peek at the current share without minting a new one —
 // powers the ShareDialog's "open with existing share" state.
 boardShare.get('/', async (c) => {
-  const user = c.get('user')!
   const boardId = c.req.param('boardId') as string
   const [row] = await db
     .select()
     .from(schema.share)
-    .where(and(eq(schema.share.boardId, boardId), eq(schema.share.userId, user.id)))
+    .where(eq(schema.share.boardId, boardId))
     .limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
   const response: ShareResponse = { share: toShareView(row) }

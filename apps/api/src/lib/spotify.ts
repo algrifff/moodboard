@@ -28,14 +28,9 @@ import { decryptToken, encryptToken } from './cryptoTokens'
 import { fetchAudioFeatures as fetchReccoBeatsAudioFeatures } from './reccobeats'
 import {
   aggregateAudioFeatures,
-  aggregateEra,
-  aggregateGenres,
   ARTISTS_BATCH,
-  DISPLAY_TRACK_CAP,
-  TOP_GENRES_CAP,
   type ArtistInfo,
   type AudioFeaturesAgg,
-  type EraAgg,
   type ExtractedTrack,
   type RawAudioFeatures,
 } from './spotifyAggregates'

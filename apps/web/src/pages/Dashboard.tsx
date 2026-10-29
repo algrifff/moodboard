@@ -92,7 +92,7 @@ export function DashboardPage() {
       <main className="max-w-5xl mx-auto px-6 pt-6 pb-16">
         <div className="flex items-end justify-between mb-8">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-foreground">Your boards</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">Team boards</h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Drop, group, and let the read come to you.
             </p>

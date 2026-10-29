@@ -12,7 +12,7 @@ import {
   type VideoEditorBreakdown,
 } from '@moodboard/shared'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { db, schema } from '../db'
@@ -35,21 +35,16 @@ import { getAgentResult } from '../routes/analyze'
 
 type BoardData = { objects?: CanvasObject[]; scale?: number; offset?: { x: number; y: number } }
 
-async function loadBoard(userId: string, boardId: string) {
-  const [row] = await db
-    .select()
-    .from(schema.board)
-    .where(and(eq(schema.board.id, boardId), eq(schema.board.userId, userId)))
-    .limit(1)
+async function loadBoard(boardId: string) {
+  const [row] = await db.select().from(schema.board).where(eq(schema.board.id, boardId)).limit(1)
   return row ?? null
 }
 
 async function appendObject(
-  userId: string,
   boardId: string,
   build: (objects: CanvasObject[]) => CanvasObject,
 ): Promise<{ object: CanvasObject; boardName: string } | null> {
-  const row = await loadBoard(userId, boardId)
+  const row = await loadBoard(boardId)
   if (!row) return null
   const data = (row.data ?? {}) as BoardData
   const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
@@ -159,14 +154,13 @@ export function buildMcpServer(userId: string): McpServer {
     {
       title: 'List boards',
       description:
-        "Return the user's most recent moodboards (up to 20). Each board has its id, name, object count, type breakdown, viewer URL, and timestamps. Use this to find an existing board to add to or to read.",
+        "Return the team's most recent moodboards (up to 20). Each board has its id, name, object count, type breakdown, viewer URL, and timestamps. Use this to find an existing board to add to or to read.",
       inputSchema: {},
     },
     async () => {
       const rows = await db
         .select()
         .from(schema.board)
-        .where(eq(schema.board.userId, userId))
         .orderBy(desc(schema.board.updatedAt))
         .limit(20)
       const boards = rows.map(summariseBoardRow)
@@ -194,7 +188,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, verbose }) => {
-      const row = await loadBoard(userId, boardId)
+      const row = await loadBoard(boardId)
       if (!row) {
         return {
           isError: true,
@@ -316,7 +310,7 @@ export function buildMcpServer(userId: string): McpServer {
         .insert(schema.board)
         .values({
           id,
-          userId,
+          createdBy: userId,
           name: name ?? 'Untitled board',
           data: {},
         })
@@ -356,7 +350,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, url }) => {
-      const board = await loadBoard(userId, boardId)
+      const board = await loadBoard(boardId)
       if (!board) {
         return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
       }
@@ -369,7 +363,7 @@ export function buildMcpServer(userId: string): McpServer {
       }
       const result = dispatch.result
 
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, (objects) => {
         const zIndex = objects.length
         switch (result.kind) {
           case 'web': {
@@ -525,7 +519,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, color }) => {
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, (objects) => {
         const spot = nextSpot(objects, STICKY_SIZE)
         const data: StickyData = { text, color: color ?? STICKY_DEFAULT_COLOR }
         return {
@@ -568,7 +562,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, fontSize }) => {
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, (objects) => {
         const size = sizeForText(text)
         const spot = nextSpot(objects, size)
         const data: TextData = {
@@ -610,13 +604,13 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, url }) => {
-      const board = await loadBoard(userId, boardId)
+      const board = await loadBoard(boardId)
       if (!board) {
         return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
       }
       try {
         const data = await saveImageFromUrl(url, userId)
-        const appended = await appendObject(userId, boardId, (objects) => {
+        const appended = await appendObject(boardId, (objects) => {
           const spot = nextSpot(objects, IMAGE_DEFAULT_SIZE)
           return {
             id: nanoid(),
@@ -665,7 +659,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, agents }) => {
-      const row = await loadBoard(userId, boardId)
+      const row = await loadBoard(boardId)
       if (!row) return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
       const data = (row.data ?? {}) as BoardData
       const objects = Array.isArray(data.objects) ? data.objects : []

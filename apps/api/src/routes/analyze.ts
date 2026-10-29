@@ -6,7 +6,7 @@ import {
   type VideoClipBreakdown,
   type VideoClipData,
 } from '@moodboard/shared'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
@@ -49,7 +49,6 @@ const analyzeRateLimit = rateLimit({ scope: 'analyze', limit: 20, windowMs: 60_0
 // Shared: load the board and resolve the requested object subset.
 async function loadGroupObjects(
   boardId: string,
-  userId: string,
   objectIds: string[],
 ): Promise<
   { ok: true; objects: CanvasObject[] } | { ok: false; status: 400 | 404; error: string }
@@ -57,7 +56,7 @@ async function loadGroupObjects(
   const [boardRow] = await db
     .select()
     .from(schema.board)
-    .where(and(eq(schema.board.id, boardId), eq(schema.board.userId, userId)))
+    .where(eq(schema.board.id, boardId))
     .limit(1)
   if (!boardRow) return { ok: false, status: 404, error: 'Not found' }
   const data = (boardRow.data ?? {}) as { objects?: CanvasObject[] }
@@ -163,7 +162,6 @@ async function getVideoEditorResult(
 }
 
 analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
-  const user = c.get('user')!
   const boardId = c.req.param('boardId') as string
 
   const body = await c.req.json().catch(() => null)
@@ -173,7 +171,7 @@ analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
   }
   const { objectIds, agentId, force = false, depth = DEFAULT_DEPTH } = parsed.data
 
-  const group = await loadGroupObjects(boardId, user.id, objectIds)
+  const group = await loadGroupObjects(boardId, objectIds)
   if (!group.ok) return c.json({ error: group.error }, group.status)
 
   try {
@@ -206,7 +204,6 @@ analyze.post('/boards/:boardId/analyze', analyzeRateLimit, async (c) => {
 })
 
 analyze.post('/boards/:boardId/synthesize', analyzeRateLimit, async (c) => {
-  const user = c.get('user')!
   const boardId = c.req.param('boardId') as string
 
   const body = await c.req.json().catch(() => null)
@@ -216,7 +213,7 @@ analyze.post('/boards/:boardId/synthesize', analyzeRateLimit, async (c) => {
   }
   const { objectIds, agentIds, force = false, depth = DEFAULT_DEPTH } = parsed.data
 
-  const group = await loadGroupObjects(boardId, user.id, objectIds)
+  const group = await loadGroupObjects(boardId, objectIds)
   if (!group.ok) return c.json({ error: group.error }, group.status)
 
   // Synthesiser cache — distinct bucket keyed by the sorted agent ids.

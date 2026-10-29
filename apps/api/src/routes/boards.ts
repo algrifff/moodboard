@@ -1,6 +1,6 @@
 import type { BoardPreview, BoardPreviewObject } from '@moodboard/shared'
 import { createBoardRequestSchema, updateBoardRequestSchema } from '@moodboard/shared'
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
@@ -111,7 +111,6 @@ boards.use('*', async (c, next) => {
 })
 
 boards.get('/', async (c) => {
-  const user = c.get('user')!
   const rows = await db
     .select({
       id: schema.board.id,
@@ -121,7 +120,6 @@ boards.get('/', async (c) => {
       data: schema.board.data,
     })
     .from(schema.board)
-    .where(eq(schema.board.userId, user.id))
     .orderBy(desc(schema.board.updatedAt))
   return c.json({
     boards: rows.map((r) => ({
@@ -145,7 +143,7 @@ boards.post('/', async (c) => {
     .insert(schema.board)
     .values({
       id: nanoid(),
-      userId: user.id,
+      createdBy: user.id,
       name: parsed.data.name ?? 'Untitled board',
       data: {},
     })
@@ -163,13 +161,8 @@ boards.post('/', async (c) => {
 })
 
 boards.get('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
-  const [row] = await db
-    .select()
-    .from(schema.board)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
-    .limit(1)
+  const [row] = await db.select().from(schema.board).where(eq(schema.board.id, id)).limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
   return c.json({
     board: {
@@ -183,7 +176,6 @@ boards.get('/:id', async (c) => {
 })
 
 boards.patch('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => null)
   const parsed = updateBoardRequestSchema.safeParse(body)
@@ -201,7 +193,7 @@ boards.patch('/:id', async (c) => {
   const [row] = await db
     .update(schema.board)
     .set(updates)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
+    .where(eq(schema.board.id, id))
     .returning()
   if (!row) return c.json({ error: 'Not found' }, 404)
   return c.json({
@@ -216,11 +208,10 @@ boards.patch('/:id', async (c) => {
 })
 
 boards.delete('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
   const [row] = await db
     .delete(schema.board)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
+    .where(eq(schema.board.id, id))
     .returning({ id: schema.board.id })
   if (!row) return c.json({ error: 'Not found' }, 404)
   return c.json({ ok: true })

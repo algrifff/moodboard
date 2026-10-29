@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { deleteConnection, importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
+import { AGENT_SIDEBAR_WIDTH, useAgentSidebarStore } from '@/store/agentSidebar'
 import { useSourcePickerStore } from '@/store/sourcePicker'
 import { AddSourceSection, EmptySourcesState } from './sourcePicker/ConnectSources'
 import { ConnectionSection } from './sourcePicker/ConnectionSection'
@@ -13,8 +14,7 @@ import { spawnDriveAtViewportCenter, spawnSpotifyAtViewportCenter } from './sour
 import { showToast } from './Toast'
 
 // ---------------------------------------------------------------------------
-// Left-side drawer mirroring the right-side AIAnalysisPanel FullscreenDrawer
-// (apps/web/src/components/canvas/AIAnalysisPanel.tsx:638).
+// Left-side drawer, opening from the canvas edge next to the agent sidebar.
 //
 // Structure (extensible — adding a new provider needs no UI changes here):
 //
@@ -57,41 +57,62 @@ export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: Connect
   const closePicker = useSourcePickerStore((s) => s.closePicker)
   const connections = useSourcePickerStore((s) => s.connections)
   const loadingConnections = useSourcePickerStore((s) => s.loadingConnections)
+  const sidebarWidth = useAgentSidebarStore((s) => (s.open ? AGENT_SIDEBAR_WIDTH : 0))
 
   return (
     <>
       {typeof document !== 'undefined' &&
         createPortal(
-          <AnimatePresence>
-            {open && (
-              <motion.div
-                key="source-picker-scrim"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.22, ease: EASE_OUT_STANDARD }}
-                onClick={closePicker}
-                style={{
-                  position: 'fixed',
-                  inset: 0,
-                  backgroundColor: 'var(--scrim)',
-                  zIndex: 79,
-                  pointerEvents: 'auto',
-                }}
-                aria-hidden
-              />
-            )}
-            {open && (
-              <DrawerContent
-                key="source-picker-drawer"
-                connections={connections}
-                loadingConnections={loadingConnections}
-                onConnectDrive={onConnectDrive}
-                onConnectSpotify={onConnectSpotify}
-                onClose={closePicker}
-              />
-            )}
-          </AnimatePresence>,
+          <>
+            <AnimatePresence>
+              {open && (
+                <motion.div
+                  key="source-picker-scrim"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.22, ease: EASE_OUT_STANDARD }}
+                  onClick={closePicker}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    left: sidebarWidth,
+                    backgroundColor: 'var(--scrim)',
+                    zIndex: 79,
+                    pointerEvents: 'auto',
+                  }}
+                  aria-hidden
+                />
+              )}
+            </AnimatePresence>
+            {/* Slides out from the canvas edge, beside the agent sidebar
+                rather than over it. */}
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                bottom: 0,
+                left: sidebarWidth,
+                right: 0,
+                overflow: 'hidden',
+                pointerEvents: 'none',
+                zIndex: 80,
+              }}
+            >
+              <AnimatePresence>
+                {open && (
+                  <DrawerContent
+                    key="source-picker-drawer"
+                    connections={connections}
+                    loadingConnections={loadingConnections}
+                    onConnectDrive={onConnectDrive}
+                    onConnectSpotify={onConnectSpotify}
+                    onClose={closePicker}
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+          </>,
           document.body,
         )}
     </>
@@ -186,14 +207,13 @@ function DrawerContent({
       exit={{ x: '-100%' }}
       transition={{ duration: 0.32, ease: EASE_OUT_STANDARD }}
       style={{
-        position: 'fixed',
+        position: 'absolute',
         top: 0,
         left: 0,
         bottom: 0,
         width: DRAWER_WIDTH,
         backgroundColor: 'var(--bg-card)',
         boxShadow: 'var(--shadow-drawer)',
-        zIndex: 80,
         display: 'flex',
         flexDirection: 'column',
         pointerEvents: 'auto',

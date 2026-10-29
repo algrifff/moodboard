@@ -1,5 +1,6 @@
 import {
   groupStatesResponseSchema,
+  type AgentId,
   type AIAnalysis,
   type GroupState,
   type PutGroupStateRequest,
@@ -8,7 +9,7 @@ import {
   type SynthesisBrief,
   type VideoEditorBreakdown,
 } from '@moodboard/shared'
-import type { SlotState } from '@/components/canvas/AIAnalysisPanel'
+import type { SlotState } from '@/store/groupPanels'
 
 async function jsonOrThrow(res: Response): Promise<unknown> {
   if (!res.ok) {
@@ -68,5 +69,21 @@ export function displayFromSlot(slot: SlotState | undefined): SharedAnalysisDisp
       return { kind: 'brief', data: slot.data }
     default:
       return null
+  }
+}
+
+// The PUT body for a group's panel state. A display is only sent with the
+// agents that produced it.
+export function persistedBody(
+  slot: SlotState | undefined,
+  agentIds: AgentId[],
+  selectedAgentIds: AgentId[],
+  aiPalette: string[],
+): PutGroupStateRequest {
+  const display = displayFromSlot(slot)
+  return {
+    ...(display ? { display, agentIds } : {}),
+    selectedAgentIds,
+    aiPalette,
   }
 }

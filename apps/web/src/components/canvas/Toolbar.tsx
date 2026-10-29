@@ -122,7 +122,7 @@ export function Toolbar() {
 
   return (
     <div
-      className="fixed top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 bg-card/95 backdrop-blur-md p-1 shadow-[var(--shadow-pill)]"
+      className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-0.5 bg-card/95 backdrop-blur-md p-1 shadow-[var(--shadow-pill)]"
       style={{ borderRadius: 'var(--radius-lg)' }}
     >
       <input

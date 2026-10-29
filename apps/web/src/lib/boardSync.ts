@@ -87,3 +87,41 @@ export function applySaveResult(
   }
   return { adopt, remove }
 }
+
+// Folds objects the server changed on its own (the agent sidebar's tools)
+// into the synced state, so autosave sees them as already saved instead of
+// diffing them as local edits. Returns the ones the canvas should adopt;
+// anything we already hold at that version or newer is skipped.
+export function foldServerObjects(
+  state: SyncedState,
+  changes: { object: CanvasObject; version: number }[],
+): CanvasObject[] {
+  const adopt: CanvasObject[] = []
+  for (const { object, version } of changes) {
+    const known = state.versions.get(object.id)
+    if (known !== undefined && known >= version) continue
+    state.saved.set(object.id, object)
+    state.versions.set(object.id, version)
+    adopt.push(object)
+  }
+  return adopt
+}
+
+type ServerObjectsListener = (
+  boardId: string,
+  changes: { object: CanvasObject; version: number }[],
+) => void
+const serverObjectListeners = new Set<ServerObjectsListener>()
+
+// BoardSync listens while a board is open; the agent sidebar pushes.
+export function onServerObjects(listener: ServerObjectsListener): () => void {
+  serverObjectListeners.add(listener)
+  return () => serverObjectListeners.delete(listener)
+}
+
+export function pushServerObjects(
+  boardId: string,
+  changes: { object: CanvasObject; version: number }[],
+): void {
+  for (const listener of serverObjectListeners) listener(boardId, changes)
+}

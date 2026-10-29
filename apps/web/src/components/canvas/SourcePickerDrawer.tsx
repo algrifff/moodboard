@@ -3,7 +3,6 @@ import type {
   DriveFileData,
   DriveFolderData,
   ImageData,
-  NotionPageData,
   PDFData,
   PickerTile,
 } from '@moodboard/shared'
@@ -15,7 +14,6 @@ import { createPortal } from 'react-dom'
 import {
   deleteConnection,
   importDriveFile,
-  importNotionPage,
   importSpotifyRef,
   type SpotifyImportResult,
   listChildPages,
@@ -26,7 +24,6 @@ import { EASE_OUT_QUICK, EASE_OUT_STANDARD } from '@/lib/motion'
 import {
   createDriveFile,
   createDriveFolder,
-  createNotionPage,
   createSpotifyAlbum,
   createSpotifyPlaylist,
   createSpotifyTrack,
@@ -34,7 +31,7 @@ import {
 import { screenToWorld } from '@moodboard/shared'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
-import { DriveLogo, NotionLogo, SpotifyLogo } from './sourceLogos'
+import { DriveLogo, SpotifyLogo } from './sourceLogos'
 import { showToast } from './Toast'
 
 // ---------------------------------------------------------------------------
@@ -48,21 +45,15 @@ import { showToast } from './Toast'
 //   │ [🔍 Search across all sources           ] │
 //   │                                            │
 //   │ ┌─ + SOURCES ────────────────────────────┐│
-//   │ │ [N] Notion              ✓ Connected   ││
+//   │ │ [G] Google Drive        ✓ Connected   ││
 //   │ │     1 connected · add another          ││
-//   │ │ [G] Google Drive                       ││
+//   │ │ [S] Spotify                            ││
 //   │ │     Connect                            ││
 //   │ └────────────────────────────────────────┘│
 //   │                                            │
 //   │  Recently added                            │
 //   │  · Brand Bible                       2d   │
 //   │  · Q4 strategy                       5d   │
-//   │                                            │
-//   │  Notion · alex@notion.com         [—]      │
-//   │  · Page A                                  │
-//   │  · Page B                                  │
-//   │  · Page C                                  │
-//   │  scroll for more…                          │
 //   │                                            │
 //   │  Google Drive · alex@gmail.com    [—]      │
 //   │  📁 Brand Assets                           │
@@ -79,16 +70,11 @@ import { showToast } from './Toast'
 const DRAWER_WIDTH = 'min(720px, max(480px, 50vw))'
 
 type ConnectProps = {
-  onConnectNotion: () => void
   onConnectDrive: () => void
   onConnectSpotify: () => void
 }
 
-export function SourcePickerDrawer({
-  onConnectNotion,
-  onConnectDrive,
-  onConnectSpotify,
-}: ConnectProps) {
+export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: ConnectProps) {
   const open = useSourcePickerStore((s) => s.open)
   const closePicker = useSourcePickerStore((s) => s.closePicker)
   const connections = useSourcePickerStore((s) => s.connections)
@@ -122,7 +108,6 @@ export function SourcePickerDrawer({
                 key="source-picker-drawer"
                 connections={connections}
                 loadingConnections={loadingConnections}
-                onConnectNotion={onConnectNotion}
                 onConnectDrive={onConnectDrive}
                 onConnectSpotify={onConnectSpotify}
                 onClose={closePicker}
@@ -138,14 +123,12 @@ export function SourcePickerDrawer({
 function DrawerContent({
   connections,
   loadingConnections,
-  onConnectNotion,
   onConnectDrive,
   onConnectSpotify,
   onClose,
 }: {
   connections: ConnectionSummary[]
   loadingConnections: boolean
-  onConnectNotion: () => void
   onConnectDrive: () => void
   onConnectSpotify: () => void
   onClose: () => void
@@ -183,10 +166,7 @@ function DrawerContent({
           : `Importing "${tile.title || 'item'}"…`
       showToast(inFlightLabel)
       try {
-        if (provider === 'notion') {
-          const data = await importNotionPage(tile.connectionId, tile.id)
-          spawnNotionAtViewportCenter(data)
-        } else if (provider === 'drive') {
+        if (provider === 'drive') {
           const result = await importDriveFile(tile.connectionId, tile.id)
           spawnDriveAtViewportCenter(result)
         } else if (provider === 'spotify') {
@@ -246,7 +226,6 @@ function DrawerContent({
       {connections.length === 0 ? (
         <EmptySourcesState
           loading={loadingConnections}
-          onConnectNotion={onConnectNotion}
           onConnectDrive={onConnectDrive}
           onConnectSpotify={onConnectSpotify}
         />
@@ -257,7 +236,6 @@ function DrawerContent({
             <AddSourceSection
               connections={connections}
               loading={loadingConnections}
-              onConnectNotion={onConnectNotion}
               onConnectDrive={onConnectDrive}
               onConnectSpotify={onConnectSpotify}
             />
@@ -356,12 +334,10 @@ function SearchBar({ query, onChange }: { query: string; onChange: (q: string) =
 
 function EmptySourcesState({
   loading,
-  onConnectNotion,
   onConnectDrive,
   onConnectSpotify,
 }: {
   loading: boolean
-  onConnectNotion: () => void
   onConnectDrive: () => void
   onConnectSpotify: () => void
 }) {
@@ -381,12 +357,6 @@ function EmptySourcesState({
         </div>
       </div>
       <div className="flex flex-col gap-2 w-full max-w-[280px]">
-        <ConnectProviderButton
-          provider="notion"
-          connectedCount={0}
-          onClick={onConnectNotion}
-          disabled={loading}
-        />
         <ConnectProviderButton
           provider="drive"
           connectedCount={0}
@@ -581,7 +551,7 @@ function ConnectionSection({
     return () => io.disconnect()
   }, [loadMore])
 
-  // Tree expansion: notion-page (always) + drive folder (kind === 'folder').
+  // Tree expansion: drive folders (kind === 'folder').
   // The TileRow takes a `canExpand` prop; collapse decisions live there but
   // toggling happens through this section's handler.
   const onToggleExpand = useCallback(
@@ -687,7 +657,6 @@ function ConnectionSection({
 }
 
 function canExpandTile(tile: PickerTile): boolean {
-  if (tile.provider === 'notion') return true
   if (tile.provider === 'drive' && tile.kind === 'folder') return true
   return false
 }
@@ -700,14 +669,14 @@ function ConnectionHeader({
   collapsed,
   onToggleCollapse,
 }: {
-  provider: 'notion' | 'drive' | 'spotify'
+  provider: 'drive' | 'spotify'
   email: string
   confirming: boolean
   onDisconnect: () => void
   collapsed: boolean
   onToggleCollapse: () => void
 }) {
-  const label = provider === 'notion' ? 'Notion' : provider === 'drive' ? 'Google Drive' : 'Spotify'
+  const label = provider === 'drive' ? 'Google Drive' : 'Spotify'
   return (
     <div className="flex items-center gap-2 w-full">
       <button
@@ -765,17 +734,14 @@ function ConnectionHeader({
 function AddSourceSection({
   connections,
   loading,
-  onConnectNotion,
   onConnectDrive,
   onConnectSpotify,
 }: {
   connections: ConnectionSummary[]
   loading: boolean
-  onConnectNotion: () => void
   onConnectDrive: () => void
   onConnectSpotify: () => void
 }) {
-  const notionCount = connections.filter((c) => c.provider === 'notion').length
   const driveCount = connections.filter((c) => c.provider === 'drive').length
   const spotifyCount = connections.filter((c) => c.provider === 'spotify').length
 
@@ -797,12 +763,6 @@ function AddSourceSection({
       </div>
       <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
         <ConnectProviderButton
-          provider="notion"
-          connectedCount={notionCount}
-          onClick={onConnectNotion}
-          disabled={loading}
-        />
-        <ConnectProviderButton
           provider="drive"
           connectedCount={driveCount}
           onClick={onConnectDrive}
@@ -822,20 +782,19 @@ function AddSourceSection({
 // Provider connect button. When the user already has at least one
 // connection for this provider, the button label switches to "Add
 // another" and a small accent checkmark indicates the connected state —
-// extra workspaces / accounts are first-class (Notion allows multiple
-// workspace installs, Google allows multiple accounts).
+// extra accounts are first-class (Google allows multiple accounts).
 function ConnectProviderButton({
   provider,
   connectedCount,
   onClick,
   disabled,
 }: {
-  provider: 'notion' | 'drive' | 'spotify'
+  provider: 'drive' | 'spotify'
   connectedCount: number
   onClick: () => void
   disabled?: boolean
 }) {
-  const label = provider === 'notion' ? 'Notion' : provider === 'drive' ? 'Google Drive' : 'Spotify'
+  const label = provider === 'drive' ? 'Google Drive' : 'Spotify'
   const isConnected = connectedCount > 0
   return (
     <motion.button
@@ -878,16 +837,9 @@ function ConnectProviderButton({
   )
 }
 
-function ProviderGlyph({
-  provider,
-  size = 14,
-}: {
-  provider: 'notion' | 'drive' | 'spotify'
-  size?: number
-}) {
+function ProviderGlyph({ provider, size = 14 }: { provider: 'drive' | 'spotify'; size?: number }) {
   if (provider === 'drive') return <DriveLogo size={size} />
-  if (provider === 'spotify') return <SpotifyLogo size={size} />
-  return <NotionLogo size={size} />
+  return <SpotifyLogo size={size} />
 }
 
 // ---------------------------------------------------------------------------
@@ -1072,13 +1024,6 @@ function TileRow({
 }
 
 function TileIcon({ tile }: { tile: PickerTile }) {
-  if (tile.iconEmoji) {
-    return (
-      <div className="text-[12px] leading-none w-4 h-4 flex items-center justify-center flex-shrink-0">
-        {tile.iconEmoji}
-      </div>
-    )
-  }
   if (tile.iconUrl) {
     return (
       <img
@@ -1122,17 +1067,6 @@ function relativeTime(iso: string): string {
 // Spawn helpers — same as before, kept here so the picker drawer is the only
 // surface that talks to the canvas store directly from a tile import.
 // ---------------------------------------------------------------------------
-
-function spawnNotionAtViewportCenter(data: NotionPageData) {
-  const { scale, offset, viewportSize, objects, addObject, commitBeforeAction } =
-    useCanvasStore.getState()
-  const center = screenToWorld(
-    { x: viewportSize.width / 2, y: viewportSize.height / 2 },
-    { scale, x: offset.x, y: offset.y },
-  )
-  commitBeforeAction()
-  addObject(createNotionPage(center, objects.length, data))
-}
 
 function spawnDriveAtViewportCenter(
   result:

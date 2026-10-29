@@ -99,8 +99,7 @@ export const groupAnalysis = pgTable('group_analysis', {
 })
 
 // External-source OAuth connections (Phase 12+). One row per (user, provider,
-// account) — a user may connect multiple Notion workspaces or multiple Google
-// accounts and we treat each as a separate connection. Tokens are encrypted at
+// account) — a user may connect multiple Google accounts and we treat each as a separate connection. Tokens are encrypted at
 // rest with AES-GCM using CONNECTION_TOKEN_KEY (server-side); the frontend
 // only ever sees `id`, `provider`, and `accountEmail`.
 export const connection = pgTable('connection', {
@@ -108,15 +107,15 @@ export const connection = pgTable('connection', {
   userId: text('user_id')
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
-  provider: text('provider').notNull(), // 'notion' | 'drive'
+  provider: text('provider').notNull(), // 'drive' | 'spotify'
   accountEmail: text('account_email').notNull(),
   // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
   accessTokenEnc: text('access_token_enc').notNull(),
   refreshTokenEnc: text('refresh_token_enc'),
   expiresAt: timestamp('expires_at'),
   scopes: text('scopes').notNull(),
-  // Notion-specific (nullable for Drive). Kept as flat columns rather than
-  // a JSON blob so we can index/filter cheaply if we ever need to.
+  // Org/workspace the account belongs to, for providers that have one.
+  // Flat columns so we can index/filter cheaply.
   workspaceId: text('workspace_id'),
   workspaceName: text('workspace_name'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -229,6 +228,6 @@ export const recentExternal = pgTable('recent_external', {
   kind: text('kind').notNull(), // 'page' | 'file' | 'folder'
   title: text('title').notNull(),
   iconUrl: text('icon_url'),
-  mimeType: text('mime_type'), // null for Notion
+  mimeType: text('mime_type'), // Spotify stores its sub-kind here
   lastUsedAt: timestamp('last_used_at').notNull().defaultNow(),
 })

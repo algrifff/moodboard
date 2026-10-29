@@ -6,7 +6,6 @@ import type {
   DriveFolderData,
   FontData,
   ImageData,
-  NotionPageData,
   PDFData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
@@ -70,14 +69,6 @@ function isDriveFileData(d: CanvasObject['data']): d is DriveFileData {
 function isDriveFolderData(d: CanvasObject['data']): d is DriveFolderData {
   return (
     'folderId' in d && typeof (d as DriveFolderData).folderId === 'string' && 'childPreview' in d
-  )
-}
-function isNotionPageData(d: CanvasObject['data']): d is NotionPageData {
-  return (
-    'markdown' in d &&
-    typeof (d as NotionPageData).markdown === 'string' &&
-    'pageId' in d &&
-    typeof (d as NotionPageData).pageId === 'string'
   )
 }
 function isWebPageData(d: CanvasObject['data']): d is WebPageData {
@@ -218,7 +209,6 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
 
   const textLines: string[] = []
   const pdfExcerpts: string[] = []
-  const notionExcerpts: string[] = []
   const driveExcerpts: string[] = []
   const driveFolderLines: string[] = []
   const webExcerpts: string[] = []
@@ -227,14 +217,12 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   const voiceNoteBlocks: string[] = []
   // Per-source excerpt cap — keeps the prompt bounded when several land in
   // the same group. Whole-document analysis isn't the job; setting the tone
-  // is. PDF / Notion / Drive / Web all share the same cap.
+  // is. PDF / Drive / Web all share the same cap.
   const PDF_EXCERPT_MAX = 4000
-  const NOTION_EXCERPT_MAX = 4000
   const DRIVE_EXCERPT_MAX = 4000
   const WEB_EXCERPT_MAX = 4000
   let stickyCount = 0
   let textCount = 0
-  let notionCount = 0
   let driveFileCount = 0
   let driveFolderCount = 0
   let webPageCount = 0
@@ -262,17 +250,6 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
       if (raw) {
         const excerpt = raw.length > PDF_EXCERPT_MAX ? `${raw.slice(0, PDF_EXCERPT_MAX)}…` : raw
         pdfExcerpts.push(`--- PDF excerpt ---\n${excerpt}\n--- end PDF ---`)
-      }
-    } else if (o.type === 'notion-page' && isNotionPageData(o.data)) {
-      notionCount += 1
-      const md = o.data.markdown.trim()
-      if (md) {
-        const excerpt = md.length > NOTION_EXCERPT_MAX ? `${md.slice(0, NOTION_EXCERPT_MAX)}…` : md
-        const title = o.data.title || 'Untitled'
-        const editedAt = o.data.lastEditedAt ?? 'unknown'
-        notionExcerpts.push(
-          `--- Notion page: "${title}" (last edited ${editedAt}) ---\n${excerpt}\n--- end Notion page ---`,
-        )
       }
     } else if (o.type === 'drive-file' && isDriveFileData(o.data)) {
       driveFileCount += 1
@@ -373,11 +350,10 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
   }
 
   const header = [
-    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${notionCount} Notion page(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s), ${voiceNoteCount} voice note(s).`,
+    `Group: ${imageCount} image(s), ${pdfCount} PDF(s), ${stickyCount} sticky note(s), ${textCount} text label(s), ${fonts.length} uploaded font(s), ${driveFileCount} Drive file(s), ${driveFolderCount} Drive folder(s), ${webPageCount} web page(s), ${spotifyPlaylistCount} Spotify playlist(s), ${spotifyTrackCount} Spotify track(s), ${spotifyAlbumCount} Spotify album(s), ${videoCount} video clip(s), ${voiceNoteCount} voice note(s).`,
     textLines.length > 0
       ? '\nText content:'
       : pdfExcerpts.length > 0 ||
-          notionExcerpts.length > 0 ||
           driveExcerpts.length > 0 ||
           webExcerpts.length > 0 ||
           spotifyBlocks.length > 0 ||
@@ -397,20 +373,8 @@ async function buildGroupContent(objects: CanvasObject[]): Promise<ContentBlock[
         pdfExcerpts.join('\n\n'),
     })
   }
-  if (notionExcerpts.length > 0) {
-    // Equal-weight treatment per Phase 12 plan: Notion pages are first-class
-    // content the user pulled onto the board. Same register as the PDF block
-    // — read for subject matter, voice, and references. Markdown typography
-    // (heading hashes, list bullets) is not a typography signal.
-    content.push({
-      type: 'text',
-      text:
-        "Notion page contents (treat as reference material — read for subject matter, voice, brand strategy, and visual references). Markdown formatting (heading hashes, list bullets) is structural and does NOT dictate the brand's typography. If a Notion page explicitly names a typeface, treat that name as a deliberate typography reference and count it for the fonts field.\n\n" +
-        notionExcerpts.join('\n\n'),
-    })
-  }
   if (driveExcerpts.length > 0) {
-    // Same register as Notion + PDF blocks. Drive Docs / Sheets / Slides
+    // Same register as the PDF block. Drive Docs / Sheets / Slides
     // are first-class content the user pulled onto the board.
     content.push({
       type: 'text',

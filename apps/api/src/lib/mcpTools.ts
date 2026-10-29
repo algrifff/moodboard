@@ -85,7 +85,6 @@ const WEB_DEFAULT_SIZE = { width: 320, height: 240 }
 const VIDEO_DEFAULT_SIZE = { width: 320, height: 290 }
 const SPOTIFY_PLAYLIST_SIZE = { width: 320, height: 150 }
 const SPOTIFY_TRACK_SIZE = { width: 320, height: 248 }
-const NOTION_DEFAULT_SIZE = { width: 280, height: 140 }
 const DRIVE_DEFAULT_SIZE = { width: 280, height: 140 }
 const PDF_DEFAULT_SIZE = { width: 180, height: 240 }
 
@@ -348,7 +347,7 @@ export function buildMcpServer(userId: string): McpServer {
     {
       title: 'Add a URL to the board',
       description:
-        'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Notion page, a Google Drive file, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Notion/Drive require the user to have connected those providers in the dashboard first; the tool returns a clear instruction when missing.',
+        'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Google Drive file, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Drive require the user to have connected those providers in the dashboard first; the tool returns a clear instruction when missing.',
       inputSchema: {
         boardId: boardIdSchema,
         url: z
@@ -405,18 +404,6 @@ export function buildMcpServer(userId: string): McpServer {
               type: 'image',
               position: spot,
               size: IMAGE_DEFAULT_SIZE,
-              rotation: 0,
-              zIndex,
-              data: result.data,
-            }
-          }
-          case 'notion': {
-            const spot = nextSpot(objects, NOTION_DEFAULT_SIZE)
-            return {
-              id: nanoid(),
-              type: 'notion-page',
-              position: spot,
-              size: NOTION_DEFAULT_SIZE,
               rotation: 0,
               zIndex,
               data: result.data,

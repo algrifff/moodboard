@@ -7,14 +7,13 @@ import { nanoid } from 'nanoid'
 import { randomBytes } from 'node:crypto'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
-import { decryptToken, encryptToken } from '../lib/cryptoTokens'
+import { encryptToken } from '../lib/cryptoTokens'
 import {
   exchangeCode as driveExchangeCode,
   getValidToken,
   listFolderChildren as driveListFolderChildren,
   searchFiles as driveSearchFiles,
 } from '../lib/drive'
-import { exchangeCode, getChildPages, searchPages } from '../lib/notion'
 import { rateLimit } from '../lib/rateLimit'
 import {
   exchangeCode as spotifyExchangeCode,
@@ -28,7 +27,7 @@ type Variables = { user: AuthUser | null; session: AuthSession | null }
 
 export const connections = new Hono<{ Variables: Variables }>()
 
-// Picker / recents are read-heavy; cap to keep the Notion API happy under a
+// Picker / recents are read-heavy; cap to keep provider APIs happy under a
 // jittery typing user.
 const externalSearchLimit = rateLimit({ scope: 'external-search', limit: 30, windowMs: 60_000 })
 
@@ -45,16 +44,6 @@ function webOrigin(): string {
     throw new Error('WEB_ORIGIN must be an http(s) origin')
   }
   return origin
-}
-
-function notionEnv(): { clientId: string; clientSecret: string; redirectUri: string } {
-  const clientId = process.env.NOTION_CLIENT_ID
-  const clientSecret = process.env.NOTION_CLIENT_SECRET
-  const redirectUri = process.env.NOTION_REDIRECT_URI
-  if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error('Notion OAuth env vars are not configured')
-  }
-  return { clientId, clientSecret, redirectUri }
 }
 
 function googleEnv(): { clientId: string; clientSecret: string; redirectUri: string } {
@@ -109,14 +98,13 @@ connections.use('*', async (c, next) => {
 // rotate the stored tokens in-place rather than inserting a duplicate.
 // Spotify especially needs this — double-clicking Connect Spotify used
 // to create two identical rows because the callback handler had no
-// dedup. The Notion + Drive flows had the same latent bug; multiple
-// workspaces/accounts with the same email would never legitimately
+// dedup. Multiple accounts with the same email would never legitimately
 // exist, so dedup is universally safe.
 //
 // Returns the connection id (whether existing or freshly inserted).
 async function upsertConnection(args: {
   userId: string
-  provider: 'notion' | 'drive' | 'spotify'
+  provider: 'drive' | 'spotify'
   accountEmail: string
   accessTokenEnc: string
   refreshTokenEnc: string | null
@@ -213,10 +201,7 @@ connections.get('/', async (c) => {
 //
 // Disconnect a connection. We delete the row (tokens go with it via cascade
 // + the connection row itself); upstream revocation is best-effort and not
-// required for the user-facing disconnect to succeed. Notion does not offer
-// a programmatic revoke endpoint for public integrations — the user
-// disconnects in their Notion workspace UI to fully revoke our access. We
-// surface that in the disconnect confirmation copy on the frontend.
+// required for the user-facing disconnect to succeed.
 // ---------------------------------------------------------------------------
 connections.delete('/:id', async (c) => {
   const user = c.get('user')!
@@ -230,89 +215,9 @@ connections.delete('/:id', async (c) => {
 })
 
 // ---------------------------------------------------------------------------
-// GET /api/connections/notion/start
-//
-// Generate a CSRF state nonce, drop it in a same-site httpOnly cookie, and
-// 302 the user to Notion's OAuth consent screen. The callback validates the
-// returned state matches the cookie before exchanging the code.
-// ---------------------------------------------------------------------------
-connections.get('/notion/start', async (c) => {
-  const { clientId, redirectUri } = notionEnv()
-  const state = randomBytes(24).toString('hex')
-  setCookie(c, STATE_COOKIE('notion'), state, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: OAUTH_STATE_TTL_SECONDS,
-  })
-  const url = new URL('https://api.notion.com/v1/oauth/authorize')
-  url.searchParams.set('client_id', clientId)
-  url.searchParams.set('redirect_uri', redirectUri)
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('owner', 'user')
-  url.searchParams.set('state', state)
-  return c.redirect(url.toString())
-})
-
-// ---------------------------------------------------------------------------
-// GET /api/connections/notion/callback
-//
-// 1. Validate state vs cookie (CSRF)
-// 2. Exchange code → tokens via Notion's OAuth endpoint
-// 3. Encrypt tokens, persist connection row
-// 4. Return a tiny HTML page that postMessages back to window.opener and closes.
-//
-// On error: still return the same HTML shape with type=mb:connection:error.
-// The popup is at the API origin; the parent is at WEB_ORIGIN. postMessage
-// uses webOrigin() as the strict target so an attacker window that grabbed
-// our popup ref can't receive the connection id.
-// ---------------------------------------------------------------------------
-connections.get('/notion/callback', async (c) => {
-  const user = c.get('user')!
-  const code = c.req.query('code')
-  const stateParam = c.req.query('state')
-  const stateCookie = getCookie(c, STATE_COOKIE('notion'))
-  deleteCookie(c, STATE_COOKIE('notion'), { path: '/' })
-
-  if (!code) return callbackHtml(c, { kind: 'error', message: 'Missing code' })
-  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
-    return callbackHtml(c, { kind: 'error', message: 'Invalid state' })
-  }
-
-  try {
-    const { clientId, clientSecret, redirectUri } = notionEnv()
-    const token = await exchangeCode({ code, clientId, clientSecret, redirectUri })
-
-    // Pull the user's email from the owner payload when present; fall back
-    // to the workspace name so the connection card still has a label.
-    const ownerEmail = token.owner?.user?.person?.email
-    const accountEmail = ownerEmail ?? token.workspaceName ?? 'Notion workspace'
-
-    const id = await upsertConnection({
-      userId: user.id,
-      provider: 'notion',
-      accountEmail,
-      accessTokenEnc: encryptToken(token.accessToken),
-      refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
-      expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
-      scopes: 'read_content,read_user',
-      workspaceId: token.workspaceId,
-      workspaceName: token.workspaceName,
-    })
-
-    return callbackHtml(c, { kind: 'done', id })
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'Unknown error'
-    return callbackHtml(c, { kind: 'error', message })
-  }
-})
-
-// ---------------------------------------------------------------------------
 // GET /api/connections/drive/start
 //
-// Mirrors the notion start route — same CSRF cookie pattern, different
-// provider. Google needs `access_type=offline&prompt=consent` to issue a
+// Same CSRF cookie pattern as the Spotify start route. Google needs `access_type=offline&prompt=consent` to issue a
 // refresh token even for returning users; otherwise we'd be re-prompting
 // every hour when the access token expires.
 // ---------------------------------------------------------------------------
@@ -340,7 +245,7 @@ connections.get('/drive/start', async (c) => {
 // ---------------------------------------------------------------------------
 // GET /api/connections/drive/callback
 //
-// Same state check + token exchange shape as notion/callback. Stores email
+// State-cookie CSRF check + code exchange. Stores email
 // (pulled from the id_token claim by exchangeCode) as the connection label.
 // ---------------------------------------------------------------------------
 connections.get('/drive/callback', async (c) => {
@@ -380,7 +285,7 @@ connections.get('/drive/callback', async (c) => {
 // ---------------------------------------------------------------------------
 // GET /api/connections/spotify/start
 //
-// Mirrors notion + drive start routes. Spotify uses standard PKCE-less
+// Mirrors the drive start route. Spotify uses standard PKCE-less
 // authorization-code grant; client_secret lives server-side. `show_dialog=true`
 // forces re-consent for users who've previously authorised the app — useful
 // if scopes have changed.
@@ -489,7 +394,7 @@ function callbackHtml(
 //
 // These live in this file (not external.ts) because they're scoped to a
 // connection id and use the connection's stored tokens directly. Imports
-// (notion/import, drive/import) live in external.ts.
+// (drive/import, spotify/*) live in external.ts.
 // ---------------------------------------------------------------------------
 
 const MIME_FOLDER = 'application/vnd.google-apps.folder'
@@ -516,34 +421,6 @@ connections.post('/:id/search', externalSearchLimit, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { query?: unknown; cursor?: unknown }
   const query = typeof body.query === 'string' ? body.query.slice(0, 200) : ''
   const cursor = typeof body.cursor === 'string' ? body.cursor : undefined
-
-  if (row.provider === 'notion') {
-    let token: string
-    try {
-      token = decryptToken(row.accessTokenEnc)
-    } catch {
-      // Wrong key / corrupted blob — connection is effectively dead.
-      // 503 (not 500) so the client knows it's a transient state.
-      return c.json({ error: 'Connection unavailable' }, 503)
-    }
-    const searchArgs: { token: string; query: string; startCursor?: string } = { token, query }
-    if (cursor !== undefined) searchArgs.startCursor = cursor
-    const { pages, nextCursor } = await searchPages(searchArgs)
-    const tiles: PickerTile[] = pages.map((p) => {
-      const tile: PickerTile = {
-        id: p.id,
-        connectionId: row.id,
-        provider: 'notion',
-        kind: 'page',
-        title: p.title,
-        lastEditedAt: p.lastEditedTime,
-      }
-      if (p.iconEmoji) tile.iconEmoji = p.iconEmoji
-      if (p.iconUrl) tile.iconUrl = p.iconUrl
-      return tile
-    })
-    return c.json({ tiles, nextCursor })
-  }
 
   if (row.provider === 'drive') {
     let token: string
@@ -644,7 +521,7 @@ connections.post('/:id/search', externalSearchLimit, async (c) => {
 // ---------------------------------------------------------------------------
 // POST /api/connections/:id/children
 //
-// Expand a Notion page to its direct sub-pages. Drives the picker's tree
+// Expand a Drive folder to its direct children. Drives the picker's tree
 // view — each tile is expandable; expansion fires this endpoint and the
 // result is rendered indented underneath the parent.
 // ---------------------------------------------------------------------------
@@ -657,24 +534,6 @@ connections.post('/:id/children', externalSearchLimit, async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { parentId?: unknown }
   const parentId = typeof body.parentId === 'string' ? body.parentId : null
   if (!parentId) return c.json({ error: 'parentId is required' }, 400)
-
-  if (row.provider === 'notion') {
-    let token: string
-    try {
-      token = decryptToken(row.accessTokenEnc)
-    } catch {
-      return c.json({ error: 'Connection unavailable' }, 503)
-    }
-    const children = await getChildPages({ token, parentId })
-    const tiles: PickerTile[] = children.map((p) => ({
-      id: p.id,
-      connectionId: row.id,
-      provider: 'notion',
-      kind: 'page',
-      title: p.title,
-    }))
-    return c.json({ tiles })
-  }
 
   if (row.provider === 'drive') {
     let token: string
@@ -732,7 +591,7 @@ connections.get('/:id/recents', async (c) => {
     const tile: PickerTile = {
       id: r.externalId,
       connectionId: row.id,
-      provider: row.provider as 'notion' | 'drive' | 'spotify',
+      provider: row.provider as 'drive' | 'spotify',
       kind: r.kind as 'page' | 'file' | 'folder',
       title: r.title,
       lastEditedAt: r.lastUsedAt.toISOString(),

@@ -23,7 +23,7 @@ import { saveUpload } from './storage'
 import type { ImageData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
-// Match Notion / Drive caps from analyze.ts:185.
+// Match the Drive excerpt cap.
 const WEB_EXCERPT_MAX = 4000
 
 // Browser-shaped UA — many sites serve a minimal placeholder to default

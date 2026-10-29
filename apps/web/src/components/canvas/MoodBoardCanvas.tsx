@@ -9,14 +9,12 @@ import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
 import {
   importDriveFile,
-  importNotionPage,
   importSpotifyRef,
   importVideoUrl,
   importWebUrl,
 } from '@/lib/connectionsApi'
 import {
   extractDriveFileId,
-  extractNotionPageId,
   extractSpotifyRef,
   extractVideoRef,
   extractWebUrl,
@@ -26,7 +24,6 @@ import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/i
 import {
   createDriveFile,
   createDriveFolder,
-  createNotionPage,
   createSpotifyAlbum,
   createSpotifyPlaylist,
   createSpotifyTrack,
@@ -413,32 +410,6 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [scale, offset, addImageFromBlob, addImageFromUrl, addPdfFromBlob],
   )
 
-  // Handle a Notion page-id extracted from a pasted URL. If the user has at
-  // least one Notion connection, import + spawn now. Otherwise stash the id
-  // on the picker store and open the picker so the connect CTA is visible —
-  // Board.tsx watches for `pendingPaste` and resumes the import after OAuth.
-  const handleNotionPasteUrl = useCallback(
-    async (pageId: string, point: Point) => {
-      const picker = useSourcePickerStore.getState()
-      const notionConnection = picker.connections.find((c) => c.provider === 'notion')
-      if (!notionConnection) {
-        picker.setPendingPaste({ provider: 'notion', pageId })
-        picker.openPicker()
-        showToast('Connect Notion first to drop this link')
-        return
-      }
-      try {
-        const data = await importNotionPage(notionConnection.id, pageId)
-        const state = useCanvasStore.getState()
-        state.commitBeforeAction()
-        addObject(createNotionPage(point, state.objects.length, data))
-      } catch (err) {
-        showToast(`Notion import failed: ${err instanceof Error ? err.message : 'unknown'}`)
-      }
-    },
-    [addObject],
-  )
-
   // Generic web URL paste — no OAuth, no connection. Server fetches the page
   // with SSRF guards, extracts brand-relevant signal, downloads up to 3
   // logo candidates. The card spawns at the click point; logo images stack
@@ -490,8 +461,11 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
-  // Same shape as the Notion paste handler, dispatched by the import's `kind`
-  // discriminator so PDFs land as PDFNode and images as ImageNode.
+  // Drive file pasted by URL. If there's a Drive connection, import + spawn
+  // now; otherwise stash the id on the picker store and open the picker so
+  // the connect CTA is visible — Board.tsx resumes the import after OAuth.
+  // Dispatched by the import's `kind` so PDFs land as PDFNode and images as
+  // ImageNode.
   const handleDrivePasteUrl = useCallback(
     async (fileId: string, point: Point) => {
       const picker = useSourcePickerStore.getState()
@@ -538,7 +512,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     [addObject],
   )
 
-  // Spotify paste handler. Mirrors the Notion / Drive shape: if there's a
+  // Spotify paste handler. Mirrors the Drive shape: if there's a
   // Spotify connection, import + spawn now; otherwise stash the ref on the
   // picker store and open the connect flow. Board.tsx watches pendingPaste
   // and resumes the import after the OAuth handshake completes.
@@ -638,13 +612,13 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
         }
       }
 
-      // 4. text/plain — could be a Notion URL, an image URL, a data URI,
-      // or just text. Notion takes precedence because the URL string
-      // would also match the image-URL fallback (Notion's URLs are http).
+      // 4. text/plain — could be a provider URL, an image URL, a data URI,
+      // or just text. Provider URLs take precedence because they would also
+      // match the image-URL fallback.
       if (snap.text) {
         const trimmed = snap.text.trim()
 
-        // 4a. Notion / Drive / Spotify URL → import via the matching
+        // 4a. Drive / Spotify URL → import via the matching
         // connection, or stash the id and open the connect flow if no
         // connection exists. Spotify also accepts `spotify:…` URI form
         // (no http prefix) so the recogniser runs outside the http guard.
@@ -655,12 +629,6 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
           return
         }
         if (trimmed.length > 0 && /https?:\/\//i.test(trimmed)) {
-          const notionPageId = extractNotionPageId(trimmed)
-          if (notionPageId) {
-            e.preventDefault()
-            await handleNotionPasteUrl(notionPageId, viewportCenterWorld())
-            return
-          }
           const driveFileId = extractDriveFileId(trimmed)
           if (driveFileId) {
             e.preventDefault()
@@ -732,7 +700,6 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     addObject,
     addPdfFromBlob,
     handleDrivePasteUrl,
-    handleNotionPasteUrl,
     handleSpotifyPasteUrl,
     handleVideoPasteUrl,
     handleWebPasteUrl,
@@ -914,7 +881,6 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'sticky' ||
             o.type === 'text' ||
             o.type === 'font' ||
-            o.type === 'notion-page' ||
             o.type === 'drive-file' ||
             o.type === 'drive-folder' ||
             o.type === 'web-page' ||

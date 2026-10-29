@@ -5,8 +5,8 @@
 //   1. The popup is opened at the FRONTEND origin (not the API origin),
 //      so the better-auth session cookie travels with it. We rely on the
 //      Vite proxy (in dev) / same-origin deploy (in prod) to forward
-//      /api/connections/{provider}/start to the backend. The Notion
-//      redirect URI is also pinned to the frontend origin, so the state
+//      /api/connections/{provider}/start to the backend. Provider
+//      redirect URIs are also pinned to the frontend origin, so the state
 //      cookie set on /start is sent back to /callback.
 //   2. The postMessage handler here only accepts messages where
 //      e.origin === window.location.origin.
@@ -15,9 +15,7 @@
 
 type PopupResult = { id: string }
 
-export async function openConnectionPopup(
-  provider: 'notion' | 'drive' | 'spotify',
-): Promise<PopupResult> {
+export async function openConnectionPopup(provider: 'drive' | 'spotify'): Promise<PopupResult> {
   // Open at the current origin — the server side handles the OAuth dance
   // and we receive a postMessage back from the callback page once it
   // finishes. Using a relative URL means the session cookie comes along.

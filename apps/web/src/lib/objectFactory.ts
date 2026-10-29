@@ -3,7 +3,6 @@ import type {
   DriveFileData,
   DriveFolderData,
   FontData,
-  NotionPageData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
   SpotifyTrackData,
@@ -98,32 +97,12 @@ export function createFont(
 // Compact card — title + provider line + Open pill is roughly 100px of
 // content; 140 gives a little breathing room without an empty void below
 // the pill. User can resize from any edge for a chunkier card.
-const NOTION_DEFAULT_SIZE = { width: 280, height: 140 }
 const DRIVE_DEFAULT_SIZE = { width: 280, height: 140 }
 
-// External-source factory. The full data snapshot comes from the import
-// endpoint and is stored verbatim on the canvas object — the board owns
-// the markdown, so future renders / AI runs don't need to refetch from
-// Notion until the user explicitly refreshes.
-export function createNotionPage(
-  worldCenter: { x: number; y: number },
-  zIndex: number,
-  data: NotionPageData,
-): CanvasObject {
-  return {
-    id: nanoid(),
-    type: 'notion-page',
-    position: {
-      x: worldCenter.x - NOTION_DEFAULT_SIZE.width / 2,
-      y: worldCenter.y - NOTION_DEFAULT_SIZE.height / 2,
-    },
-    size: NOTION_DEFAULT_SIZE,
-    rotation: 0,
-    zIndex,
-    data,
-  }
-}
-
+// External-source factories. The full data snapshot comes from the import
+// endpoint and is stored verbatim on the canvas object — the board owns the
+// excerpt, so future renders / AI runs don't need to refetch until the user
+// explicitly refreshes.
 export function createDriveFile(
   worldCenter: { x: number; y: number },
   zIndex: number,
@@ -162,7 +141,7 @@ export function createDriveFolder(
   }
 }
 
-// Taller than Notion/Drive so the description paragraph + swatch row each
+// Taller than Drive so the description paragraph + swatch row each
 // get their own band without crowding the favicon + title above.
 const WEB_DEFAULT_SIZE = { width: 320, height: 240 }
 

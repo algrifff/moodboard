@@ -19,7 +19,7 @@ const PREVIEW_OBJECT_CAP = 12
 // historical board snapshots may have minor shape drift, and the dashboard
 // preview shouldn't fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'notion-page' | 'drive-file' | 'drive-folder'
+  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'drive-file' | 'drive-folder'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
@@ -30,7 +30,6 @@ const STORED_TYPES = [
   'text',
   'pdf',
   'font',
-  'notion-page',
   'drive-file',
   'drive-folder',
 ] as const
@@ -91,10 +90,6 @@ function buildPreview(data: unknown): BoardPreview {
     if (o.type === 'font' && d) {
       if (typeof d.family === 'string') base.family = d.family
       if (typeof d.url === 'string') base.url = d.url
-    }
-    if (o.type === 'notion-page' && d) {
-      if (typeof d.title === 'string') base.title = d.title
-      if (typeof d.iconEmoji === 'string') base.iconEmoji = d.iconEmoji
     }
     if ((o.type === 'drive-file' || o.type === 'drive-folder') && d) {
       if (typeof d.name === 'string') base.title = d.name

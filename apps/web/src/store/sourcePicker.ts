@@ -13,7 +13,6 @@ import { listConnections } from '@/lib/connectionsApi'
 // (which shows the connect CTAs in its empty state), and after the OAuth
 // handshake completes the Board page checks this and runs the import.
 export type PendingPaste =
-  | { provider: 'notion'; pageId: string }
   | { provider: 'drive'; fileId: string }
   | { provider: 'spotify'; ref: { kind: 'playlist' | 'track' | 'album'; id: string } }
 

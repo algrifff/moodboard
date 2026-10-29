@@ -1,6 +1,6 @@
 # moodboard.ai
 
-Infinite-canvas mood board. Drop images, sticky notes, text, and PDFs on a canvas — or pull in pages, files, web pages, and music from **Notion, Google Drive, any URL, and Spotify**. When two or more items come within 48 px of each other in world space they auto-group, a coloured outline draws around them, a palette widget extracts the colours, and Claude reads the group as a brand brief.
+Infinite-canvas mood board. Drop images, sticky notes, text, and PDFs on a canvas — or pull in files, web pages, video, and music from **Google Drive, any URL, and Spotify**. When two or more items come within 48 px of each other in world space they auto-group, a coloured outline draws around them, a palette widget extracts the colours, and Claude reads the group as a brand brief.
 
 The "feel" of items snapping into a group is the whole product.
 
@@ -86,11 +86,10 @@ External knowledge sources (all **optional** — the app boots without them; eac
 | Key                                               | What it is                                                                                                                                                                                                |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CONNECTION_TOKEN_KEY`                            | 64 hex chars (32 bytes). AES-256-GCM key that encrypts every OAuth token at rest. Required for any source. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. |
-| `NOTION_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Notion public integration (Read content + Read user info). Redirect points at the **frontend** origin: `…/api/connections/notion/callback`.                                                               |
 | `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Google Cloud OAuth (Drive + Sheets + Slides APIs). Redirect: `…/api/connections/drive/callback`.                                                                                                          |
 | `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify app (scopes: `playlist-read-private`, `playlist-read-collaborative`, `user-read-email`). Redirect: `…/api/connections/spotify/callback`.                                                          |
 
-**OAuth needs HTTPS.** Notion requires HTTPS redirect URIs; Spotify accepts `https://…` or the `http://127.0.0.1` loopback. The simplest setup that satisfies all providers is local HTTPS on `https://127.0.0.1:5173` via [mkcert](https://github.com/FiloSottile/mkcert) — see [Local HTTPS](#local-https-for-oauth) below. Set every redirect URI (and `BETTER_AUTH_URL` / `WEB_ORIGIN`) to match.
+**OAuth needs HTTPS.** Google requires HTTPS redirect URIs outside localhost; Spotify accepts `https://…` or the `http://127.0.0.1` loopback. The simplest setup that satisfies all providers is local HTTPS on `https://127.0.0.1:5173` via [mkcert](https://github.com/FiloSottile/mkcert) — see [Local HTTPS](#local-https-for-oauth) below. Set every redirect URI (and `BETTER_AUTH_URL` / `WEB_ORIGIN`) to match.
 
 **Never commit `.env`.** It's in `.gitignore`; verify with `git check-ignore -v apps/api/.env` before any commit. The `.env.example` files document every key with placeholder values only.
 
@@ -115,7 +114,7 @@ This runs `apps/web` (Vite dev server) and `apps/api` (Hono with hot reload) in 
 
 ### Local HTTPS (for OAuth)
 
-You only need this to connect external sources (Notion / Drive / Spotify) — plain HTTP works for everything else. OAuth providers require HTTPS redirect URIs (Spotify also accepts the `http://127.0.0.1` loopback). Generate a locally-trusted cert with [mkcert](https://github.com/FiloSottile/mkcert):
+You only need this to connect external sources (Drive / Spotify) — plain HTTP works for everything else. OAuth providers require HTTPS redirect URIs (Spotify also accepts the `http://127.0.0.1` loopback). Generate a locally-trusted cert with [mkcert](https://github.com/FiloSottile/mkcert):
 
 ```bash
 brew install mkcert && mkcert -install
@@ -188,11 +187,10 @@ Two items belong to the same group when their bounding boxes are within **48 px 
 
 ## External knowledge sources
 
-Beyond uploads, the canvas pulls real brand context from four sources. Each import snapshots content onto a canvas card that the AI reads alongside the images — so a grouping can mix a logo, a Notion brand doc, the company's homepage, and a playlist, and the Art Director reads all of it.
+Beyond uploads, the canvas pulls real brand context from three sources. Each import snapshots content onto a canvas card that the AI reads alongside the images — so a grouping can mix a logo, a Drive brand doc, the company's homepage, and a playlist, and the Art Director reads all of it.
 
 | Source           | Auth          | What lands on the canvas                                                                                                                                                                                                                      |
 | ---------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Notion**       | OAuth         | Any page → title, icon, cover, and the block tree converted to markdown.                                                                                                                                                                      |
 | **Google Drive** | OAuth         | Docs / Sheets / Slides → extracted text; PDFs and images route through the normal file pipeline; folders → a child preview.                                                                                                                   |
 | **Web URL**      | none (public) | Any homepage → title, computed colour palette, fonts, OG image + favicon + header logos, and readable text.                                                                                                                                   |
 | **Spotify**      | OAuth         | Playlists, albums, and individual tracks → cover, track list, genres (track-weighted from artists), release era, and audio-feature aggregates (energy / valence / danceability / tempo). A single track also gets an inline embed **player**. |

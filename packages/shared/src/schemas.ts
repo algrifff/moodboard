@@ -37,24 +37,6 @@ export const fontDataSchema = z.object({
   sampleText: z.string().optional(),
 })
 
-// External-source nodes. See types.ts for the rationale; this is the wire
-// shape the API + frontend agree on. Icon/cover URLs are optional because not
-// every Notion page sets them; `markdown` is required so the renderer never
-// has to deal with a partially-imported page.
-export const notionPageDataSchema = z.object({
-  connectionId: z.string(),
-  pageId: z.string(),
-  workspaceId: z.string(),
-  title: z.string(),
-  iconEmoji: z.string().optional(),
-  iconUrl: z.string().optional(),
-  coverUrl: z.string().optional(),
-  url: z.string(),
-  markdown: z.string(),
-  fetchedAt: z.string(),
-  lastEditedAt: z.string().optional(),
-})
-
 export const driveFileDataSchema = z.object({
   connectionId: z.string(),
   fileId: z.string(),
@@ -222,7 +204,6 @@ export const canvasObjectSchema = z.object({
     'text',
     'pdf',
     'font',
-    'notion-page',
     'drive-file',
     'drive-folder',
     'web-page',
@@ -242,7 +223,6 @@ export const canvasObjectSchema = z.object({
     textDataSchema,
     pdfDataSchema,
     fontDataSchema,
-    notionPageDataSchema,
     driveFileDataSchema,
     driveFolderDataSchema,
     webPageDataSchema,
@@ -513,7 +493,6 @@ export const boardPreviewObjectSchema = z.object({
     'text',
     'pdf',
     'font',
-    'notion-page',
     'drive-file',
     'drive-folder',
     'web-page',
@@ -530,9 +509,8 @@ export const boardPreviewObjectSchema = z.object({
   family: z.string().optional(),
   url: z.string().optional(),
   // For external nodes — used by the dashboard to render a small provider
-  // chip + title without shipping the full markdown body.
+  // chip + title without shipping the full body.
   title: z.string().optional(),
-  iconEmoji: z.string().optional(),
   // For drive files — mime type so the dashboard can render the right glyph.
   mimeType: z.string().optional(),
   // For web pages — favicon + host string for the dashboard chip.
@@ -591,7 +569,7 @@ export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 // client only sees what's needed to label the connection in the picker.
 export const connectionSummarySchema = z.object({
   id: z.string(),
-  provider: z.enum(['notion', 'drive', 'spotify']),
+  provider: z.enum(['drive', 'spotify']),
   accountEmail: z.string(),
   workspaceName: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -604,8 +582,8 @@ export const connectionsListResponseSchema = z.object({
 })
 
 // Uniform tile shape across providers — what the picker drawer renders.
-// Optional fields populate per provider: Notion fills `iconEmoji` or
-// `iconUrl`; Drive fills `mimeType` + `thumbnailUrl`.
+// Optional fields populate per provider: Drive fills `mimeType` +
+// `thumbnailUrl`.
 // Widened to include 'spotify' so the picker can render the user's own
 // playlists. Spotify tiles use `kind: 'page'` since the union is page|
 // file|folder and the picker treats kind generically for layout — only
@@ -613,11 +591,10 @@ export const connectionsListResponseSchema = z.object({
 export const pickerTileSchema = z.object({
   id: z.string(),
   connectionId: z.string(),
-  provider: z.enum(['notion', 'drive', 'spotify']),
+  provider: z.enum(['drive', 'spotify']),
   kind: z.enum(['page', 'file', 'folder']),
   title: z.string(),
   iconUrl: z.string().optional(),
-  iconEmoji: z.string().optional(),
   mimeType: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   lastEditedAt: z.string().optional(),
@@ -643,13 +620,6 @@ export const pickerRecentsResponseSchema = z.object({
 
 export const pickerChildrenResponseSchema = z.object({
   tiles: z.array(pickerTileSchema),
-})
-
-// Import / refresh return the on-canvas data wrapped under `data`. The
-// client takes this verbatim and stores it on a new (import) or existing
-// (refresh) CanvasObject.
-export const importNotionResponseSchema = z.object({
-  data: notionPageDataSchema,
 })
 
 // Drive import is a discriminated response — files come back as DriveFileData,
@@ -762,7 +732,7 @@ export type ShareResponse = z.infer<typeof shareResponseSchema>
 // Asset walker — pulls every /api/files/<filename> reference out of a
 // SharedBoardSnapshot. Used by the share creator to populate the
 // assetFilenames allowlist that gates the public share-file route.
-// External URLs (Spotify CDN, Notion icons, etc.) pass through unchanged
+// External URLs (Spotify CDN, etc.) pass through unchanged
 // — the viewer requests them directly.
 // ---------------------------------------------------------------------------
 

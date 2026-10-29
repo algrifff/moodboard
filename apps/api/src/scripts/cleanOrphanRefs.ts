@@ -10,7 +10,7 @@
 // browser logs.
 //
 // This script walks every board's `data.objects[]`, finds any
-// `image` / `pdf` / `notion-page` / `drive-file` / `drive-folder` /
+// `image` / `pdf` / `drive-file` / `drive-folder` /
 // `web-page` object whose data.url (or data.thumbnailUrl, etc.) points
 // at an `/api/files/<filename>` path that has no matching row in the
 // asset table for that board's user. It removes the offending canvas
@@ -52,8 +52,7 @@ function urlsFromObject(o: CanvasObjectLike): string[] {
   probe(d.url)
   probe(d.thumbnailUrl)
   // Web-page logos themselves are spawned as independent `image` objects,
-  // so their URLs land via the `url` probe above. Notion icon/cover and
-  // Drive thumbnails are stable external CDN URLs and don't go through
+  // so their URLs land via the `url` probe above. Drive thumbnails are stable external CDN URLs and don't go through
   // /api/files/, so no special-casing needed.
   return out
 }

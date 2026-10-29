@@ -18,28 +18,11 @@ export type FontData = {
   sampleText?: string
 }
 
-// External-source nodes — content imported from a connected Notion or Drive
-// account. The board owns its snapshot: `markdown` / `excerpt` lives on the
-// canvas object itself so the board keeps rendering even if the source moves
-// or is deleted. `connectionId` lets the refresh endpoint look up credentials
-// to refetch on demand. A stale indicator on the node fires when remote
-// `lastEditedAt > fetchedAt`.
-export type NotionPageData = {
-  connectionId: string
-  pageId: string
-  workspaceId: string
-  title: string
-  iconEmoji?: string
-  iconUrl?: string
-  coverUrl?: string
-  // Public Notion URL — used by the "Open in Notion" link.
-  url: string
-  // The cached extraction. Source of truth for the on-canvas reader + the
-  // AD/synthesiser. When the user clicks refresh, this is what gets swapped.
-  markdown: string
-  fetchedAt: string
-  lastEditedAt?: string
-}
+// External-source nodes — content imported from a connected Drive account.
+// The board owns its snapshot: `excerpt` lives on the canvas object itself so
+// the board keeps rendering even if the source moves or is deleted.
+// `connectionId` lets the refresh endpoint look up credentials to refetch on
+// demand.
 
 // Google Drive file — Docs, Sheets, Slides, or any other type that isn't
 // routed to a dedicated node. PDFs and images come back through the existing
@@ -343,7 +326,6 @@ export type CanvasObjectType =
   | 'text'
   | 'pdf'
   | 'font'
-  | 'notion-page'
   | 'drive-file'
   | 'drive-folder'
   | 'web-page'
@@ -366,7 +348,6 @@ export type CanvasObject = {
     | TextData
     | PDFData
     | FontData
-    | NotionPageData
     | DriveFileData
     | DriveFolderData
     | WebPageData

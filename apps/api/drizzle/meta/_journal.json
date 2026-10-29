@@ -43,6 +43,13 @@
       "when": 1780247477922,
       "tag": "0005_green_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793313135110,
+      "tag": "0006_drop_notion",
+      "breakpoints": true
     }
   ]
 }

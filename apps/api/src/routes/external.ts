@@ -2,7 +2,6 @@ import type {
   DriveFileData,
   DriveFolderData,
   ImageData,
-  NotionPageData,
   PDFData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
@@ -15,14 +14,12 @@ import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
-import { decryptToken } from '../lib/cryptoTokens'
 import {
   extractFile as driveExtractFile,
   extractFolder as driveExtractFolder,
   getValidToken,
   MIME_FOLDER,
 } from '../lib/drive'
-import { blocksToMarkdown, getPage, getPageBlocks } from '../lib/notion'
 import { processPdf } from '../lib/pdfProcessing'
 import { rateLimit } from '../lib/rateLimit'
 import {
@@ -49,9 +46,9 @@ type Variables = { user: AuthUser | null; session: AuthSession | null }
 
 export const external = new Hono<{ Variables: Variables }>()
 
-// Import + refresh both hit upstream provider APIs and run the
-// blocks-to-markdown converter. 20/min/user gives generous headroom for
-// adding a handful of pages at once without hitting Notion's own rate cap.
+// Import + refresh both hit upstream provider APIs. 20/min/user gives
+// generous headroom for adding a handful of items at once without hitting
+// provider rate caps.
 const externalImportLimit = rateLimit({ scope: 'external-import', limit: 20, windowMs: 60_000 })
 
 // Cap of recent items kept per user. Older rows pruned on insert.
@@ -64,45 +61,9 @@ external.use('*', async (c, next) => {
 })
 
 // ---------------------------------------------------------------------------
-// POST /api/external/notion/import
-//
-// Fetch a page, convert its block tree to markdown, persist a recent_external
-// row, and return the wire shape the canvas will mount as a NotionPageNode.
-// The frontend takes this object and calls addObject() — the connectionId on
-// the data is what powers the refresh endpoint later.
-// ---------------------------------------------------------------------------
-external.post('/notion/import', externalImportLimit, async (c) => {
-  const user = c.get('user')!
-  const body = (await c.req.json().catch(() => ({}))) as {
-    connectionId?: unknown
-    pageId?: unknown
-  }
-  const connectionId = typeof body.connectionId === 'string' ? body.connectionId : null
-  const pageId = typeof body.pageId === 'string' ? body.pageId : null
-  if (!connectionId || !pageId) {
-    return c.json({ error: 'connectionId and pageId are required' }, 400)
-  }
-
-  const connectionRow = await loadConnection(user.id, connectionId)
-  if (!connectionRow || connectionRow.provider !== 'notion') {
-    return c.json({ error: 'Connection not found' }, 404)
-  }
-
-  try {
-    const data = await importNotionPage({ userId: user.id, connectionRow, pageId })
-    return c.json({ data })
-  } catch (e) {
-    if (e instanceof TokenDecryptError) {
-      return c.json({ error: 'Connection unavailable' }, 503)
-    }
-    throw e
-  }
-})
-
-// ---------------------------------------------------------------------------
 // POST /api/external/drive/import
 //
-// Same shape as notion/import — connectionId + fileId. The response is a
+// Body: connectionId + fileId. The response is a
 // discriminated union by `kind`:
 //   - 'file'   → DriveFileData (Doc, Sheet, Slides, or other-uncovered mime)
 //   - 'folder' → DriveFolderData
@@ -312,30 +273,6 @@ external.post('/refresh', externalImportLimit, async (c) => {
   const object = findObject(boardRow.data, objectId)
   if (!object) return c.json({ error: 'Object not found on board' }, 404)
 
-  if (object.type === 'notion-page') {
-    const d = object.data as Partial<NotionPageData>
-    if (!d.connectionId || !d.pageId) {
-      return c.json({ error: 'Object has no connection metadata' }, 400)
-    }
-    const connectionRow = await loadConnection(user.id, d.connectionId)
-    if (!connectionRow || connectionRow.provider !== 'notion') {
-      return c.json({ error: 'Connection no longer available' }, 409)
-    }
-    try {
-      const data = await importNotionPage({
-        userId: user.id,
-        connectionRow,
-        pageId: d.pageId,
-      })
-      return c.json({ data })
-    } catch (e) {
-      if (e instanceof TokenDecryptError) {
-        return c.json({ error: 'Connection unavailable' }, 503)
-      }
-      throw e
-    }
-  }
-
   if (object.type === 'drive-file' || object.type === 'drive-folder') {
     const d = object.data as { connectionId?: string; fileId?: string; folderId?: string }
     const fileId = d.fileId ?? d.folderId
@@ -448,54 +385,6 @@ export class TokenDecryptError extends Error {
     super('TokenDecryptError')
     this.name = 'TokenDecryptError'
   }
-}
-
-export async function importNotionPage(args: {
-  userId: string
-  connectionRow: { id: string; accessTokenEnc: string; workspaceId: string | null }
-  pageId: string
-}): Promise<NotionPageData> {
-  let token: string
-  try {
-    token = decryptToken(args.connectionRow.accessTokenEnc)
-  } catch {
-    throw new TokenDecryptError()
-  }
-  const [page, blocks] = await Promise.all([
-    getPage({ token, pageId: args.pageId }),
-    getPageBlocks({ token, pageId: args.pageId }),
-  ])
-  const markdown = blocksToMarkdown(blocks)
-  const fetchedAt = new Date().toISOString()
-
-  await db
-    .update(schema.connection)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(schema.connection.id, args.connectionRow.id))
-
-  await upsertRecent({
-    userId: args.userId,
-    connectionId: args.connectionRow.id,
-    externalId: args.pageId,
-    kind: 'page',
-    title: page.title,
-    iconUrl: page.iconUrl,
-  })
-
-  const data: NotionPageData = {
-    connectionId: args.connectionRow.id,
-    pageId: page.id,
-    workspaceId: args.connectionRow.workspaceId ?? '',
-    title: page.title,
-    url: page.url,
-    markdown,
-    fetchedAt,
-  }
-  if (page.iconEmoji) data.iconEmoji = page.iconEmoji
-  if (page.iconUrl) data.iconUrl = page.iconUrl
-  if (page.coverUrl) data.coverUrl = page.coverUrl
-  if (page.lastEditedTime) data.lastEditedAt = page.lastEditedTime
-  return data
 }
 
 type DriveImportResult =

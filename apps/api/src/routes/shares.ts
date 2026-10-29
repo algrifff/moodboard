@@ -16,7 +16,7 @@ import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
 import { renderSharePdf } from '../lib/pdfRender'
 import { rateLimit } from '../lib/rateLimit'
-import { externalPath, isSafeFilename, pdfPath, pdfThumbPath, uploadPath } from '../lib/storage'
+import { isSafeFilename, pdfPath, pdfThumbPath, uploadPath } from '../lib/storage'
 import { mimeFromExt } from '../lib/upload-validation'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
@@ -248,11 +248,7 @@ shares.get('/:token/files/:filename', shareFileRateLimit, async (c) => {
       ? pdfPath(filename)
       : assetRow.kind === 'pdf-thumb'
         ? pdfThumbPath(filename)
-        : assetRow.kind === 'external-notion'
-          ? externalPath('notion', filename)
-          : assetRow.kind === 'external-drive'
-            ? externalPath('drive', filename)
-            : uploadPath(filename)
+        : uploadPath(filename)
 
   let s
   try {

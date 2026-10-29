@@ -81,61 +81,6 @@ describe('analysisHash', () => {
     expect(a).not.toBe(b)
   })
 
-  it('changes when a notion page markdown changes', () => {
-    const page = (id: string, markdown: string, lastEditedAt?: string): CanvasObject => ({
-      id,
-      type: 'notion-page',
-      position: { x: 0, y: 0 },
-      size: { width: 280, height: 360 },
-      rotation: 0,
-      zIndex: 0,
-      data: {
-        connectionId: 'c1',
-        pageId: 'p1',
-        workspaceId: 'w1',
-        title: 'Page',
-        url: 'https://notion.so/p1',
-        markdown,
-        fetchedAt: '2026-05-30T00:00:00Z',
-        lastEditedAt,
-      },
-    })
-    const a = analysisHash([page('a', '# Hello')], 'm1')
-    const b = analysisHash([page('a', '# Hello world')], 'm1')
-    expect(a).not.toBe(b)
-  })
-
-  it('does not invalidate when only notion fetchedAt drifts', () => {
-    // fetchedAt advances on every refresh even when content is unchanged.
-    // Hashing it would burn AI cache on every poll.
-    const base = {
-      id: 'a',
-      type: 'notion-page' as const,
-      position: { x: 0, y: 0 },
-      size: { width: 280, height: 360 },
-      rotation: 0,
-      zIndex: 0,
-    }
-    const a: CanvasObject = {
-      ...base,
-      data: {
-        connectionId: 'c1',
-        pageId: 'p1',
-        workspaceId: 'w1',
-        title: 'Page',
-        url: 'https://notion.so/p1',
-        markdown: '# Hello',
-        fetchedAt: '2026-05-30T00:00:00Z',
-        lastEditedAt: '2026-05-29T00:00:00Z',
-      },
-    }
-    const b: CanvasObject = {
-      ...base,
-      data: { ...(a.data as Record<string, unknown>), fetchedAt: '2026-05-31T00:00:00Z' } as never,
-    }
-    expect(analysisHash([a], 'm1')).toBe(analysisHash([b], 'm1'))
-  })
-
   it('changes when a drive file excerpt changes', () => {
     const driveFile = (id: string, excerpt: string): CanvasObject => ({
       id,

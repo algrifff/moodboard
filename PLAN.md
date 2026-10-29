@@ -677,10 +677,10 @@ Already on Postgres; this makes it production-grade and ready for structured des
 - [ ] Import Figma frames as kit sources / template references via the REST API (plain `fetch`, read-only)
 - [ ] No push-back to Figma — HTML is the output
 
-### Open decisions
+### Decisions
 
-- **Audio in video** — music/voiceover tracks muxed by ffmpeg, or silent for v1?
-- **Linear trigger** — agents start only when someone picks an issue, or automatically on a label (e.g. `design-request`)?
+- **Video audio** — silent for v1.
+- **Linear trigger** — manual: agents start only when someone picks an issue.
 
 ---
 

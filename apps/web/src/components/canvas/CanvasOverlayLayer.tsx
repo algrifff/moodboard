@@ -1,7 +1,6 @@
 import type { CanvasObject } from '@moodboard/shared'
 import { DriveNode } from './DriveNode'
 import { FontNode } from './FontNode'
-import { NotionPageNode } from './NotionPageNode'
 import { SpotifyNode } from './SpotifyNode'
 import { StickyNote } from './StickyNote'
 import { TextObject } from './TextObject'
@@ -71,18 +70,6 @@ export function CanvasOverlayLayer({
                 scale={scale}
                 panMode={panMode}
                 selected={selectedSet.has(o.id)}
-              />
-            )
-          }
-          if (o.type === 'notion-page' && boardId) {
-            return (
-              <NotionPageNode
-                key={o.id}
-                object={o}
-                scale={scale}
-                panMode={panMode}
-                selected={selectedSet.has(o.id)}
-                boardId={boardId}
               />
             )
           }

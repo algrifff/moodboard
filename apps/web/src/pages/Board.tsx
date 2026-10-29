@@ -11,11 +11,10 @@ import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
 import { groupBoundingBox } from '@moodboard/shared'
 import { updateBoard } from '@/lib/boardsApi'
-import { importDriveFile, importNotionPage, importSpotifyRef } from '@/lib/connectionsApi'
+import { importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import {
   createDriveFile,
   createDriveFolder,
-  createNotionPage,
   createSpotifyAlbum,
   createSpotifyPlaylist,
   createSpotifyTrack,
@@ -88,41 +87,8 @@ export function BoardPage() {
   // open via the toolbar button instead).
   //
   // If a `pendingPaste` is stashed (set by the canvas paste handler when a
-  // Notion URL was dropped with no connection), resume the import here so
+  // provider URL was dropped with no connection), resume the import here so
   // the user doesn't have to paste again.
-  const onConnectNotion = useCallback(async () => {
-    try {
-      await openConnectionPopup('notion')
-      const picker = useSourcePickerStore.getState()
-      await picker.refreshConnections()
-      const pending = useSourcePickerStore.getState().pendingPaste
-      if (pending?.provider === 'notion' && boardId) {
-        const fresh = useSourcePickerStore.getState()
-        const conn = fresh.connections.find((c) => c.provider === 'notion')
-        if (conn) {
-          try {
-            const data = await importNotionPage(conn.id, pending.pageId)
-            const state = useCanvasStore.getState()
-            const center = screenToWorld(
-              { x: state.viewportSize.width / 2, y: state.viewportSize.height / 2 },
-              { scale: state.scale, x: state.offset.x, y: state.offset.y },
-            )
-            state.commitBeforeAction()
-            state.addObject(createNotionPage(center, state.objects.length, data))
-            fresh.closePicker()
-          } catch (importErr) {
-            console.error('Resume of Notion paste failed', importErr)
-          }
-        }
-        useSourcePickerStore.getState().setPendingPaste(null)
-      }
-    } catch (e) {
-      console.error('Notion connect failed', e)
-    }
-  }, [boardId])
-
-  // Drive OAuth — same shape as onConnectNotion. After the popup closes
-  // we resume any pendingPaste targeting drive.
   const onConnectDrive = useCallback(async () => {
     try {
       await openConnectionPopup('drive')
@@ -177,7 +143,7 @@ export function BoardPage() {
     }
   }, [boardId])
 
-  // Spotify OAuth — mirrors onConnectNotion / onConnectDrive. Resumes any
+  // Spotify OAuth — mirrors onConnectDrive. Resumes any
   // pendingPaste { provider: 'spotify' } after the popup completes.
   const onConnectSpotify = useCallback(async () => {
     try {
@@ -256,11 +222,7 @@ export function BoardPage() {
         <MoodBoardCanvas boardId={boardId} />
         <Toolbar />
         <ToastHost />
-        <SourcePickerDrawer
-          onConnectNotion={onConnectNotion}
-          onConnectDrive={onConnectDrive}
-          onConnectSpotify={onConnectSpotify}
-        />
+        <SourcePickerDrawer onConnectDrive={onConnectDrive} onConnectSpotify={onConnectSpotify} />
 
         <div
           className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"

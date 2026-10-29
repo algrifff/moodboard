@@ -4,7 +4,6 @@ import type {
   DriveFolderData,
   FontData,
   ImageData,
-  NotionPageData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
   SpotifyTrackData,
@@ -28,10 +27,6 @@ import { createHash } from 'node:crypto'
 //   font    — family + url; the AD lists uploaded fonts as ground truth so a
 //             family change must bust the cache. (Was previously omitted —
 //             see 12a regression test.)
-//   notion  — markdown + lastEditedAt; the cached snapshot IS the content the
-//             AD reads, so hashing the markdown directly is what we want.
-//             Refresh-with-no-change reuses the cache; refresh-with-new-content
-//             invalidates.
 export function analysisHash(objects: CanvasObject[], modelTag: string): string {
   const sorted = [...objects].sort((a, b) => a.id.localeCompare(b.id))
   const parts: string[] = []
@@ -50,9 +45,6 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
     } else if (o.type === 'font') {
       const d = o.data as FontData
       parts.push(`${o.id}|font|${d.family}|${d.url}`)
-    } else if (o.type === 'notion-page') {
-      const d = o.data as NotionPageData
-      parts.push(`${o.id}|notion-page|${d.lastEditedAt ?? ''}|${d.markdown}`)
     } else if (o.type === 'drive-file') {
       // modifiedTime + excerpt — refresh updates both; cache picks up
       // content changes naturally when either drifts.

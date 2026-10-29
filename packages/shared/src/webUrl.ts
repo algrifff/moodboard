@@ -2,14 +2,13 @@
 //
 // Returns the URL itself when the string is a fetchable http(s) URL that
 // isn't already claimed by a more specific provider. Provider-specific
-// recognisers (Notion, Drive) run earlier in the dispatch chain and
+// recognisers (Drive, Spotify, video) run earlier in the dispatch chain and
 // short-circuit before this; here we explicitly bail on those hosts so a
 // paste that didn't extract a provider-side id (malformed URL, share link
 // with no id) doesn't get downgraded into a generic web page when the user
 // clearly meant the provider.
 
 const PROVIDER_HOSTS = [
-  /(?:^|\.)notion\.(so|site)$/i,
   /^docs\.google\.com$/i,
   /^drive\.google\.com$/i,
   // Phase 15 — Spotify recogniser will be added to its dispatch slot.

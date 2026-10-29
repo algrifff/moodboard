@@ -524,24 +524,6 @@ export type AgentOutput =
     }
   | { agentId: 'video-editor'; data: VideoEditorBreakdown }
 
-export type Group = {
-  id: string
-  objectIds: string[]
-  boundingBox: { x: number; y: number; w: number; h: number }
-  analysis?: AIAnalysis
-  analysisHash?: string
-}
-
-export type Board = {
-  id: string
-  userId: string | null
-  name: string
-  objects: CanvasObject[]
-  groups: Group[]
-  createdAt: string
-  updatedAt: string
-}
-
 // ---------------------------------------------------------------------------
 // Phase 18 — shareable moodboards (frozen snapshot + PDF)
 //

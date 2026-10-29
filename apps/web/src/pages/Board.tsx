@@ -10,7 +10,7 @@ import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
 import { groupBoundingBox } from '@moodboard/shared'
-import { updateBoard } from '@/lib/boardsApi'
+import { renameBoard } from '@/lib/boardsApi'
 import { importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import {
   createDriveFile,
@@ -210,7 +210,7 @@ export function BoardPage() {
     }
     setName(trimmed)
     try {
-      await updateBoard(boardId, { name: trimmed })
+      await renameBoard(boardId, trimmed)
     } catch (e) {
       console.error('rename failed', e)
     }

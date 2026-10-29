@@ -46,6 +46,10 @@ type CanvasState = {
   canUndo: () => boolean
   canRedo: () => boolean
 
+  // Server-originated changes (a teammate's newer copy won a save race).
+  // Bypasses history: these aren't the local user's actions to undo.
+  applyRemote: (adopt: CanvasObject[], remove: string[]) => void
+
   hydrate: (snapshot: Partial<CanvasSnapshot>) => void
   reset: () => void
 }
@@ -135,6 +139,24 @@ export const useCanvasStore = create<CanvasState>()((set, get) => ({
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
 
+  applyRemote: (adopt, remove) =>
+    set((s) => {
+      const removed = new Set(remove)
+      const byId = new Map(adopt.map((o) => [o.id, o]))
+      const objects = s.objects
+        .filter((o) => !removed.has(o.id))
+        .map((o) => {
+          const next = byId.get(o.id)
+          if (!next) return o
+          byId.delete(o.id)
+          return next
+        })
+      return {
+        objects: [...objects, ...byId.values()],
+        selectedIds: s.selectedIds.filter((id) => !removed.has(id)),
+      }
+    }),
+
   hydrate: (snapshot) =>
     set(() => ({
       objects: snapshot.objects ?? INITIAL.objects,
@@ -152,11 +174,3 @@ export const useCanvasStore = create<CanvasState>()((set, get) => ({
       future: [],
     })),
 }))
-
-export function snapshotFromStore(state: CanvasState): CanvasSnapshot {
-  return {
-    objects: state.objects,
-    scale: state.scale,
-    offset: state.offset,
-  }
-}

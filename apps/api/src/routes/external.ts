@@ -37,6 +37,7 @@ import {
   SpotifyApiError,
   trackFeaturesWithAggregate,
 } from '../lib/spotify'
+import { loadBoardObject } from '../lib/boardObjects'
 import { savePdf, savePdfThumbnail, saveUpload } from '../lib/storage'
 import { extractVideoClip, VideoExtractError } from '../lib/video'
 import { extractWebPage, WebExtractError } from '../lib/web'
@@ -263,15 +264,9 @@ external.post('/refresh', externalImportLimit, async (c) => {
     return c.json({ error: 'boardId and objectId are required' }, 400)
   }
 
-  const [boardRow] = await db
-    .select({ data: schema.board.data })
-    .from(schema.board)
-    .where(eq(schema.board.id, boardId))
-    .limit(1)
-  if (!boardRow) return c.json({ error: 'Board not found' }, 404)
-
-  const object = findObject(boardRow.data, objectId)
-  if (!object) return c.json({ error: 'Object not found on board' }, 404)
+  const stored = await loadBoardObject(boardId, objectId)
+  if (!stored) return c.json({ error: 'Object not found on board' }, 404)
+  const { object } = stored
 
   if (object.type === 'drive-file' || object.type === 'drive-folder') {
     const d = object.data as { connectionId?: string; fileId?: string; folderId?: string }
@@ -927,29 +922,4 @@ async function upsertRecent(args: {
         // Swallow — older rows can be pruned next time.
       })
   }
-}
-
-// Walk a stored board.data jsonb for the object with matching id. Loose
-// typing — the stored shape is opaque to the API and we only need a couple
-// of fields to dispatch on.
-function findObject(
-  data: unknown,
-  objectId: string,
-): { type: string; data: Record<string, unknown> } | null {
-  if (!data || typeof data !== 'object') return null
-  const objects = (data as { objects?: unknown[] }).objects
-  if (!Array.isArray(objects)) return null
-  for (const o of objects) {
-    if (!o || typeof o !== 'object') continue
-    const obj = o as { id?: unknown; type?: unknown; data?: unknown }
-    if (
-      obj.id === objectId &&
-      typeof obj.type === 'string' &&
-      obj.data &&
-      typeof obj.data === 'object'
-    ) {
-      return { type: obj.type, data: obj.data as Record<string, unknown> }
-    }
-  }
-  return null
 }

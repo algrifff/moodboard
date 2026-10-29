@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { CanvasObject } from './types'
 
 // URLs on canvas objects are typically server-relative `/api/files/<id>`
 // paths, not absolute URLs. The boards endpoint accepts state via
@@ -429,29 +430,6 @@ export const synthesizeResponseSchema = z.object({
 })
 export type SynthesizeResponse = z.infer<typeof synthesizeResponseSchema>
 
-export const groupSchema = z.object({
-  id: z.string(),
-  objectIds: z.array(z.string()),
-  boundingBox: z.object({
-    x: z.number(),
-    y: z.number(),
-    w: z.number(),
-    h: z.number(),
-  }),
-  analysis: aiAnalysisSchema.optional(),
-  analysisHash: z.string().optional(),
-})
-
-export const boardSchema = z.object({
-  id: z.string(),
-  userId: z.string().nullable(),
-  name: z.string(),
-  objects: z.array(canvasObjectSchema),
-  groups: z.array(groupSchema),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   service: z.string(),
@@ -543,15 +521,27 @@ export const boardSummariesResponseSchema = z.object({
 })
 export type BoardSummariesResponse = z.infer<typeof boardSummariesResponseSchema>
 
-// `data` is the canvas state blob; opaque to the API, parsed by the frontend.
+// Wire shape for a stored canvas object. The envelope is validated; `data`
+// passes through untouched — parsing it against the per-type union would
+// strip fields the union doesn't know about yet.
+export const storedCanvasObjectSchema = canvasObjectSchema.extend({
+  data: z.record(z.string(), z.unknown()),
+})
+
+// `versions` maps object id → server version. The client echoes the version
+// back as `baseVersion` on its next write so the server can detect a
+// teammate's concurrent edit instead of silently overwriting it.
 export const fullBoardSchema = z.object({
   id: z.string(),
   name: z.string(),
-  data: z.unknown(),
+  objects: z.array(storedCanvasObjectSchema),
+  versions: z.record(z.string(), z.number().int()),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
-export type FullBoard = z.infer<typeof fullBoardSchema>
+export type FullBoard = Omit<z.infer<typeof fullBoardSchema>, 'objects'> & {
+  objects: CanvasObject[]
+}
 
 export const boardResponseSchema = z.object({ board: fullBoardSchema })
 export type BoardResponse = z.infer<typeof boardResponseSchema>
@@ -668,10 +658,43 @@ export const importVideoResponseSchema = z.object({
 })
 
 export const updateBoardRequestSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  data: z.unknown().optional(),
+  name: z.string().min(1).max(120),
 })
 export type UpdateBoardRequest = z.infer<typeof updateBoardRequestSchema>
+
+// Object-level save. `baseVersion` is the version the client last saw
+// (null = the client believes it's creating the object). A write whose
+// baseVersion doesn't match the stored version is rejected as a conflict
+// and the server's current copy comes back instead.
+export const MAX_OBJECT_WRITES = 500
+export const saveBoardObjectsRequestSchema = z.object({
+  upserts: z
+    .array(z.object({ object: storedCanvasObjectSchema, baseVersion: z.number().int().nullable() }))
+    .max(MAX_OBJECT_WRITES),
+  deletes: z
+    .array(z.object({ id: z.string().min(1), baseVersion: z.number().int() }))
+    .max(MAX_OBJECT_WRITES),
+})
+export type SaveBoardObjectsRequest = z.infer<typeof saveBoardObjectsRequestSchema>
+
+export const boardObjectConflictSchema = z.object({
+  id: z.string(),
+  // null when the object no longer exists on the server.
+  object: storedCanvasObjectSchema.nullable(),
+  version: z.number().int().nullable(),
+})
+
+export const saveBoardObjectsResponseSchema = z.object({
+  // New version for every write that applied (deletes are omitted).
+  versions: z.record(z.string(), z.number().int()),
+  conflicts: z.array(boardObjectConflictSchema),
+})
+export type SaveBoardObjectsResponse = Omit<
+  z.infer<typeof saveBoardObjectsResponseSchema>,
+  'conflicts'
+> & {
+  conflicts: { id: string; object: CanvasObject | null; version: number | null }[]
+}
 
 // ---------------------------------------------------------------------------
 // Phase 18 — shareable moodboards

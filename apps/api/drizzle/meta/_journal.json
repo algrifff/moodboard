@@ -64,6 +64,20 @@
       "when": 1793313238539,
       "tag": "0008_team_drop_user_id",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793313500585,
+      "tag": "0009_board_object",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793313513511,
+      "tag": "0010_drop_board_data",
+      "breakpoints": true
     }
   ]
 }

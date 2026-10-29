@@ -26,6 +26,7 @@ import {
 } from '../lib/analyze'
 import { analyzeVideoForEditor } from '../lib/gemini'
 import { analysisHash } from '../lib/analysisHash'
+import { loadBoardObjects } from '../lib/boardObjects'
 import { rateLimit } from '../lib/rateLimit'
 import { recordGroupDisplay, type DisplayKind } from '../lib/recordGroupDisplay'
 
@@ -54,15 +55,15 @@ async function loadGroupObjects(
   { ok: true; objects: CanvasObject[] } | { ok: false; status: 400 | 404; error: string }
 > {
   const [boardRow] = await db
-    .select()
+    .select({ id: schema.board.id })
     .from(schema.board)
     .where(eq(schema.board.id, boardId))
     .limit(1)
   if (!boardRow) return { ok: false, status: 404, error: 'Not found' }
-  const data = (boardRow.data ?? {}) as { objects?: CanvasObject[] }
-  const all: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
   const idSet = new Set(objectIds)
-  const objects = all.filter((o) => idSet.has(o.id))
+  const objects = (await loadBoardObjects(boardId))
+    .map((o) => o.object)
+    .filter((o) => idSet.has(o.id))
   if (objects.length < 2) {
     return {
       ok: false,

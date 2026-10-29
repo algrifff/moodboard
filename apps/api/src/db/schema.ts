@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm'
-import { boolean, integer, jsonb, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 // ---------------------------------------------------------------------------
 // better-auth tables (singular names, matches better-auth v1 defaults).
@@ -68,12 +78,35 @@ export const board = pgTable('board', {
   id: text('id').primaryKey(),
   createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
-  data: jsonb('data')
-    .notNull()
-    .default(sql`'{}'::jsonb`),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
+
+// One row per canvas object. `object` is the full CanvasObject (geometry +
+// per-type data); `type` is lifted out so queries can filter without
+// unpacking JSON. `version` increments on every write — clients send the
+// version they last saw and a mismatch is reported as a conflict rather
+// than overwritten. Object ids are client-minted, so the key is scoped to
+// the board.
+export const boardObject = pgTable(
+  'board_object',
+  {
+    boardId: text('board_id')
+      .notNull()
+      .references(() => board.id, { onDelete: 'cascade' }),
+    id: text('id').notNull(),
+    type: text('type').notNull(),
+    object: jsonb('object').notNull(),
+    version: integer('version').notNull().default(1),
+    updatedBy: text('updated_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.boardId, t.id] }),
+    typeIdx: index('board_object_type_idx').on(t.type),
+  }),
+)
 
 export const asset = pgTable('asset', {
   id: text('id').primaryKey(),

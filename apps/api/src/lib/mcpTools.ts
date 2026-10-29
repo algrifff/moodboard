@@ -19,6 +19,7 @@ import { db, schema } from '../db'
 import { getAgent } from './agents'
 import { DEFAULT_DEPTH, modelTag, synthesisModelTag, synthesizeGroup } from './analyze'
 import { analysisHash } from './analysisHash'
+import { insertBoardObject, loadBoardObjects, loadObjectsByBoard } from './boardObjects'
 import { nextSpot } from './canvasPlacement'
 import { routeUrlToImporter } from './mcpUrlDispatch'
 import { listGroupDisplays } from './recordGroupDisplay'
@@ -33,32 +34,30 @@ import { getAgentResult } from '../routes/analyze'
 // Helpers — board state mutation
 // ---------------------------------------------------------------------------
 
-type BoardData = { objects?: CanvasObject[]; scale?: number; offset?: { x: number; y: number } }
+type BoardRow = typeof schema.board.$inferSelect
 
-async function loadBoard(boardId: string) {
+async function loadBoard(
+  boardId: string,
+): Promise<{ row: BoardRow; objects: CanvasObject[] } | null> {
   const [row] = await db.select().from(schema.board).where(eq(schema.board.id, boardId)).limit(1)
-  return row ?? null
+  if (!row) return null
+  const objects = (await loadBoardObjects(boardId)).map((o) => o.object)
+  return { row, objects }
 }
 
+// `build` sees the current objects so it can pick a free spot. The insert
+// is a single new row, so a teammate editing the board concurrently keeps
+// their changes.
 async function appendObject(
   boardId: string,
+  userId: string,
   build: (objects: CanvasObject[]) => CanvasObject,
 ): Promise<{ object: CanvasObject; boardName: string } | null> {
-  const row = await loadBoard(boardId)
-  if (!row) return null
-  const data = (row.data ?? {}) as BoardData
-  const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
-  const newObject = build(objects)
-  const nextData: BoardData = {
-    objects: [...objects, newObject],
-    scale: data.scale,
-    offset: data.offset,
-  }
-  await db
-    .update(schema.board)
-    .set({ data: nextData, updatedAt: new Date() })
-    .where(eq(schema.board.id, boardId))
-  return { object: newObject, boardName: row.name }
+  const board = await loadBoard(boardId)
+  if (!board) return null
+  const newObject = build(board.objects)
+  await insertBoardObject(boardId, newObject, userId)
+  return { object: newObject, boardName: board.row.name }
 }
 
 // Pull the canonical viewer URL for a board. Used in tool outputs so
@@ -107,9 +106,7 @@ type BoardSummary = {
   updatedAt: string
 }
 
-function summariseBoardRow(row: typeof schema.board.$inferSelect): BoardSummary {
-  const data = (row.data ?? {}) as BoardData
-  const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
+function summariseBoard(row: BoardRow, objects: CanvasObject[]): BoardSummary {
   const byType: Record<string, number> = {}
   for (const o of objects) {
     byType[o.type] = (byType[o.type] ?? 0) + 1
@@ -163,7 +160,8 @@ export function buildMcpServer(userId: string): McpServer {
         .from(schema.board)
         .orderBy(desc(schema.board.updatedAt))
         .limit(20)
-      const boards = rows.map(summariseBoardRow)
+      const objectsByBoard = await loadObjectsByBoard(rows.map((r) => r.id))
+      const boards = rows.map((r) => summariseBoard(r, objectsByBoard.get(r.id) ?? []))
       return {
         content: [{ type: 'text', text: JSON.stringify({ boards }, null, 2) }],
       }
@@ -188,16 +186,15 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, verbose }) => {
-      const row = await loadBoard(boardId)
-      if (!row) {
+      const board = await loadBoard(boardId)
+      if (!board) {
         return {
           isError: true,
           content: [{ type: 'text', text: 'Board not found.' }],
         }
       }
-      const summary = summariseBoardRow(row)
-      const data = (row.data ?? {}) as BoardData
-      const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
+      const { objects } = board
+      const summary = summariseBoard(board.row, objects)
 
       // Map current groups by their stable key so we can join against
       // the persisted display table.
@@ -312,7 +309,6 @@ export function buildMcpServer(userId: string): McpServer {
           id,
           createdBy: userId,
           name: name ?? 'Untitled board',
-          data: {},
         })
         .returning()
       if (!row) {
@@ -363,7 +359,7 @@ export function buildMcpServer(userId: string): McpServer {
       }
       const result = dispatch.result
 
-      const appended = await appendObject(boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const zIndex = objects.length
         switch (result.kind) {
           case 'web': {
@@ -519,7 +515,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, color }) => {
-      const appended = await appendObject(boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const spot = nextSpot(objects, STICKY_SIZE)
         const data: StickyData = { text, color: color ?? STICKY_DEFAULT_COLOR }
         return {
@@ -562,7 +558,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, fontSize }) => {
-      const appended = await appendObject(boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const size = sizeForText(text)
         const spot = nextSpot(objects, size)
         const data: TextData = {
@@ -610,7 +606,7 @@ export function buildMcpServer(userId: string): McpServer {
       }
       try {
         const data = await saveImageFromUrl(url, userId)
-        const appended = await appendObject(boardId, (objects) => {
+        const appended = await appendObject(boardId, userId, (objects) => {
           const spot = nextSpot(objects, IMAGE_DEFAULT_SIZE)
           return {
             id: nanoid(),
@@ -659,10 +655,9 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, agents }) => {
-      const row = await loadBoard(boardId)
-      if (!row) return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
-      const data = (row.data ?? {}) as BoardData
-      const objects = Array.isArray(data.objects) ? data.objects : []
+      const board = await loadBoard(boardId)
+      if (!board) return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
+      const { objects } = board
       const idGroups = proximityGroups(objects)
       const byId = new Map(objects.map((o) => [o.id, o]))
       const groups = idGroups.map((ids) => ({

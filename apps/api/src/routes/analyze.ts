@@ -11,19 +11,15 @@ import { Hono } from 'hono'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
 import { getAgent } from '../lib/agents'
+import { analyzeGroup, synthesizeGroup } from '../lib/analyze'
+import { DEFAULT_DEPTH, modelTag, synthesisModelTag, type AnalysisDepth } from '../lib/modelTags'
 import {
-  analyzeGroup,
   assembleVideoEditorBreakdown,
-  DEFAULT_DEPTH,
   mapWithConcurrency,
   MAX_VIDEO_CLIPS,
-  modelTag,
-  synthesisModelTag,
-  synthesizeGroup,
   VIDEO_CLIP_CONCURRENCY,
   videoClipCacheTag,
-  type AnalysisDepth,
-} from '../lib/analyze'
+} from '../lib/videoClips'
 import { analyzeVideoForEditor } from '../lib/gemini'
 import { analysisHash } from '../lib/analysisHash'
 import { loadBoardObjects } from '../lib/boardObjects'

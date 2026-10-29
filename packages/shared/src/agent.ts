@@ -87,6 +87,9 @@ export const postAgentMessageRequestSchema = z.object({
   text: z.string().trim().min(1).max(AGENT_MESSAGE_MAX_CHARS),
   // Ids selected on the sender's canvas — what "these" refers to.
   selection: z.array(z.string().min(1)).max(200).optional(),
+  // A Linear issue (identifier like LIN-123, or id) to attach as the brief.
+  // The server fetches it with the sender's Linear connection.
+  linearIssue: z.string().trim().min(1).max(64).optional(),
 })
 export type PostAgentMessageRequest = z.infer<typeof postAgentMessageRequestSchema>
 

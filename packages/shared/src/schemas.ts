@@ -512,6 +512,7 @@ export const boardSummarySchema = z.object({
   name: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  clientId: z.string().nullable(),
   preview: boardPreviewSchema.optional(),
 })
 export type BoardSummary = z.infer<typeof boardSummarySchema>
@@ -536,6 +537,7 @@ export const fullBoardSchema = z.object({
   name: z.string(),
   objects: z.array(storedCanvasObjectSchema),
   versions: z.record(z.string(), z.number().int()),
+  clientId: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
@@ -548,6 +550,7 @@ export type BoardResponse = z.infer<typeof boardResponseSchema>
 
 export const createBoardRequestSchema = z.object({
   name: z.string().min(1).max(120).optional(),
+  clientId: z.string().min(1).optional(),
 })
 export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 
@@ -559,7 +562,7 @@ export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 // client only sees what's needed to label the connection in the picker.
 export const connectionSummarySchema = z.object({
   id: z.string(),
-  provider: z.enum(['drive', 'spotify']),
+  provider: z.enum(['drive', 'spotify', 'linear']),
   accountEmail: z.string(),
   workspaceName: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -657,9 +660,13 @@ export const importVideoResponseSchema = z.object({
   data: videoClipDataSchema,
 })
 
-export const updateBoardRequestSchema = z.object({
-  name: z.string().min(1).max(120),
-})
+export const updateBoardRequestSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    // Null detaches the board from its client.
+    clientId: z.string().min(1).nullable(),
+  })
+  .partial()
 export type UpdateBoardRequest = z.infer<typeof updateBoardRequestSchema>
 
 // Object-level save. `baseVersion` is the version the client last saw

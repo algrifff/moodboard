@@ -438,6 +438,9 @@ const SYNTHESIS_JSON_SCHEMA = {
 export type Agent = {
   id: AgentId
   label: string
+  // One line on what the specialist reads for — the orchestrator's
+  // analyze_group description lists these so it can pick agents.
+  blurb: string
   systemPrompt: string
   jsonSchema: typeof ART_DIRECTOR_JSON_SCHEMA | typeof SECTIONED_JSON_SCHEMA
   outputSchema: z.ZodSchema<unknown>
@@ -450,6 +453,8 @@ const AGENTS: Record<AgentId, Agent> = {
   'art-director': {
     id: 'art-director',
     label: 'Art Director',
+    blurb:
+      'Visual direction: palette, typography, logo marks, references, tensions, hooks. Include it whenever a brief should carry a palette.',
     maxTokens: 2048,
     jsonSchema: ART_DIRECTOR_JSON_SCHEMA,
     outputSchema: aiAnalysisSchema,
@@ -496,6 +501,7 @@ If a section legitimately doesn't apply (no images → empty typographicVoice; n
   'business-analyst': {
     id: 'business-analyst',
     label: 'Business Analyst',
+    blurb: 'Business model, niche and category positioning.',
     maxTokens: 1400,
     jsonSchema: SECTIONED_JSON_SCHEMA,
     outputSchema: sectionedParagraphsSchema,
@@ -521,6 +527,7 @@ Audience: a founder or strategist. Internal-deck register — confident, defensi
   'audience-profiler': {
     id: 'audience-profiler',
     label: 'Audience Profiler',
+    blurb: 'Who the work is for: audience segments and what moves them.',
     maxTokens: 1600,
     jsonSchema: SECTIONED_JSON_SCHEMA,
     outputSchema: sectionedParagraphsSchema,
@@ -543,6 +550,7 @@ Banned words. ${BANNED_PHRASES}`,
   'channel-strategist': {
     id: 'channel-strategist',
     label: 'Channel Strategist',
+    blurb: 'Where it should live: channels and formats.',
     maxTokens: 1400,
     jsonSchema: SECTIONED_JSON_SCHEMA,
     outputSchema: sectionedParagraphsSchema,
@@ -560,6 +568,7 @@ Banned words. ${BANNED_PHRASES}`,
   copywriter: {
     id: 'copywriter',
     label: 'Copywriter',
+    blurb: 'Voice, taglines, headlines and body copy.',
     maxTokens: 1600,
     jsonSchema: SECTIONED_JSON_SCHEMA,
     outputSchema: sectionedParagraphsSchema,
@@ -589,6 +598,8 @@ Banned words. ${BANNED_PHRASES}`,
   'video-editor': {
     id: 'video-editor',
     label: 'Senior Video Editor',
+    blurb:
+      "Hooks, transitions, pacing and sound in the group's video clips (only useful when the group has video clips).",
     maxTokens: 0,
     jsonSchema: SECTIONED_JSON_SCHEMA,
     outputSchema: videoEditorBreakdownSchema,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FIGMA_ROW_CLEARANCE,
+  FIGMA_ROW_GAP,
   figmaCardSize,
+  layoutFigmaRow,
   figmaNodeUrl,
   figmaRenderScale,
   isFigmaNodeId,
@@ -119,5 +122,49 @@ describe('sizes', () => {
 
   it('never makes a sliver unclickable', () => {
     expect(figmaCardSize(2000, 20).height).toBeGreaterThanOrEqual(120 + 34)
+  })
+})
+
+describe('layoutFigmaRow', () => {
+  const card = { width: 400, height: 300 }
+
+  it('centres one card on the point', () => {
+    expect(layoutFigmaRow([card], { x: 1000, y: 500 }, [])).toEqual({
+      positions: [{ x: 800, y: 350 }],
+      moved: false,
+    })
+  })
+
+  it('lays several side by side past the grouping distance, centred as a row', () => {
+    const { positions } = layoutFigmaRow([card, card], { x: 0, y: 0 }, [])
+    expect(positions[1]!.x - (positions[0]!.x + card.width)).toBe(FIGMA_ROW_GAP)
+    expect(FIGMA_ROW_GAP).toBeGreaterThan(48)
+    expect(positions[0]!.x + (positions[1]!.x + card.width)).toBe(0)
+  })
+
+  it('aligns cards of different heights on their middles', () => {
+    const { positions } = layoutFigmaRow([card, { width: 200, height: 600 }], { x: 0, y: 0 }, [])
+    expect(positions.map((p) => p.y)).toEqual([-150, -300])
+  })
+
+  it('leaves a clear spot where it is, even right next to other things', () => {
+    const near = { left: 200 + FIGMA_ROW_CLEARANCE + 1, top: 0, right: 900, bottom: 100 }
+    expect(layoutFigmaRow([card], { x: 0, y: 0 }, [near]).moved).toBe(false)
+  })
+
+  it('moves a row that would crowd the board to the right of everything', () => {
+    const existing = [
+      { left: -200, top: -150, right: 200, bottom: 150 },
+      { left: 1000, top: -400, right: 1400, bottom: -100 },
+    ]
+    const { positions, moved } = layoutFigmaRow([card, card], { x: 0, y: 0 }, existing)
+    expect(moved).toBe(true)
+    expect(positions[0]!.x).toBe(1400 + FIGMA_ROW_CLEARANCE * 1.5)
+    expect(positions[0]!.y).toBe(-150)
+    expect(positions[1]!.x).toBe(positions[0]!.x + card.width + FIGMA_ROW_GAP)
+  })
+
+  it('handles nothing to place', () => {
+    expect(layoutFigmaRow([], { x: 0, y: 0 }, [])).toEqual({ positions: [], moved: false })
   })
 })

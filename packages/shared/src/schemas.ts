@@ -795,9 +795,13 @@ export const sharedBoardSnapshotSchema = z.object({
   version: z.literal(1),
   boardName: z.string().min(1).max(200),
   capturedAt: z.string(),
-  // Reuse the existing canvas-object schema so the snapshot stays
-  // structurally identical to what the editor stores.
-  objects: z.array(canvasObjectSchema),
+  // The same loose per-object shape the board stores (type-checked, data
+  // passed through whole): parsing `data` against the per-type union would
+  // keep only the first matching schema's fields — a font or Figma card would
+  // arrive as a bare { url }.
+  objects: z
+    .array(storedCanvasObjectSchema)
+    .transform((objects) => objects as unknown as CanvasObject[]),
   groups: z.array(sharedGroupSnapshotSchema),
 })
 export type SharedBoardSnapshotInput = z.infer<typeof sharedBoardSnapshotSchema>

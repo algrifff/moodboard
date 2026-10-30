@@ -117,3 +117,59 @@ describe('createShareRequestSchema', () => {
     expect(parsed.success).toBe(true)
   })
 })
+
+describe('sharedBoardSnapshotSchema keeps every card whole', () => {
+  const base = {
+    position: { x: 0, y: 0 },
+    size: { width: 400, height: 300 },
+    rotation: 0,
+    zIndex: 0,
+  }
+  const snapshot = (objects: unknown[]) =>
+    sharedBoardSnapshotSchema.parse({
+      version: 1,
+      boardName: 'Board',
+      capturedAt: '2026-10-30T00:00:00.000Z',
+      objects,
+      groups: [],
+    })
+
+  it('does not reduce a card with a url to a bare image', () => {
+    const figma = {
+      url: '/api/files/hero.png',
+      fileKey: 'AbCdEfGhIjKlMnOpQrStUv',
+      nodeId: '12:34',
+      name: 'Hero',
+      fileName: 'Acme Brand',
+      figmaUrl: 'https://www.figma.com/design/AbCdEfGhIjKlMnOpQrStUv/Acme?node-id=12-34',
+      width: 1440,
+      height: 900,
+      lastModified: '2026-03-04T10:00:00Z',
+      fetchedAt: '2026-03-04T10:05:00Z',
+      structure: 'Frame “Hero”',
+    }
+    const font = { url: '/api/files/aktiv.woff2', family: 'Aktiv Grotesk' }
+    const web = { url: 'https://acme.io', host: 'acme.io', title: 'Acme', description: '' }
+    const parsed = snapshot([
+      { id: 'f', type: 'figma-frame', data: figma, ...base },
+      { id: 't', type: 'font', data: font, ...base },
+      { id: 'w', type: 'web-page', data: web, ...base },
+    ])
+    expect(parsed.objects.map((o) => o.data)).toEqual([figma, font, web])
+  })
+
+  it('still rejects an object with no type or position', () => {
+    expect(() => snapshot([{ id: 'x', data: {} }])).toThrow()
+    expect(() => snapshot([{ id: 'x', type: 'nope', data: {}, ...base }])).toThrow()
+  })
+
+  it('walks a Figma card’s render for the share’s file allowlist', () => {
+    expect(
+      collectAssetFilenames({
+        objects: [
+          { type: 'figma-frame', data: { url: '/api/files/hero.png', figmaUrl: 'https://x' } },
+        ],
+      }),
+    ).toEqual(['hero.png'])
+  })
+})

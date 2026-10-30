@@ -1,5 +1,12 @@
-import { parseFigmaUrl, screenToWorld, type FigmaFrameData } from '@moodboard/shared'
+import {
+  layoutFigmaRow,
+  objectRect,
+  parseFigmaUrl,
+  screenToWorld,
+  type FigmaFrameData,
+} from '@moodboard/shared'
 import { showToast } from '@/components/canvas/Toast'
+import { focusObjects } from '@/lib/canvasCamera'
 import { importFigmaFrames } from '@/lib/figmaApi'
 import { ApiError } from '@/lib/http'
 import { createFigmaFrame } from '@/lib/objectFactory'
@@ -13,10 +20,6 @@ import { useSourcePickerStore } from '@/store/sourcePicker'
 
 type Point = { x: number; y: number }
 
-// Imported side by side with a gap well past the 48px grouping proximity, so
-// a handful of frames from one file don't fuse into a group on their own.
-const ROW_GAP = 96
-
 function viewportCenter(): Point {
   const { scale, offset, viewportSize } = useCanvasStore.getState()
   return screenToWorld(
@@ -29,13 +32,16 @@ export function placeFigmaFrames(frames: FigmaFrameData[], center: Point = viewp
   const state = useCanvasStore.getState()
   state.commitBeforeAction()
   const cards = frames.map((data, i) => createFigmaFrame(center, state.objects.length + i, data))
-  const total = cards.reduce((w, c) => w + c.size.width, 0) + ROW_GAP * (cards.length - 1)
-  let x = center.x - total / 2
-  for (const card of cards) {
-    card.position = { x, y: center.y - card.size.height / 2 }
-    x += card.size.width + ROW_GAP
+  const { positions, moved } = layoutFigmaRow(
+    cards.map((c) => c.size),
+    center,
+    state.objects.map(objectRect),
+  )
+  cards.forEach((card, i) => {
+    card.position = positions[i]!
     state.addObject(card)
-  }
+  })
+  if (moved) focusObjects(cards.map((c) => c.id))
 }
 
 export async function importFigmaToBoard(

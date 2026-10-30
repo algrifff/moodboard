@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
 import { refreshFigmaFrame } from '@/lib/figmaApi'
+import { useReadOnly } from '@/lib/readOnlyContext'
 import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useAgentSidebarStore } from '@/store/agentSidebar'
 import { useCanvasStore } from '@/store/canvas'
@@ -31,6 +32,7 @@ export function FigmaNode({
   selected: boolean
   boardId: string
 }) {
+  const live = !useReadOnly()
   const data = object.data as FigmaFrameData
   const updateObject = useCanvasStore((s) => s.updateObject)
   const startFromFigmaFrame = useAgentSidebarStore((s) => s.startFromFigmaFrame)
@@ -132,22 +134,26 @@ export function FigmaNode({
           >
             {data.name}
           </span>
-          <CardButton label="Refresh from Figma" onPointerDown={stop} onClick={onRefresh}>
-            <ArrowClockwise
-              size={12}
-              style={{ animation: refreshing ? 'mb-spin 800ms linear infinite' : 'none' }}
-            />
-          </CardButton>
-          <CardButton
-            label="Use as reference"
-            onPointerDown={stop}
-            onClick={(e) => {
-              e.stopPropagation()
-              startFromFigmaFrame(object)
-            }}
-          >
-            <ChatCircleText size={12} />
-          </CardButton>
+          {live && (
+            <>
+              <CardButton label="Refresh from Figma" onPointerDown={stop} onClick={onRefresh}>
+                <ArrowClockwise
+                  size={12}
+                  style={{ animation: refreshing ? 'mb-spin 800ms linear infinite' : 'none' }}
+                />
+              </CardButton>
+              <CardButton
+                label="Use as reference"
+                onPointerDown={stop}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  startFromFigmaFrame(object)
+                }}
+              >
+                <ChatCircleText size={12} />
+              </CardButton>
+            </>
+          )}
           <a
             href={data.figmaUrl}
             target="_blank"

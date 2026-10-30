@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { aabbIntersect, type Rect } from './aabb'
 import { figmaFrameDataSchema } from './schemas'
 
 // Phase 26 — Figma import. Read-only: frames come in as image cards that
@@ -137,6 +138,50 @@ export function figmaCardSize(width: number, height: number): { width: number; h
   const w = Math.max(FIGMA_CARD_MIN_EDGE, Math.round(width * fit))
   const h = Math.max(FIGMA_CARD_MIN_EDGE, Math.round(height * fit))
   return { width: w, height: h + FIGMA_CARD_FOOTER_PX }
+}
+
+// Frames imported together sit side by side, with a gap well past the 48px
+// grouping proximity so a handful from one file don't fuse into a group on
+// their own; a row keeps CLEARANCE from anything already on the board.
+export const FIGMA_ROW_GAP = 96
+export const FIGMA_ROW_CLEARANCE = 80
+
+/**
+ * Where to put a row of new cards: centred on `center`, or — when that spot is
+ * taken — to the right of everything on the board. Returns each card's
+ * top-left corner.
+ */
+export function layoutFigmaRow(
+  sizes: { width: number; height: number }[],
+  center: { x: number; y: number },
+  existing: Rect[],
+): { positions: { x: number; y: number }[]; moved: boolean } {
+  if (sizes.length === 0) return { positions: [], moved: false }
+  const total = sizes.reduce((w, s) => w + s.width, 0) + FIGMA_ROW_GAP * (sizes.length - 1)
+  const height = Math.max(...sizes.map((s) => s.height))
+  const row: Rect = {
+    left: center.x - total / 2,
+    top: center.y - height / 2,
+    right: center.x + total / 2,
+    bottom: center.y + height / 2,
+  }
+  const padded: Rect = {
+    left: row.left - FIGMA_ROW_CLEARANCE,
+    top: row.top - FIGMA_ROW_CLEARANCE,
+    right: row.right + FIGMA_ROW_CLEARANCE,
+    bottom: row.bottom + FIGMA_ROW_CLEARANCE,
+  }
+  const moved = existing.some((r) => aabbIntersect(padded, r))
+  const shift = moved
+    ? Math.max(...existing.map((r) => r.right)) + FIGMA_ROW_CLEARANCE * 1.5 - row.left
+    : 0
+  let x = row.left + shift
+  const positions = sizes.map((s) => {
+    const at = { x, y: center.y - s.height / 2 }
+    x += s.width + FIGMA_ROW_GAP
+    return at
+  })
+  return { positions, moved }
 }
 
 // ---------------------------------------------------------------------------

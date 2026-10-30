@@ -34,8 +34,8 @@ import { showToast } from './Toast'
 //   │ └────────────────────────────────────────┘│
 //   │                                            │
 //   │  Asset library     (click or drag to add)  │
-//   │  Outputs           (click to add)          │
 //   │  Figma             (paste a link → frames) │
+//   │  Outputs           (click to add)          │
 //   │  Linear            (pick an issue → thread)│
 //   │                                            │
 //   │  Recently added                            │
@@ -252,8 +252,8 @@ function DrawerContent({
           onConnectFigma={() => void connectFigma(boardId)}
         />
         <LibrarySection boardId={boardId} query={query} />
-        <OutputsSection boardId={boardId} query={query} />
         <FigmaSection boardId={boardId} query={query} />
+        <OutputsSection boardId={boardId} query={query} />
         <LinearSection boardId={boardId} query={query} />
         {!query && pickerConnections.length > 0 && (
           <RecentsSection

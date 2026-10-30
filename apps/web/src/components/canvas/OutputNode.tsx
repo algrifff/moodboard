@@ -9,6 +9,7 @@ import { ArrowSquareOut, Layout } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { OutputFrame } from '@/components/outputs/OutputFrame'
 import { useBoxInteraction } from '@/hooks/useBoxInteraction'
+import { useReadOnly } from '@/lib/readOnlyContext'
 import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { SpawnRing } from './SpawnRing'
 
@@ -19,21 +20,20 @@ const FOOTER_PX = 34
 // "Open" or a double-click goes to the output. The card is a drag handle
 // like any other node; the preview never takes pointer events.
 //
-// Without `live` (the public board-share viewer, which has no session to
-// render with) the card shows its name and format only.
+// In the public board-share viewer (read-only, no session to render with)
+// the card shows its name and format only.
 export function OutputNode({
   object,
   scale,
   panMode,
   selected,
-  live,
 }: {
   object: CanvasObject
   scale: number
   panMode: boolean
   selected: boolean
-  live: boolean
 }) {
+  const live = !useReadOnly()
   const data = object.data as OutputCardData
   const HALO = 14
   const interaction = useBoxInteraction(object.id, scale, {

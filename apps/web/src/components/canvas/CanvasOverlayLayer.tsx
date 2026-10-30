@@ -135,7 +135,6 @@ export function CanvasOverlayLayer({
                 scale={scale}
                 panMode={panMode}
                 selected={selectedSet.has(o.id)}
-                live={boardId !== undefined}
               />
             )
           }

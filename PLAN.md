@@ -675,15 +675,34 @@ Already on Postgres; this makes it production-grade and ready for structured des
 
 ### Phase 23 — Templates + Outputs (HTML)
 
-- [ ] Template + output tables; HTML/CSS stored as versioned text
-- [ ] Output view: sandboxed iframe preview, slot list in the sidebar, inline text edits write back to the slot
-- [ ] Starter templates: YouTube thumbnail, social post, 16:9 deck (scroll-snap sections, keyboard nav), landing page, one-pager
-- [ ] Apply kit → template swaps the `--kit-*` stylesheet; switching kits is instant
-- [ ] Save any output as a new template (agent proposes slot markers)
-- [ ] Share link for outputs (reuse Phase 18 share tokens); "Download HTML" as a single self-contained file (assets inlined)
-- [ ] Outputs can be dropped onto a board as a live card
+- [x] Template + output tables; HTML/CSS stored as versioned text
+- [x] Output view: sandboxed iframe preview, slot list in the sidebar, inline text edits write back to the slot
+- [x] Starter templates: YouTube thumbnail, social post, 16:9 deck (scroll-snap sections, keyboard nav), landing page, one-pager
+- [x] Apply kit → template swaps the `--kit-*` stylesheet; switching kits is instant
+- [x] Save any output as a new template (agent proposes slot markers — deterministic for now: existing markers, renamed/labelled by hand; the proposer hook is in place)
+- [x] Share link for outputs (reuse Phase 18 share tokens); "Download HTML" as a single self-contained file (assets inlined)
+- [x] Outputs can be dropped onto a board as a live card
 
 **Deliverable:** Hand-build a deck from a template + kit, share the link.
+
+**How it fits together:**
+
+- Tables: `template` + `template_version`, `output` + `output_version`, `output_share` (migration `0015`). Versions are immutable; an output version holds the whole document (html with slot markers, css, slot values, pinned kit id + version, the template's `js`), so any version renders exactly as it did.
+- Shared: `slots.ts` (the `data-slot` contract — find / fill / rename / label / remove markers, `/api/files` refs; pure, no DOM) and `outputs.ts` (formats, viewports, wire shapes, `HOUSE_KIT_TOKENS` for outputs without a kit, render paths, the editor's postMessage types). New canvas object type `output` (`OutputCardData`).
+- Composition: `lib/compose.ts` (pure) → one standalone document with a CSP `<meta>`; `lib/inlineAssets.ts` reads referenced files into `data:` URIs (12MB per file cap, small in-memory cache — files are immutable). `lib/outputs.ts` / `lib/templates.ts` hold the CRUD, versions, shares and board placement; `lib/starterTemplates.ts` syncs `src/templates/*` on boot.
+- Routes: `/api/templates` (list, detail, `/:id/render?kit=` previews, save-from-output, rename, delete non-starters), `/api/outputs` (CRUD, `/:id/versions`, `/:id/render?version&edit&download`, `/:id/proposed-slots`, `/:id/place`, `/:id/share`), public `/api/output-shares/:token` + `/render`.
+- Tools (`CANVAS_TOOLS`, bodies in `lib/outputTools.ts`): `list_templates`, `create_output`, `get_output` (slots, versions, composed size, missing assets; `includeSource` for the HTML/CSS), `update_output_slots` (versioned, optional `baseVersion`), `place_output_on_board`.
+- Web: `/outputs` (client filter, outputs + templates tabs, "New output" with live template previews in the chosen kit), `/outputs/:id` (left panel: client, kit, slot fields, versions; centre: fit-to-frame or device-width preview with click-to-edit text), `/share/output/:token`, `OutputNode` board cards, an Outputs section in the sources drawer, sidebar cards for the output tools.
+
+**Deferred / notes:**
+
+- No live model run: the output tools were driven through the real sidebar routes with a scripted fake model. Slot-marker proposals for save-as-template are deterministic (existing markers); `SlotProposer` in `lib/templates.ts` is where Phase 24's agent plugs in.
+- External `http(s)` kit fonts/logos aren't inlined (only library files are) — the CSP blocks them, so the template falls back. Import them into the library first.
+- No HTML/CSS code editor in the UI; whole-document edits go through the API (`html`/`css` on a new version) — the Phase 24 agents' path.
+- Board cards render the latest version and refresh on reload, not live as teammates edit; the public board-share viewer shows output cards as name + format only (it has no session to render with).
+- Template versions can only be created by the starter sync; saving an output as a template always makes a new template.
+- Kit switches re-render through the server (a version is saved per switch); the preview double-buffers so there's no blank flash, but it's a round trip, not a client-side stylesheet swap.
+- Template script (`js`) runs in previews with `allow-scripts` inside the opaque-origin sandbox; agent-written HTML can't add scripts (CSP hashes), but a future "agent writes template JS" feature would need its own review.
 
 ### Phase 24 — Output agents (thumbnail first)
 

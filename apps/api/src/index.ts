@@ -10,6 +10,7 @@ import { db } from './db'
 import { runMigrations } from './db/migrate'
 import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
+import { syncStarterTemplates } from './lib/starterTemplates'
 import { ensureDataDirs } from './lib/storage'
 import { agentRoutes, defaultModelClient } from './routes/agent'
 import { analyze } from './routes/analyze'
@@ -24,6 +25,7 @@ import { kits } from './routes/kits'
 import { library } from './routes/library'
 import { linear } from './routes/linear'
 import { mcp } from './routes/mcp'
+import { outputShares, outputs, templates } from './routes/outputs'
 import { boardShare, shares } from './routes/shares'
 import { voice } from './routes/voice'
 
@@ -137,6 +139,9 @@ api.route('/connections', connections)
 api.route('/clients', clients)
 api.route('/kits', kits)
 api.route('/library', library)
+api.route('/templates', templates)
+api.route('/outputs', outputs)
+api.route('/output-shares', outputShares)
 api.route('/linear', linear)
 api.route('/external', external)
 api.route('/voice', voice)
@@ -149,6 +154,7 @@ const port = Number(process.env.PORT ?? 3001)
 
 await runMigrations(process.env.DATABASE_URL!)
 await ensureDataDirs()
+await syncStarterTemplates()
 startMaintenance()
 
 serve({ fetch: app.fetch, port }, (info) => {

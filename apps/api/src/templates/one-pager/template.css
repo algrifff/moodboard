@@ -1,0 +1,201 @@
+/* A4-sized one-pager (794×1123 CSS px = 210×297mm at 96dpi). Prints on one
+   page if someone prints it; there is no PDF export. Reads only --kit-*
+   variables; html[data-kit-logo] is set by the composer. */
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body {
+  width: 794px;
+  height: 1123px;
+  overflow: hidden;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+body {
+  background: var(--kit-color-background);
+  color: var(--kit-color-text);
+  font-family: var(--kit-font-body);
+  font-weight: var(--kit-font-body-weight);
+  font-size: 13.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  width: 794px;
+  height: 1123px;
+  padding: 56px 60px 48px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 18px;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--kit-color-text) 14%, transparent);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  height: 30px;
+}
+
+.logo {
+  display: block;
+  width: 130px;
+  height: 30px;
+  background: var(--kit-logo) left center / contain no-repeat;
+}
+
+.wordmark {
+  font-family: var(--kit-font-display);
+  font-weight: var(--kit-font-display-weight);
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+[data-kit-logo='none'] .logo,
+[data-kit-logo='present'] .wordmark {
+  display: none;
+}
+
+.doc-meta,
+.eyebrow,
+.contact {
+  font-family: var(--kit-font-mono);
+  font-weight: var(--kit-font-mono-weight);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.doc-meta {
+  opacity: 0.65;
+}
+
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.eyebrow {
+  color: color-mix(in srgb, var(--kit-color-accent) 75%, var(--kit-color-text));
+}
+
+.title,
+.columns h2,
+.value {
+  font-family: var(--kit-font-display);
+  font-weight: var(--kit-font-display-weight);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.title {
+  font-size: 44px;
+  line-height: 1.02;
+}
+
+.lede {
+  max-width: 600px;
+  font-size: 16.5px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.media {
+  position: relative;
+  flex: 1;
+  min-height: 200px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--kit-color-primary);
+}
+
+.media-art {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 82% 30%, var(--kit-color-accent) 0 30%, transparent 30.4%),
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--kit-color-on-primary) 7%, transparent) 0 1.5px,
+      transparent 1.5px 18px
+    );
+}
+
+.media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+}
+
+.columns h2 {
+  margin-bottom: 8px;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.columns p {
+  opacity: 0.85;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.figure {
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: var(--kit-color-surface);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kit-color-text) 10%, transparent);
+}
+
+.value {
+  color: var(--kit-color-primary);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.caption {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: var(--kit-color-accent);
+  color: var(--kit-color-on-accent);
+  font-weight: 600;
+}

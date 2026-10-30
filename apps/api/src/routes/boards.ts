@@ -25,7 +25,7 @@ const PREVIEW_OBJECT_CAP = 12
 // objects may have minor shape drift, and the dashboard preview shouldn't
 // fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'drive-file' | 'drive-folder'
+  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'drive-file' | 'drive-folder' | 'output'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
@@ -38,6 +38,7 @@ const STORED_TYPES = [
   'font',
   'drive-file',
   'drive-folder',
+  'output',
 ] as const
 function isStoredObject(o: unknown): o is StoredObject {
   if (!o || typeof o !== 'object') return false
@@ -94,6 +95,7 @@ function buildPreview(objs: unknown[]): BoardPreview {
       if (typeof d.family === 'string') base.family = d.family
       if (typeof d.url === 'string') base.url = d.url
     }
+    if (o.type === 'output' && d && typeof d.name === 'string') base.title = d.name
     if ((o.type === 'drive-file' || o.type === 'drive-folder') && d) {
       if (typeof d.name === 'string') base.title = d.name
       if (typeof d.mimeType === 'string') base.mimeType = d.mimeType

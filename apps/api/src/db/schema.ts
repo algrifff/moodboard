@@ -469,3 +469,128 @@ export const linearMapping = pgTable(
     clientIdx: index('linear_mapping_client_id_idx').on(t.clientId),
   }),
 )
+
+// Phase 23 — templates. Style-agnostic HTML + CSS with data-slot markers
+// (packages/shared/src/slots.ts) that reads only --kit-* variables. Edited
+// by appending immutable versions, like kits. `starterKey` marks the
+// templates that ship with the app (lib/starterTemplates.ts keeps them in
+// sync on boot); everything else is saved from an output.
+export const template = pgTable(
+  'template',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    format: text('format').notNull(),
+    viewport: jsonb('viewport').notNull(),
+    clientId: text('client_id').references(() => client.id, { onDelete: 'set null' }),
+    starterKey: text('starter_key'),
+    latestVersion: integer('latest_version').notNull().default(1),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    starterIdx: uniqueIndex('template_starter_key_idx').on(t.starterKey),
+    clientIdx: index('template_client_id_idx').on(t.clientId),
+  }),
+)
+
+// HTML/CSS are text, so they live here rather than on the volume. `js` is
+// only ever app-authored (starter templates, copied forward); no route
+// accepts it, because composition allows exactly these scripts to run.
+export const templateVersion = pgTable(
+  'template_version',
+  {
+    id: text('id').primaryKey(),
+    templateId: text('template_id')
+      .notNull()
+      .references(() => template.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    html: text('html').notNull(),
+    css: text('css').notNull(),
+    js: text('js').notNull().default(''),
+    slots: jsonb('slots').notNull(),
+    note: text('note').notNull().default(''),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    templateVersionIdx: uniqueIndex('template_version_template_version_idx').on(
+      t.templateId,
+      t.version,
+    ),
+  }),
+)
+
+// Phase 23 — outputs: a template instantiated for a client. Format and
+// viewport are copied from the template so an output stands alone once the
+// template changes or goes away.
+export const output = pgTable(
+  'output',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    format: text('format').notNull(),
+    viewport: jsonb('viewport').notNull(),
+    clientId: text('client_id').references(() => client.id, { onDelete: 'set null' }),
+    boardId: text('board_id').references(() => board.id, { onDelete: 'set null' }),
+    templateId: text('template_id').references(() => template.id, { onDelete: 'set null' }),
+    latestVersion: integer('latest_version').notNull().default(1),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    clientIdx: index('output_client_id_idx').on(t.clientId),
+    boardIdx: index('output_board_id_idx').on(t.boardId),
+    templateIdx: index('output_template_id_idx').on(t.templateId),
+    updatedAtIdx: index('output_updated_at_idx').on(t.updatedAt),
+  }),
+)
+
+// One immutable row per edit: the document as the user/agent left it (html
+// with slot markers + css), the slot values filled into it on render, and
+// the kit version it is skinned with. `js` is copied from the template
+// version and never written by a route.
+export const outputVersion = pgTable(
+  'output_version',
+  {
+    id: text('id').primaryKey(),
+    outputId: text('output_id')
+      .notNull()
+      .references(() => output.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    templateVersion: integer('template_version'),
+    kitId: text('kit_id').references(() => styleKit.id, { onDelete: 'set null' }),
+    kitVersion: integer('kit_version'),
+    slotValues: jsonb('slot_values').notNull(),
+    html: text('html').notNull(),
+    css: text('css').notNull(),
+    js: text('js').notNull().default(''),
+    note: text('note').notNull().default(''),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    outputVersionIdx: uniqueIndex('output_version_output_version_idx').on(t.outputId, t.version),
+    kitIdx: index('output_version_kit_id_idx').on(t.kitId),
+  }),
+)
+
+// Phase 23 — share link for an output, Phase 18's token mechanism: one per
+// output, pinned to a version so recipients see what was shared; "update"
+// moves the pin and keeps the token.
+export const outputShare = pgTable(
+  'output_share',
+  {
+    token: text('token').primaryKey(),
+    outputId: text('output_id')
+      .notNull()
+      .references(() => output.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({ outputIdx: uniqueIndex('output_share_output_idx').on(t.outputId) }),
+)

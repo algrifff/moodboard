@@ -1,0 +1,5 @@
+{
+  "name": "Landing page",
+  "format": "landing",
+  "viewport": { "kind": "responsive" }
+}

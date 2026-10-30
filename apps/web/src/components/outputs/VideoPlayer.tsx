@@ -55,13 +55,17 @@ export function VideoPlayer({
           className="h-full w-full object-contain"
         />
       </div>
-      <div className="mt-2 flex items-center gap-2 text-[12px] text-[var(--text-mute)]">
-        <span className="min-w-0 flex-1 truncate">
+      <div className="mt-2 flex items-start gap-2 text-[12px] text-[var(--text-mute)]">
+        <span className="min-w-0 flex-1 leading-snug">
           {info.width}×{info.height} · {info.fps} fps · {(info.durationMs / 1000).toFixed(1)}s ·{' '}
           {formatBytes(info.bytes)}
           {info.draft ? ' · draft' : ''}
         </span>
-        <a href={downloadHref} download className={`${ghostButton} !px-2 !py-1 !text-[12px]`}>
+        <a
+          href={downloadHref}
+          download
+          className={`${ghostButton} shrink-0 !px-2 !py-1 !text-[12px]`}
+        >
           <DownloadSimple size={13} />
           Download MP4
         </a>

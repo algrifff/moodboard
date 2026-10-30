@@ -116,7 +116,7 @@ export const VideoTransport = forwardRef<
         aria-label="Timeline"
         className="min-w-0 flex-1 accent-[var(--accent)]"
       />
-      <span className="w-[92px] shrink-0 text-right font-mono text-[12px] tabular-nums text-[var(--text-mute)]">
+      <span className="w-[120px] shrink-0 whitespace-nowrap text-right font-mono text-[12px] tabular-nums text-[var(--text-mute)]">
         {formatClock(time)} / {formatClock(video.durationMs)}
       </span>
     </div>

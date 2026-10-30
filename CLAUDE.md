@@ -79,6 +79,14 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - **Migrations:** edit `schema.ts`, `db:generate --name=…`, commit the SQL. The API applies them on start. Never `db:push` a shared database.
 - **Rate limits** are Postgres-backed (`lib/rateLimit.ts`) so they hold across instances.
 
+### Agent sidebar (Phase 21)
+
+- **One tool implementation, two transports.** Canvas tools live in `apps/api/src/lib/canvasTools.ts`; `mcpTools.ts` (MCP, takes `boardId`) and the sidebar orchestrator (bound to the open board) both expose `CANVAS_TOOLS`. Never fork a tool per transport.
+- **Analysis runs go through `lib/groupAnalysis.ts`** (cache → model → `recordGroupDisplay`) whether triggered by the routes, MCP or the orchestrator.
+- **Threads are team-visible**, persisted per turn in Anthropic content-block form (`agent_message.content`); server notices are `is_error` rows, never replayed to the model.
+- **Server-originated board writes** reach the open canvas as `{ object, version }` and must be folded into the autosave's synced state (`foldServerObjects`) before `applyRemote` — otherwise they read as local edits or conflicts.
+- **The orchestrator's model client is injected** (`agentRoutes(defaultModelClient())`); tests use a fake streaming client. Model is `DEEP_MODEL`.
+
 ### Design output = HTML (Phase 23+)
 
 Every design the agents produce is a self-contained HTML/CSS document — no PPTX, no PDF export, no image generation, no new rendering libraries. Video is the same HTML on a seekable CSS/WAAPI timeline, captured by Playwright + ffmpeg. See the roadmap in PLAN.md.

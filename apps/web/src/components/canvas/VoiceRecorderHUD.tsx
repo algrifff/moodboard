@@ -199,7 +199,7 @@ export function VoiceRecorderHUD() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-6 left-1/2 z-20"
+      className="pointer-events-none absolute bottom-6 left-1/2 z-20"
       style={{ transform: 'translateX(-50%)' }}
     >
       <motion.div

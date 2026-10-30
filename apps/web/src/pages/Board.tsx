@@ -1,7 +1,15 @@
-import { ArrowLeft, CornersOut, Minus, Plus, ShareNetwork } from '@phosphor-icons/react'
+import {
+  ArrowLeft,
+  CornersOut,
+  Minus,
+  Plus,
+  ShareNetwork,
+  SidebarSimple,
+} from '@phosphor-icons/react'
 import { cubicBezier } from 'framer-motion'
 import { useCallback, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { AgentSidebar } from '@/components/agent/AgentSidebar'
 import { BoardSync } from '@/components/BoardSync'
 import { MoodBoardCanvas } from '@/components/canvas/MoodBoardCanvas'
 import { ShareDialog } from '@/components/canvas/ShareDialog'
@@ -9,7 +17,6 @@ import { SourcePickerDrawer } from '@/components/canvas/SourcePickerDrawer'
 import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
-import { groupBoundingBox } from '@moodboard/shared'
 import { renameBoard } from '@/lib/boardsApi'
 import { importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import {
@@ -28,6 +35,8 @@ import {
 } from '@/lib/motion'
 import { openConnectionPopup } from '@/lib/oauthPopup'
 import { tweenTransform } from '@/lib/tweenTransform'
+import { frameObjects } from '@/lib/canvasCamera'
+import { useAgentSidebarStore } from '@/store/agentSidebar'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
 
@@ -38,28 +47,19 @@ export function BoardPage() {
   const [editingName, setEditingName] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const scale = useCanvasStore((s) => s.scale)
+  const sidebarOpen = useAgentSidebarStore((s) => s.open)
+  const setSidebarOpen = useAgentSidebarStore((s) => s.setOpen)
   const setTransform = useCanvasStore((s) => s.setTransform)
   const tweenCancelRef = useRef<(() => void) | null>(null)
 
   const animateToFitAll = useCallback(() => {
     const s = useCanvasStore.getState()
-    if (s.objects.length === 0) return
-    const bbox = groupBoundingBox(s.objects, 40)
-    const w = bbox.right - bbox.left
-    const h = bbox.bottom - bbox.top
-    const vw = s.viewportSize.width
-    const vh = s.viewportSize.height
-    if (w <= 0 || h <= 0 || vw <= 0 || vh <= 0) return
-    const nextScale = Math.max(0.1, Math.min(4, Math.min(vw / w, vh / h)))
-    const cx = (bbox.left + bbox.right) / 2
-    const cy = (bbox.top + bbox.bottom) / 2
+    const to = frameObjects(s.objects, s.viewportSize)
+    if (!to) return
     tweenCancelRef.current?.()
     tweenCancelRef.current = tweenTransform(
       { scale: s.scale, offset: s.offset },
-      {
-        scale: nextScale,
-        offset: { x: vw / 2 - cx * nextScale, y: vh / 2 - cy * nextScale },
-      },
+      to,
       FIT_ALL_DURATION_MS,
       cubicBezier(...SNAP_CURVE),
       (next) => setTransform({ scale: next.scale, offset: next.offset }),
@@ -217,115 +217,134 @@ export function BoardPage() {
   }
 
   return (
-    <div className="fixed inset-0 bg-background text-foreground">
-      <BoardSync boardId={boardId} onTitle={onTitle}>
-        <MoodBoardCanvas boardId={boardId} />
-        <Toolbar />
-        <ToastHost />
-        <SourcePickerDrawer onConnectDrive={onConnectDrive} onConnectSpotify={onConnectSpotify} />
+    <div className="fixed inset-0 flex bg-background text-foreground">
+      <AgentSidebar boardId={boardId} />
+      {/* The canvas region: everything below positions against it, so the
+          viewport, toolbar and pills reflow around the docked sidebar. */}
+      <div className="relative min-w-0 flex-1">
+        <BoardSync boardId={boardId} onTitle={onTitle}>
+          <MoodBoardCanvas boardId={boardId} />
+          <Toolbar />
+          <ToastHost />
+          <SourcePickerDrawer onConnectDrive={onConnectDrive} onConnectSpotify={onConnectSpotify} />
 
-        <div
-          className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"
-          style={{ borderRadius: 'var(--radius-lg)' }}
-        >
-          <Link
-            to="/"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Back to dashboard"
-            title="Back to dashboard"
+          <div
+            className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"
+            style={{ borderRadius: 'var(--radius-lg)' }}
           >
-            <ArrowLeft size={14} weight="regular" />
-          </Link>
-          {editingName ? (
-            <input
-              autoFocus
-              defaultValue={name}
-              className="bg-transparent outline-none border-b border-[var(--border)] focus:border-[var(--accent)] max-w-[240px] text-foreground transition-colors"
-              onBlur={(e) => commitName(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') e.currentTarget.blur()
-                if (e.key === 'Escape') {
-                  setEditingName(false)
-                }
-              }}
-            />
-          ) : (
+            {!sidebarOpen && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Open agent sidebar"
+                  title="Open agent sidebar"
+                >
+                  <SidebarSimple size={15} weight="regular" />
+                </button>
+                <div className="mx-0.5 h-4 w-px bg-[var(--border-soft)]" />
+              </>
+            )}
+            <Link
+              to="/"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Back to dashboard"
+              title="Back to dashboard"
+            >
+              <ArrowLeft size={14} weight="regular" />
+            </Link>
+            {editingName ? (
+              <input
+                autoFocus
+                defaultValue={name}
+                className="bg-transparent outline-none border-b border-[var(--border)] focus:border-[var(--accent)] max-w-[240px] text-foreground transition-colors"
+                onBlur={(e) => commitName(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur()
+                  if (e.key === 'Escape') {
+                    setEditingName(false)
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingName(true)}
+                className="font-medium text-foreground hover:text-muted-foreground truncate max-w-[240px] transition-colors"
+                title="Rename board"
+              >
+                {name}
+              </button>
+            )}
+            <div className="mx-1 h-4 w-px bg-[var(--border-soft)]" />
             <button
               type="button"
-              onClick={() => setEditingName(true)}
-              className="font-medium text-foreground hover:text-muted-foreground truncate max-w-[240px] transition-colors"
-              title="Rename board"
+              onClick={() => setShareOpen(true)}
+              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+              title="Share this board"
+              aria-label="Share this board"
             >
-              {name}
+              <ShareNetwork size={13} weight="regular" />
+              Share
             </button>
-          )}
-          <div className="mx-1 h-4 w-px bg-[var(--border-soft)]" />
-          <button
-            type="button"
-            onClick={() => setShareOpen(true)}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-            title="Share this board"
-            aria-label="Share this board"
-          >
-            <ShareNetwork size={13} weight="regular" />
-            Share
-          </button>
-        </div>
+          </div>
 
-        <ShareDialog
-          open={shareOpen}
-          onClose={() => setShareOpen(false)}
-          boardId={boardId}
-          boardName={name}
-        />
+          <ShareDialog
+            open={shareOpen}
+            onClose={() => setShareOpen(false)}
+            boardId={boardId}
+            boardName={name}
+          />
 
-        <div
-          className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card/95 backdrop-blur-md px-1.5 py-1 text-xs font-mono shadow-[var(--shadow-toast)]"
-          style={{ borderRadius: 'var(--radius-lg)' }}
-        >
-          <button
-            type="button"
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
-            style={{ borderRadius: 'var(--radius)' }}
-            onClick={() => setTransform({ scale: Math.max(0.1, scale / 1.2) })}
-            aria-label="Zoom out"
-            title="Zoom out"
+          <div
+            className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card/95 backdrop-blur-md px-1.5 py-1 text-xs font-mono shadow-[var(--shadow-toast)]"
+            style={{ borderRadius: 'var(--radius-lg)' }}
           >
-            <Minus size={14} weight="regular" />
-          </button>
-          <button
-            type="button"
-            className="px-2 py-1 tabular-nums text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
-            style={{ borderRadius: 'var(--radius)' }}
-            onClick={animateToReset}
-            aria-label="Reset zoom"
-            title="Reset to 100%"
-          >
-            {Math.round(scale * 100)}%
-          </button>
-          <button
-            type="button"
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
-            style={{ borderRadius: 'var(--radius)' }}
-            onClick={() => setTransform({ scale: Math.min(4, scale * 1.2) })}
-            aria-label="Zoom in"
-            title="Zoom in"
-          >
-            <Plus size={14} weight="regular" />
-          </button>
-          <div className="mx-0.5 h-4 w-px bg-[var(--border-soft)]" />
-          <button
-            type="button"
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
-            style={{ borderRadius: 'var(--radius)' }}
-            onClick={animateToFitAll}
-            aria-label="Fit all"
-            title="Fit all (⌘1)"
-          >
-            <CornersOut size={14} weight="regular" />
-          </button>
-        </div>
-      </BoardSync>
+            <button
+              type="button"
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+              style={{ borderRadius: 'var(--radius)' }}
+              onClick={() => setTransform({ scale: Math.max(0.1, scale / 1.2) })}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <Minus size={14} weight="regular" />
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1 tabular-nums text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+              style={{ borderRadius: 'var(--radius)' }}
+              onClick={animateToReset}
+              aria-label="Reset zoom"
+              title="Reset to 100%"
+            >
+              {Math.round(scale * 100)}%
+            </button>
+            <button
+              type="button"
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+              style={{ borderRadius: 'var(--radius)' }}
+              onClick={() => setTransform({ scale: Math.min(4, scale * 1.2) })}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <Plus size={14} weight="regular" />
+            </button>
+            <div className="mx-0.5 h-4 w-px bg-[var(--border-soft)]" />
+            <button
+              type="button"
+              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+              style={{ borderRadius: 'var(--radius)' }}
+              onClick={animateToFitAll}
+              aria-label="Fit all"
+              title="Fit all (⌘1)"
+            >
+              <CornersOut size={14} weight="regular" />
+            </button>
+          </div>
+        </BoardSync>
+      </div>
     </div>
   )
 }

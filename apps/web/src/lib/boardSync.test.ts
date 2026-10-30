@@ -1,6 +1,12 @@
 import type { CanvasObject } from '@moodboard/shared'
 import { describe, expect, it } from 'vitest'
-import { applySaveResult, diffObjects, isEmptyDiff, syncedStateFrom } from './boardSync'
+import {
+  applySaveResult,
+  diffObjects,
+  foldServerObjects,
+  isEmptyDiff,
+  syncedStateFrom,
+} from './boardSync'
 
 function sticky(id: string, text = id): CanvasObject {
   return {
@@ -86,5 +92,33 @@ describe('applySaveResult', () => {
     })
     expect(out.adopt).toEqual([theirs])
     expect(state.versions.get('a')).toBe(2)
+  })
+})
+
+describe('foldServerObjects', () => {
+  it('adopts newer server copies and marks them saved', () => {
+    const state = syncedStateFrom([sticky('a')], { a: 1 })
+    const moved = { ...sticky('a'), position: { x: 300, y: 0 } }
+    const adopt = foldServerObjects(state, [
+      { object: moved, version: 2 },
+      { object: sticky('n'), version: 1 },
+    ])
+    expect(adopt.map((o) => o.id)).toEqual(['a', 'n'])
+    expect(state.versions.get('a')).toBe(2)
+    // Autosave now sees the canvas (which adopted them) as clean.
+    expect(isEmptyDiff(diffObjects(state, adopt))).toBe(true)
+  })
+
+  it('skips copies we already hold at that version or newer', () => {
+    const state = syncedStateFrom([sticky('a', 'mine')], { a: 3 })
+    expect(foldServerObjects(state, [{ object: sticky('a', 'old'), version: 2 }])).toEqual([])
+    expect((state.saved.get('a')!.data as { text: string }).text).toBe('mine')
+  })
+
+  it('a local edit made after the fold saves against the new version', () => {
+    const state = syncedStateFrom([sticky('a')], { a: 1 })
+    const [adopted] = foldServerObjects(state, [{ object: sticky('a', 'agent'), version: 2 }])
+    const edited = { ...adopted!, data: { text: 'mine', color: '#fff' } }
+    expect(diffObjects(state, [edited]).upserts[0]!.baseVersion).toBe(2)
   })
 })

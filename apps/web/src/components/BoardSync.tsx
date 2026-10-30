@@ -5,7 +5,9 @@ import { getBoard, saveBoardObjects } from '@/lib/boardsApi'
 import {
   applySaveResult,
   diffObjects,
+  foldServerObjects,
   isEmptyDiff,
+  onServerObjects,
   syncedStateFrom,
   type SyncedState,
 } from '@/lib/boardSync'
@@ -142,8 +144,18 @@ export function BoardSync({
       timer = setTimeout(() => void save(), AUTOSAVE_DEBOUNCE_MS)
     })
 
+    // Changes the server made itself (agent tools) arrive already saved:
+    // fold them into the synced state first so the canvas update below
+    // doesn't read as a local edit.
+    const offServer = onServerObjects((id, changes) => {
+      if (id !== boardId) return
+      const adopt = foldServerObjects(state, changes)
+      if (adopt.length > 0) useCanvasStore.getState().applyRemote(adopt, [])
+    })
+
     return () => {
       unsub()
+      offServer()
       if (timer) {
         clearTimeout(timer)
         void save(true)

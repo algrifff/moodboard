@@ -219,7 +219,7 @@ export const connection = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    provider: text('provider').notNull(), // 'drive' | 'spotify' | 'linear'
+    provider: text('provider').notNull(), // 'drive' | 'spotify' | 'linear' | 'figma'
     accountEmail: text('account_email').notNull(),
     // base64(iv ‖ ciphertext ‖ authTag) — see apps/api/src/lib/cryptoTokens.ts
     accessTokenEnc: text('access_token_enc').notNull(),

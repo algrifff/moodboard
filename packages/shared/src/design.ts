@@ -15,6 +15,7 @@ export const designStageSchema = z.enum([
   'outline',
   'template',
   'assets',
+  'reference',
   'filling',
   'rendering',
   'critique',

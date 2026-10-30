@@ -335,6 +335,7 @@ export type CanvasObjectType =
   | 'video-clip'
   | 'voice-note'
   | 'output'
+  | 'figma-frame'
 
 // Phase 23 — a design output placed on a board as a live card. The card
 // renders the output's latest composed document, scaled; everything else
@@ -346,6 +347,28 @@ export type OutputCardData = {
   format: string
   width: number
   height: number
+}
+
+// Phase 26 — a frame imported from Figma: an image card that remembers its
+// origin. `url` is the PNG render saved to the asset library, so the board
+// shows it even if the file moves; `structure` is a compact outline (layer
+// names, text, auto-layout, colours) the design agents read alongside the
+// picture. Refresh re-renders when the file's lastModified has moved on.
+export type FigmaFrameData = {
+  url: string
+  fileKey: string
+  nodeId: string
+  name: string
+  fileName: string
+  pageName?: string
+  figmaUrl: string
+  // The frame's size in Figma pixels (the render may be scaled).
+  width: number
+  height: number
+  // The file's lastModified when this was rendered.
+  lastModified: string
+  fetchedAt: string
+  structure?: string
 }
 
 export type CanvasObject = {
@@ -370,6 +393,7 @@ export type CanvasObject = {
     | VideoClipData
     | VoiceNoteData
     | OutputCardData
+    | FigmaFrameData
 }
 
 export type AIAnalysis = {

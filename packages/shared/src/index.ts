@@ -33,3 +33,7 @@ export * from './design'
 
 // Phase 25 — HTML → MP4: video documents, render limits, render jobs.
 export * from './video'
+
+// Phase 26 — Figma import: URLs, frame data, styles → kit tokens.
+export * from './figma'
+export * from './figmaKit'

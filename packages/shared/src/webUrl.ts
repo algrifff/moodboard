@@ -20,6 +20,8 @@ const PROVIDER_HOSTS = [
   /(?:^|\.)tiktok\.com$/i,
   /(?:^|\.)instagram\.com$/i,
   /(?:^|\.)vimeo\.com$/i,
+  // Phase 26 — Figma links. A link figma.com won't give us is still not a web page.
+  /(?:^|\.)figma\.com$/i,
 ]
 
 /**

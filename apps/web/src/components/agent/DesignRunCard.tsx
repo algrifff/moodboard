@@ -35,6 +35,7 @@ export const STAGE_LABEL: Record<DesignStage, string> = {
   outline: 'Planning the outline',
   template: 'Picking a template',
   assets: 'Searching the library',
+  reference: 'Looking at the Figma reference',
   filling: 'Filling in copy and images',
   rendering: 'Rendering',
   critique: 'Looking at the render',

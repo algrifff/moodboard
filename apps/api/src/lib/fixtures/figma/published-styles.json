@@ -1,0 +1,32 @@
+{
+  "status": 200,
+  "error": false,
+  "meta": {
+    "styles": [
+      {
+        "key": "k-fill-primary",
+        "file_key": "AbCdEfGhIjKlMnOpQrStUv",
+        "node_id": "1:100",
+        "style_type": "FILL",
+        "name": "Colors/Brand/Primary",
+        "description": ""
+      },
+      {
+        "key": "k-fill-sage",
+        "file_key": "AbCdEfGhIjKlMnOpQrStUv",
+        "node_id": "1:105",
+        "style_type": "FILL",
+        "name": "Colors/Support/Sage",
+        "description": ""
+      },
+      {
+        "key": "k-text-code",
+        "file_key": "AbCdEfGhIjKlMnOpQrStUv",
+        "node_id": "2:202",
+        "style_type": "TEXT",
+        "name": "Code/Inline",
+        "description": ""
+      }
+    ]
+  }
+}

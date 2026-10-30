@@ -1,0 +1,28 @@
+{
+  "name": "Acme Brand",
+  "lastModified": "2026-03-04T10:00:00Z",
+  "version": "9001",
+  "nodes": {
+    "1:105": {
+      "document": {
+        "id": "1:105",
+        "name": "Colors/Support/Sage",
+        "type": "RECTANGLE",
+        "fills": [
+          { "type": "SOLID", "color": { "r": 0.5647059, "g": 0.7058824, "b": 0.5882353, "a": 1 } }
+        ]
+      },
+      "styles": {}
+    },
+    "2:202": {
+      "document": {
+        "id": "2:202",
+        "name": "Code/Inline",
+        "type": "TEXT",
+        "characters": "Aa",
+        "style": { "fontFamily": "JetBrains Mono", "fontWeight": 400, "fontSize": 14 }
+      },
+      "styles": {}
+    }
+  }
+}

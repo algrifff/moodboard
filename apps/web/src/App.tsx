@@ -8,6 +8,9 @@ import { DashboardPage } from '@/pages/Dashboard'
 import { KitPage } from '@/pages/Kit'
 import { KitsPage } from '@/pages/Kits'
 import { LibraryPage } from '@/pages/Library'
+import { OutputPage } from '@/pages/Output'
+import { OutputSharePage } from '@/pages/OutputShare'
+import { OutputsPage } from '@/pages/Outputs'
 import { SettingsPage } from '@/pages/Settings'
 import { SharePage } from '@/pages/Share'
 import { SignInPage } from '@/pages/SignIn'
@@ -88,6 +91,26 @@ function AnimatedRoutes() {
           }
         />
         <Route
+          path="/outputs"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <OutputsPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/outputs/:id"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <OutputPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/library"
           element={
             <RequireAuth>
@@ -113,6 +136,14 @@ function AnimatedRoutes() {
           element={
             <PageMotion>
               <SharePage />
+            </PageMotion>
+          }
+        />
+        <Route
+          path="/share/output/:token"
+          element={
+            <PageMotion>
+              <OutputSharePage />
             </PageMotion>
           }
         />

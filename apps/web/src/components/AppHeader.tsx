@@ -4,6 +4,7 @@ import { signOut, useSession } from '@/lib/authClient'
 
 const NAV = [
   { to: '/', label: 'Boards', end: true },
+  { to: '/outputs', label: 'Outputs', end: false },
   { to: '/kits', label: 'Kits', end: false },
   { to: '/library', label: 'Library', end: false },
 ]

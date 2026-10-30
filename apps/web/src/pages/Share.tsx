@@ -13,6 +13,7 @@ import type {
   WebPageData,
   FontData,
   ImageData,
+  OutputCardData,
   SharedGroupSnapshot,
   ShareViewParsed,
 } from '@moodboard/shared'
@@ -667,6 +668,19 @@ function SourceCard({ object }: { object: CanvasObject }) {
               {d.transcript}
             </p>
           )}
+        </div>
+      )
+    }
+    case 'output': {
+      const d = object.data as OutputCardData
+      return (
+        <div style={wrap}>
+          <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-faint)] font-semibold">
+            Design output
+          </div>
+          <div className="mt-1 text-foreground" style={{ fontSize: 14, fontWeight: 600 }}>
+            {d.name}
+          </div>
         </div>
       )
     }

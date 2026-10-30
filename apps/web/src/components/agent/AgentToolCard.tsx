@@ -14,6 +14,7 @@ import {
   Buildings,
   CheckCircle,
   Code,
+  FilmSlate,
   Crosshair,
   Eye,
   Images,
@@ -34,6 +35,7 @@ import {
 } from '@phosphor-icons/react'
 import { AGENT_META } from '@/components/canvas/AgentRow'
 import { DesignRunCard } from './DesignRunCard'
+import { RenderJobCard, VideoRunCard } from './VideoCards'
 import { AssetsToolCard, KitToolCard, OutputToolCard } from './DesignToolCards'
 import { ArtDirectorGlance } from '@/components/canvas/readouts/ArtDirectorReadout'
 import { BriefGlance } from '@/components/canvas/readouts/BriefReadout'
@@ -64,6 +66,9 @@ const TOOL_META: Record<string, { icon: Icon; running: string }> = {
   place_output_on_board: { icon: Layout, running: 'Placing the output' },
   add_asset_to_board: { icon: Images, running: 'Adding an asset to the board' },
   design_output: { icon: MagicWand, running: 'Designing' },
+  design_video: { icon: FilmSlate, running: 'Making a film' },
+  render_video: { icon: FilmSlate, running: 'Queuing the render' },
+  get_render_job: { icon: FilmSlate, running: 'Checking the render' },
   pick_design_variant: { icon: CheckCircle, running: 'Picking the option' },
   post_linear_comment: { icon: PaperPlaneTilt, running: 'Posting to Linear' },
 }
@@ -115,6 +120,17 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
     )
   }
 
+  if (first.use.name === 'design_video' && !first.result?.is_error) {
+    return (
+      <VideoRunCard
+        toolUseId={first.use.id}
+        input={first.use.input}
+        payload={first.result ? toolPayload(first.result.content) : null}
+        running={running}
+      />
+    )
+  }
+
   if (!first.result) {
     return (
       <CardRow icon={IconCmp}>
@@ -156,6 +172,12 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
     payload.output
   ) {
     return <OutputToolCard payload={payload} title={title} />
+  }
+  if (
+    (first.use.name === 'render_video' || first.use.name === 'get_render_job') &&
+    payload.job !== undefined
+  ) {
+    return <RenderJobCard payload={payload} />
   }
   if (first.use.name === 'search_assets') {
     return <AssetsToolCard payload={payload} title={title} />

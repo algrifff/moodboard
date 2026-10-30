@@ -6,6 +6,7 @@ import {
   outputFormatSchema,
   slotNameSchema,
   SLOT_TEXT_MAX,
+  videoFpsSchema,
   groupId,
   proximityGroups,
   type AgentToolPayload,
@@ -50,6 +51,7 @@ import {
   updateOutputSlotsTool,
 } from './outputTools'
 import { listGroupStates } from './groupState'
+import { designVideoTool, getRenderJobTool, renderVideoTool } from './videoAgentTools'
 import { routeUrlToImporter, type DispatchOk } from './mcpUrlDispatch'
 import type { ModelClient, ToolRunOptions } from './orchestrator'
 import { saveImageFromUrl } from './saveImageFromUrl'
@@ -844,6 +846,48 @@ const postLinearCommentDef = defineTool({
   run: (ctx, input) => postLinearCommentTool(ctx, input),
 })
 
+// ---------------------------------------------------------------------------
+// Video (bodies in videoAgentTools.ts)
+// ---------------------------------------------------------------------------
+
+const designVideoDef = defineTool({
+  name: 'design_video',
+  title: 'Make a film',
+  description:
+    "Run the video agent: it writes a script and scene list, builds the film from a video template (promo spot, 16:9 or 9:16) in the client's kit with library imagery, looks at key frames and fixes what's off, then queues the MP4 render. Silent, up to 60 s (the starter spot is 15 s). Takes a few minutes; the render continues in the background and the user sees progress and then the video as a card. Needs the client (default: this board's) and a brief with the message, audience, tone, length and must-include copy; pass the kit when the client has several. Identical requests reuse the earlier film; regenerate:true makes a fresh one (only when the user asks). Imported video clips on the board are references and stills only.",
+  input: {
+    brief: z.string().min(1).max(DESIGN_BRIEF_MAX),
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+    kit: z.string().min(1).optional().describe("Kit name or id (one of the client's kits)."),
+    fps: videoFpsSchema.optional().describe('30 (default) or 60.'),
+    regenerate: z.boolean().optional(),
+  },
+  run: (ctx, input) => designVideoTool(ctx, input),
+})
+
+const renderVideoDef = defineTool({
+  name: 'render_video',
+  title: 'Render an MP4',
+  description:
+    "Queue the MP4 render of a video output (a version, default the latest) at 30 or 60 fps. It runs in the background — the user sees a progress card that becomes the finished video with a download link; don't wait on it. A version that already has an MP4 at that fps isn't rendered again unless force:true. Only video outputs (a root with data-duration, fixed size up to 1920×1080, at most 60 s) can be rendered.",
+  input: {
+    output: outputQuery,
+    version: z.number().int().min(1).optional(),
+    fps: videoFpsSchema.optional().describe('30 (default) or 60.'),
+    force: z.boolean().optional(),
+  },
+  run: (ctx, input) => renderVideoTool(ctx, input),
+})
+
+const getRenderJobDef = defineTool({
+  name: 'get_render_job',
+  title: 'Check a render',
+  description:
+    "Status of a render job (queued, running with progress, done with the video's details, failed with the reason, or cancelled) by the id render_video or design_video returned. Only for when the user asks how a render is going — the sidebar card already shows live progress.",
+  input: { job: z.string().min(1).max(64) },
+  run: (ctx, input) => getRenderJobTool(ctx, input),
+})
+
 const addAssetToBoardDef = defineTool({
   name: 'add_asset_to_board',
   title: 'Put a library asset on the board',
@@ -879,6 +923,9 @@ export const CANVAS_TOOLS: CanvasTool[] = [
   updateOutputHtmlDef,
   placeOutputDef,
   designOutputDef,
+  designVideoDef,
+  renderVideoDef,
+  getRenderJobDef,
   pickDesignVariantDef,
   postLinearCommentDef,
 ]

@@ -5,6 +5,7 @@ import {
   index,
   integer,
   jsonb,
+  real,
   pgTable,
   primaryKey,
   text,
@@ -641,3 +642,39 @@ export const designCache = pgTable('design_cache', {
   result: jsonb('result').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// Phase 25 — the background job queue. Generic on purpose (kind + payload +
+// result are opaque to the queue; lib/jobs.ts owns the semantics): MP4
+// renders run on it now, and Phase 24's designer runs can move onto it
+// later. Workers claim with FOR UPDATE SKIP LOCKED, so any number of API
+// instances can poll one table. A running job is kept alive by heartbeats
+// (`locked_at`); one that stops beating is re-queued by the maintenance
+// tick. `output_id` is the subject of render jobs (jobs vanish with it).
+export const renderJob = pgTable(
+  'render_job',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').notNull(),
+    payload: jsonb('payload').notNull(),
+    // queued | running | done | failed | cancelled
+    status: text('status').notNull().default('queued'),
+    progress: real('progress').notNull().default(0),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    lockedAt: timestamp('locked_at'),
+    lockedBy: text('locked_by'),
+    result: jsonb('result'),
+    error: text('error'),
+    outputId: text('output_id').references(() => output.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    startedAt: timestamp('started_at'),
+    finishedAt: timestamp('finished_at'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    claimIdx: index('render_job_status_created_idx').on(t.status, t.createdAt),
+    outputIdx: index('render_job_output_id_idx').on(t.outputId),
+    createdByIdx: index('render_job_created_by_idx').on(t.createdBy),
+  }),
+)

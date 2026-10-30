@@ -63,6 +63,11 @@ jobs:
       - name: Install Chromium
         run: pnpm --filter @moodboard/api exec playwright install --with-deps chromium
 
+      # The MP4 renderer pipes frames to ffmpeg and its tests probe the
+      # result with ffprobe; without them those tests fail.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Format check
         run: pnpm format:check
 

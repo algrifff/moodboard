@@ -30,3 +30,6 @@ export * from './outputs'
 
 // Phase 24 — output agents: design runs, variants, progress.
 export * from './design'
+
+// Phase 25 — HTML → MP4: video documents, render limits, render jobs.
+export * from './video'

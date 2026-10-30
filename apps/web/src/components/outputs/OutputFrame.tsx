@@ -1,5 +1,5 @@
 import { viewportSize, type TemplateViewport } from '@moodboard/shared'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type Ref } from 'react'
 
 // A composed output in a sandboxed iframe, scaled to fit its box. The
 // document is untrusted (agents write it), so the frame never gets
@@ -17,6 +17,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 type Layer = { key: number; src: string; loaded: boolean }
 
+// Lets the parent talk to the document (video seeks): postMessage to the
+// frame on screen — the newest one that has loaded.
+export type FrameController = { post: (message: unknown) => void }
+
 export function OutputFrame({
   src,
   viewport,
@@ -27,6 +31,7 @@ export function OutputFrame({
   className = '',
   maxScale = 1,
   shadow = true,
+  controllerRef,
 }: {
   src: string
   viewport: TemplateViewport
@@ -38,6 +43,7 @@ export function OutputFrame({
   className?: string
   maxScale?: number
   shadow?: boolean
+  controllerRef?: Ref<FrameController>
 }) {
   const boxRef = useRef<HTMLDivElement>(null)
   const frames = useRef(new Map<number, HTMLIFrameElement>())
@@ -67,6 +73,21 @@ export function OutputFrame({
         : [...prev.filter((l) => l.loaded).slice(-1), { key: Date.now(), src, loaded: false }],
     )
   }, [src])
+
+  const layersRef = useRef(layers)
+  layersRef.current = layers
+  useImperativeHandle(
+    controllerRef,
+    () => ({
+      post: (message) => {
+        const current =
+          [...layersRef.current].reverse().find((l) => l.loaded) ?? layersRef.current[0]
+        // The document is in an opaque origin, so '*' is the only target.
+        if (current) frames.current.get(current.key)?.contentWindow?.postMessage(message, '*')
+      },
+    }),
+    [],
+  )
 
   useEffect(() => {
     if (!onMessage) return

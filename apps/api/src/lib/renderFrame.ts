@@ -5,8 +5,8 @@ import { getBrowser } from './browser'
 // network) in headless Chromium at its template viewport and captures a
 // PNG frame. Animations are CSS keyframes / WAAPI only, so a frame at any
 // time is a seek on document.getAnimations(): pause everything, set
-// currentTime. Thumbnails are one frame at the end state; Phase 25's MP4
-// renderer steps the same seek per frame through `withDocument`.
+// currentTime. Thumbnails are one frame; the MP4 renderer (renderVideo.ts)
+// steps the same seek per frame through `withDocument`.
 //
 // One shared browser (lib/browser.ts), a fresh context per document, every
 // request refused (the document's own CSP already forbids them), bounded
@@ -16,19 +16,25 @@ export type FrameViewport = { width: number; height: number }
 export type FrameTime = number | 'end'
 
 export const RENDER_TIMEOUT_MS = 20_000
-const RENDER_CONCURRENCY = Math.max(1, Number(process.env.RENDER_CONCURRENCY) || 2)
+// Frames and MP4s have separate pools: a video render holds its slot for
+// minutes, and must not starve the designer's quick frame renders.
+class Pool {
+  private active = 0
+  private waiting: (() => void)[] = []
+  constructor(private readonly size: number) {}
 
-let active = 0
-const waiting: (() => void)[] = []
-
-async function acquire(): Promise<() => void> {
-  if (active >= RENDER_CONCURRENCY) await new Promise<void>((resolve) => waiting.push(resolve))
-  active++
-  return () => {
-    active--
-    waiting.shift()?.()
+  async acquire(): Promise<() => void> {
+    if (this.active >= this.size) await new Promise<void>((resolve) => this.waiting.push(resolve))
+    this.active++
+    return () => {
+      this.active--
+      this.waiting.shift()?.()
+    }
   }
 }
+
+const framePool = new Pool(Math.max(1, Number(process.env.RENDER_CONCURRENCY) || 2))
+const videoPool = new Pool(Math.max(1, Number(process.env.VIDEO_RENDER_CONCURRENCY) || 1))
 
 export class RenderTimeoutError extends Error {
   constructor(ms: number) {
@@ -68,10 +74,15 @@ function sectionElements(): Element[] {
 
 export async function withDocument<T>(
   html: string,
-  opts: { viewport: FrameViewport; deviceScaleFactor?: number; timeoutMs?: number },
+  opts: {
+    viewport: FrameViewport
+    deviceScaleFactor?: number
+    timeoutMs?: number
+    pool?: 'frame' | 'video'
+  },
   fn: (doc: DocumentHandle) => Promise<T>,
 ): Promise<T> {
-  const release = await acquire()
+  const release = await (opts.pool === 'video' ? videoPool : framePool).acquire()
   let context: BrowserContext | null = null
   const timeoutMs = opts.timeoutMs ?? RENDER_TIMEOUT_MS
   let timer: NodeJS.Timeout | undefined
@@ -100,6 +111,15 @@ export async function withDocument<T>(
       errors,
       seek: (time) =>
         page.evaluate((t) => {
+          // A video document carries its own timeline (lib/videoTimeline.ts);
+          // using it makes a still exactly the frame the MP4 would have.
+          const timeline = (
+            window as unknown as { __moodboardTimeline?: { seek(time: number): void } }
+          ).__moodboardTimeline
+          if (timeline && t !== 'end') {
+            timeline.seek(t)
+            return
+          }
           for (const a of document.getAnimations()) {
             const timing = a.effect?.getComputedTiming()
             a.pause()

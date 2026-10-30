@@ -56,3 +56,27 @@ describe('documentProblems', () => {
     expect(documentProblems('<link rel="stylesheet" href="x.css">', '')[0]).toMatch(/No <link>/)
   })
 })
+
+describe('documentProblems for videos', () => {
+  const video = (duration: string) => `<main data-duration="${duration}"><h1>Hi</h1></main>`
+  const keyframes = '.a{animation:rise 600ms 200ms both}@keyframes rise{from{opacity:0}}'
+
+  it('accepts a retimed video inside the limits', () => {
+    expect(documentProblems(video('20000'), keyframes)).toEqual([])
+  })
+
+  it('keeps the duration valid and inside the limits', () => {
+    expect(documentProblems(video('soon'), keyframes)[0]).toMatch(/positive number/)
+    expect(documentProblems(video('120000'), keyframes)[0]).toMatch(/at most 60s/)
+    expect(documentProblems(video('50'), keyframes)[0]).toMatch(/at least/)
+  })
+
+  it('keeps the motion seekable', () => {
+    expect(documentProblems(video('5000'), '.a{transition:opacity .3s}')[0]).toMatch(/seekable/)
+    expect(documentProblems(video('5000'), '.a{animation-play-state:paused}')[0]).toMatch(
+      /seekable/,
+    )
+    // Not a video: transitions are the page's own business.
+    expect(documentProblems('<main>x</main>', '.a{transition:opacity .3s}')).toEqual([])
+  })
+})

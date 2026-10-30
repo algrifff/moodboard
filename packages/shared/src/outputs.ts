@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { kitTokensSchema, type KitTokens } from './kits'
 import { SLOT_CANDIDATE_RE, SLOT_NAME_RE, isSlotImageValue } from './slots'
+import { videoDocSchema, videoRenderInfoSchema } from './video'
 
 // Phase 23 — templates and outputs. A template is style-agnostic HTML + CSS
 // with `data-slot` markers that reads only `--kit-*` variables; an output is
@@ -13,6 +14,7 @@ export const OUTPUT_FORMATS = [
   'deck',
   'landing',
   'one-pager',
+  'video',
   'other',
 ] as const
 export const outputFormatSchema = z.enum(OUTPUT_FORMATS)
@@ -24,6 +26,7 @@ export const OUTPUT_FORMAT_LABELS: Record<OutputFormat, string> = {
   deck: 'Deck',
   landing: 'Landing page',
   'one-pager': 'One-pager',
+  video: 'Video',
   other: 'Other',
 }
 
@@ -223,6 +226,8 @@ export const outputDetailSchema = z.object({
     slots: z.array(outputSlotSchema),
     // The pinned kit's newest version, so the view can offer an update.
     kitLatestVersion: z.number().int().nullable(),
+    // Set when the document is a video (data-duration on its root).
+    video: videoDocSchema.nullable(),
   }),
   versions: z.array(outputVersionMetaSchema),
   share: outputShareSchema.nullable(),
@@ -280,6 +285,8 @@ export const outputShareViewSchema = z.object({
   viewport: templateViewportSchema,
   version: z.number().int(),
   updatedAt: z.string(),
+  // A video's rendered MP4s for the shared version, if any.
+  video: videoDocSchema.extend({ renders: z.array(videoRenderInfoSchema) }).nullable(),
 })
 export type OutputShareView = z.infer<typeof outputShareViewSchema>
 export const outputShareViewResponseSchema = z.object({ share: outputShareViewSchema })

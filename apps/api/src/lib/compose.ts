@@ -2,11 +2,13 @@ import {
   FILE_REF_RE,
   escapeHtml,
   fillSlots,
+  parseVideoDoc,
   SLOT_EDIT_MESSAGE,
   SLOT_FOCUS_MESSAGE,
   type TemplateViewport,
 } from '@moodboard/shared'
 import { createHash } from 'node:crypto'
+import { TIMELINE_SCRIPT } from './videoTimeline'
 
 // Composes one standalone HTML document from an output (or a template
 // preview): the HTML with slot values filled, the kit's --kit-* stylesheet,
@@ -132,7 +134,11 @@ export function composeDocument(input: ComposeInput): Composed {
   const body = inline(fillSlots(input.html, input.values))
   const kitCss = guard(inline(input.kitCss), 'style')
   const css = guard(inline(input.css), 'style')
-  const scripts = [input.js.trim(), input.editable ? EDITOR_SCRIPT : '']
+  const scripts = [
+    input.js.trim(),
+    parseVideoDoc(body) ? TIMELINE_SCRIPT : '',
+    input.editable ? EDITOR_SCRIPT : '',
+  ]
     .filter(Boolean)
     .map((s) => guard(s, 'script'))
   const csp = documentCsp(scripts)

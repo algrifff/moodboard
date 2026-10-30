@@ -1,4 +1,4 @@
-import { viewportSize } from '@moodboard/shared'
+import { parseVideoDoc, viewportSize } from '@moodboard/shared'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { composeDoc, getOutputSummary, outputRenderDoc } from './outputs'
@@ -39,14 +39,19 @@ export async function renderOutputFrame(
   if (!doc) return null
   const composed = await composeDoc(doc)
   const viewport = viewportSize(doc.viewport)
+  // A video's still is its poster moment, not t=0 (blank) or the end card.
+  const video = parseVideoDoc(doc.html)
+  const defaultTime: FrameTime = video ? video.posterMs : 'end'
+  const time = opts.time ?? defaultTime
   const frame = await renderFrame(composed.html, {
     viewport,
     section: opts.section,
-    time: opts.time,
+    time,
     maxEdge: FRAME_MAX_EDGE,
   })
-  // The default frame (end state, first screen) is the thumbnail.
-  if (opts.section === undefined && (opts.time ?? 'end') === 'end') {
+  // The default frame (end state, or a video's poster; first screen) is the
+  // thumbnail.
+  if (opts.section === undefined && time === defaultTime) {
     await mkdir(OUTPUTS_DIR, { recursive: true })
     await writeFile(thumbnailFile(outputId, version), frame.png)
   }

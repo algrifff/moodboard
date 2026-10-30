@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '../db'
 import { enrichPending } from './assetEnrich'
+import { requeueStaleJobs } from './jobs'
 
 const MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000
 
@@ -37,6 +38,11 @@ export async function runMaintenance(): Promise<void> {
   }
   // Library metadata for assets recorded before the library existed, or
   // whose in-request enrichment didn't finish.
+  // Render jobs whose worker died mid-run go back on the queue.
+  const stale = await requeueStaleJobs()
+  if (stale.requeued + stale.failed > 0) {
+    console.log(`[maintenance] stale jobs: ${stale.requeued} requeued, ${stale.failed} failed`)
+  }
   const enriched = await enrichPending()
   if (enriched > 0) console.log(`[maintenance] enriched ${enriched} library assets`)
 }

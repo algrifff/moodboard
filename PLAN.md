@@ -737,13 +737,32 @@ Already on Postgres; this makes it production-grade and ready for structured des
 
 ### Phase 25 — HTML → MP4
 
-- [ ] Video template convention: fixed viewport, `data-duration`, animations as CSS keyframes / WAAPI only (no `setTimeout`/rAF-driven motion — must be seekable)
-- [ ] Renderer: Playwright loads the output, pauses all animations, steps `document.getAnimations()` `currentTime` per frame at 30/60fps, screenshots each frame, pipes to ffmpeg → MP4 on `/data/outputs/`
-- [ ] Render runs as a background job (Postgres-backed queue), progress in the sidebar
-- [ ] Video agent: script → scene list → HTML composition from kit + template + assets (+ clips from the existing video importer) → render
-- [ ] Single-frame render reuses the same path for thumbnail PNGs (Phase 24 built that path: `lib/renderFrame.ts`)
+- [x] Video template convention: fixed viewport, `data-duration`, animations as CSS keyframes / WAAPI only (no `setTimeout`/`rAF`-driven motion — must be seekable)
+- [x] Renderer: Playwright loads the output, pauses all animations, steps `document.getAnimations()` `currentTime` per frame at 30/60fps, screenshots each frame, pipes to ffmpeg → MP4 on `/data/outputs/`
+- [x] Render runs as a background job (Postgres-backed queue), progress in the sidebar
+- [x] Video agent: script → scene list → HTML composition from kit + template + assets (+ clips from the existing video importer) → render
+- [x] Single-frame render reuses the same path for thumbnail PNGs (Phase 24 built that path: `lib/renderFrame.ts`)
 
 **Deliverable:** A 15s kit-styled promo spot, rendered from HTML, downloadable as MP4.
+
+**How it fits together:**
+
+- Video = an ordinary fixed-size output (`format: 'video'`) whose root has `data-duration` (ms; optional `data-poster` ms for the still). `packages/shared/src/video.ts` holds the limits (≤ 1920×1080 pixels, ≤ 60 s, ≤ 1800 frames so 60 fps caps at 30 s), `parseVideoDoc`, `videoRenderProblems`, the job/render wire shapes and the postMessage names. Starter templates `promo-spot` (1920×1080) and `promo-spot-vertical` (1080×1920): logo sting → headline → three feature beats with a progress rail → CTA end card, 15 s, every moment a CSS animation with explicit delay + `both` fill, driven by `--kit-*` and 15 slots. `starterTemplates.test.ts` enforces the convention (limits, no transitions/script timing, and in Chromium: every animation finite and inside the duration, scenes visible only in their window, frames a pure function of time).
+- Seekable timeline: `lib/compose.ts` adds `lib/videoTimeline.ts`'s script (hash-whitelisted like the editor's) to any video document. It takes hold of the animations at load but leaves them playing — a downloaded file just plays — and `seek(t)` pauses them all at time `t`. The renderer, thumbnails (`withDocument.seek`) and the output view's preview all use it, so a preview frame is exactly an MP4 frame.
+- Renderer: `lib/renderVideo.ts` — `withDocument` (own pool, `VIDEO_RENDER_CONCURRENCY`, default 1, so MP4s don't starve the designer's frames) → seek → JPEG q95 screenshot (PNG is ~10× slower per 1080p frame) → ffmpeg `image2pipe` → H.264 yuv420p, BT.709 tagged, `+faststart`, silent, written to `<name>.mp4.partial` and renamed on success; cancel/failure kills ffmpeg and deletes the partial. `lib/outputVideo.ts` names files `<id>@v<n>@<fps>fps.mp4` + a `.json` sidecar on `/data/outputs/` and owns `enqueueVideoRender` (validates it's a video inside the limits, returns an existing render unless `force`, dedupes an identical queued/running job).
+- Queue: `render_job` (migration `0017`) — generic kind/payload/result. `lib/jobs.ts` (claim `FOR UPDATE SKIP LOCKED`, heartbeat, complete/fail with retry up to `max_attempts`, cancel, release on shutdown, stale re-queue), `lib/jobRunner.ts` (per-instance worker: `JOB_CONCURRENCY`, `JOB_WORKER=0` for an API-only instance; handlers registered by kind). `requeueStaleJobs` runs in the maintenance tick and in each worker's poll. Routes: `POST /api/outputs/:id/render-video`, `GET …/renders`, `GET …/video` (range requests), `GET/POST /api/render-jobs/:id[/stream|/cancel]` (SSE), `GET /api/output-shares/:token/video`.
+- UI: video outputs get a play/pause + scrubber under the preview (the parent posts `moodboard:video-seek`; the sandbox and CSP are untouched), a **Video** tab (30/60 fps, Render MP4, live progress, cancel, players + downloads) and a header shortcut. Sidebar `VideoRunCard` / `RenderJobCard` follow a job live and complete into the video card. The share page plays/downloads the MP4 beside the live HTML.
+- Video agent: `lib/videoAgent.ts` — `design_video` (in `CANVAS_TOOLS`, bodies in `lib/videoAgentTools.ts`) runs one bounded `DEEP_MODEL` loop (16 steps, 3 key-frame calls × 4 frames): `write_script` → `create_output` → `get_output_source` / `update_output_slots` / `update_output_html` (retime scenes; `docEdits` keeps `data-duration` valid and motion seekable) → `render_key_frames` (images at chosen times, plus a list of animations running past the duration) → `finish_video`, then enqueues the MP4. Cached through `design_cache` (`VIDEO_AGENT_MODEL_TAG`). Imported video clips on the board appear in its brief as references with poster stills only. `render_video` and `get_render_job` expose the queue to the orchestrator.
+
+**Deferred / notes:**
+
+- No live model run (no API key): `design_video` was driven in the browser with a scripted fake model; the real tools, renderer, queue and worker ran. First real runs should be watched for how well the model retimes scenes through CSS edits (the starter timeline is `--at`/`--len` custom properties — the easy path) and for token cost (up to 12 key-frame images per film).
+- Silent for v1: no audio track, no clip footage (clips are posters/stills only).
+- Phase 24's designer runs still run inside the request. The queue is generic (`kind` + handler) and meant to take them next: register a `design-run` handler, enqueue from `design_output`, stream progress from the job — not done here.
+- The queue is Postgres polling (2 s) — a job enqueued on one instance can be picked up by any; no LISTEN/NOTIFY. Finished job rows and MP4s aren't pruned (an output's files go with it); render files are on the volume, so they don't replicate across hosts any more than uploads do.
+- A render uses one shared Chromium context per document and a JPEG pipe; ~35 ms/frame screenshot at 1080p here (15 s at 30 fps ≈ 25 s wall). No GPU, no parallel frame capture.
+- Headless Chromium builds without H.264 can't play the MP4 in the e2e; correctness was checked with `ffprobe` and a full `ffmpeg` decode. Real browsers play it.
+- No kit font loading beyond what the document inlines (same as Phase 23): fonts a kit names but doesn't upload fall back to system fonts in the render.
 
 ### Phase 26 — Figma import
 

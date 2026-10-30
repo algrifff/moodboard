@@ -29,8 +29,9 @@ import { useAgentSidebarStore } from '@/store/agentSidebar'
 // person picks one here (or tells the agent), opens it to tweak, and — when
 // the brief came from Linear — posts the pick back to the issue.
 
-const STAGE_LABEL: Record<DesignStage, string> = {
+export const STAGE_LABEL: Record<DesignStage, string> = {
   queued: 'Waiting',
+  script: 'Writing the script',
   outline: 'Planning the outline',
   template: 'Picking a template',
   assets: 'Searching the library',
@@ -38,6 +39,7 @@ const STAGE_LABEL: Record<DesignStage, string> = {
   rendering: 'Rendering',
   critique: 'Looking at the render',
   revising: 'Revising',
+  'render-queued': 'Queued the MP4 render',
   done: 'Done',
   cached: 'Reused from an earlier run',
   failed: 'Failed',
@@ -49,6 +51,7 @@ const ASPECT: Record<OutputFormat, string> = {
   deck: '16 / 9',
   landing: '16 / 10',
   'one-pager': '4 / 3',
+  video: '16 / 9',
   other: '16 / 10',
 }
 

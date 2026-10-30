@@ -1,8 +1,14 @@
-import { OUTPUT_FORMAT_LABELS, type OutputShareView } from '@moodboard/shared'
+import {
+  OUTPUT_FORMAT_LABELS,
+  shareVideoPath,
+  viewportSize,
+  type OutputShareView,
+} from '@moodboard/shared'
 import { DownloadSimple } from '@phosphor-icons/react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { OutputFrame } from '@/components/outputs/OutputFrame'
+import { VideoPlayer } from '@/components/outputs/VideoPlayer'
 import { ghostButton } from '@/components/ui'
 import { getSharedOutput, shareRenderUrl } from '@/lib/outputsApi'
 
@@ -13,6 +19,7 @@ export function OutputSharePage() {
   const { token = '' } = useParams()
   const [share, setShare] = useState<OutputShareView | null>(null)
   const [missing, setMissing] = useState(false)
+  const [view, setView] = useState<'video' | 'html'>('video')
 
   useEffect(() => {
     getSharedOutput(token)
@@ -22,6 +29,10 @@ export function OutputSharePage() {
       })
       .catch(() => setMissing(true))
   }, [token])
+
+  const renders = share?.video?.renders ?? []
+  const best = renders[0]
+  const size = share ? viewportSize(share.viewport) : { width: 16, height: 9 }
 
   if (missing) {
     return (
@@ -52,6 +63,42 @@ export function OutputSharePage() {
           </>
         )}
         <div className="flex-1" />
+        {share && renders.length > 0 && (
+          <div
+            className="flex items-center gap-0.5 bg-[var(--bg-elevated)] p-0.5"
+            style={{ borderRadius: 'var(--radius-lg)' }}
+            role="radiogroup"
+            aria-label="View"
+          >
+            {(['video', 'html'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={view === v}
+                onClick={() => setView(v)}
+                className={`h-7 px-3 text-[12.5px] transition-colors ${
+                  view === v
+                    ? 'bg-card text-foreground'
+                    : 'text-[var(--text-mute)] hover:text-foreground'
+                }`}
+                style={{ borderRadius: 'var(--radius)' }}
+              >
+                {v === 'video' ? 'Video' : 'Live HTML'}
+              </button>
+            ))}
+          </div>
+        )}
+        {share && best && (
+          <a
+            href={shareVideoPath(token, { fps: best.fps, download: true })}
+            className={ghostButton}
+            download
+          >
+            <DownloadSimple size={14} />
+            Download MP4
+          </a>
+        )}
         {share && (
           <a href={shareRenderUrl(token, true)} className={ghostButton} download>
             <DownloadSimple size={14} />
@@ -59,7 +106,19 @@ export function OutputSharePage() {
           </a>
         )}
       </header>
-      {share && (
+      {share && best && view === 'video' && (
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4 sm:p-8">
+          <VideoPlayer
+            className="w-full"
+            src={shareVideoPath(token, { fps: best.fps })}
+            downloadHref={shareVideoPath(token, { fps: best.fps, download: true })}
+            info={best}
+            aspect={`${size.width} / ${size.height}`}
+            maxHeight="calc(100vh - 14rem)"
+          />
+        </div>
+      )}
+      {share && !(best && view === 'video') && (
         <OutputFrame
           src={shareRenderUrl(token)}
           viewport={share.viewport}

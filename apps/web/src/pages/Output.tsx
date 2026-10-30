@@ -3,6 +3,7 @@ import {
   outputRenderPath,
   SLOT_EDIT_MESSAGE,
   SLOT_FOCUS_MESSAGE,
+  viewportSize,
   type CreateOutputVersionRequest,
   type KitSummary,
   type OutputDetail,
@@ -14,6 +15,7 @@ import {
   DeviceMobile,
   DeviceTablet,
   DownloadSimple,
+  FilmSlate,
   ShareNetwork,
   SquaresFour,
   Trash,
@@ -30,8 +32,10 @@ import {
   SaveTemplateDialog,
   ShareOutputDialog,
 } from '@/components/outputs/OutputDialogs'
-import { OutputFrame } from '@/components/outputs/OutputFrame'
+import { OutputFrame, type FrameController } from '@/components/outputs/OutputFrame'
 import { SlotFields } from '@/components/outputs/SlotFields'
+import { VideoPanel } from '@/components/outputs/VideoPanel'
+import { VideoTransport, type VideoTransportHandle } from '@/components/outputs/VideoTransport'
 import { ghostButton, labelClass, primaryButton, relativeTime } from '@/components/ui'
 import { ApiError } from '@/lib/http'
 import { listKits } from '@/lib/kitsApi'
@@ -62,7 +66,7 @@ export function OutputPage() {
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
   const [kits, setKits] = useState<KitSummary[]>([])
-  const [tab, setTab] = useState<'slots' | 'versions'>('slots')
+  const [tab, setTab] = useState<'slots' | 'versions' | 'video'>('slots')
   const [device, setDevice] = useState<(typeof DEVICES)[number]['id']>('desktop')
   const [focusedSlot, setFocusedSlot] = useState<string | null>(null)
   const [picking, setPicking] = useState<OutputSlot | null>(null)
@@ -72,6 +76,8 @@ export function OutputPage() {
   // The version the preview iframe shows. An inline edit made inside the
   // preview is already on screen, so saving it doesn't reload the frame.
   const [frameVersion, setFrameVersion] = useState<number | null>(null)
+  const frameController = useRef<FrameController>(null)
+  const transport = useRef<VideoTransportHandle>(null)
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve())
   const latestRef = useRef(0)
 
@@ -145,6 +151,7 @@ export function OutputPage() {
   const onFrameMessage = useCallback(
     (data: unknown) => {
       if (!data || typeof data !== 'object') return
+      if (transport.current?.handleMessage(data)) return
       const msg = data as { type?: unknown; name?: unknown; value?: unknown }
       if (typeof msg.name !== 'string') return
       if (msg.type === SLOT_FOCUS_MESSAGE) {
@@ -278,6 +285,12 @@ export function OutputPage() {
             ))}
           </div>
         )}
+        {version.video && (
+          <button type="button" className={ghostButton} onClick={() => setTab('video')}>
+            <FilmSlate size={14} />
+            <span className="hidden lg:inline">Render MP4</span>
+          </button>
+        )}
         <button type="button" className={ghostButton} onClick={() => setDialog('board')}>
           <SquaresFour size={14} />
           <span className="hidden lg:inline">Add to board</span>
@@ -307,7 +320,10 @@ export function OutputPage() {
           aria-label="Output"
         >
           <div className="flex h-11 shrink-0 items-center gap-1 border-b border-[var(--border-soft)] px-2">
-            {(['slots', 'versions'] as const).map((t) => (
+            {(version.video
+              ? (['slots', 'versions', 'video'] as const)
+              : (['slots', 'versions'] as const)
+            ).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -319,13 +335,24 @@ export function OutputPage() {
                 }`}
                 style={{ borderRadius: 'var(--radius)' }}
               >
-                {t === 'versions' ? `Versions · ${output.latestVersion}` : 'Slots'}
+                {t === 'versions'
+                  ? `Versions · ${output.latestVersion}`
+                  : t === 'video'
+                    ? 'Video'
+                    : 'Slots'}
               </button>
             ))}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {tab === 'slots' ? (
+            {tab === 'video' && version.video && output.viewport.kind === 'fixed' ? (
+              <VideoPanel
+                outputId={output.id}
+                version={version.version}
+                video={version.video}
+                viewport={viewportSize(output.viewport)}
+              />
+            ) : tab === 'slots' ? (
               <>
                 <div className="mb-4 grid grid-cols-2 gap-2">
                   <label className="block">
@@ -466,8 +493,17 @@ export function OutputPage() {
             interactive
             title={output.name}
             onMessage={onFrameMessage}
+            controllerRef={frameController}
             className="min-h-0 flex-1 p-6"
           />
+          {version.video && (
+            <VideoTransport
+              ref={transport}
+              video={version.video}
+              controller={frameController}
+              documentKey={`${output.id}@${frameVersion ?? version.version}`}
+            />
+          )}
           <ToastHost />
         </main>
       </div>

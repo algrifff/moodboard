@@ -193,6 +193,13 @@ export const renderJobsResponseSchema = z.object({
   renders: z.array(videoRenderInfoSchema),
 })
 
+// POST /api/outputs/:id/render-video: a queued job, or (no job) the render
+// that already exists.
+export const renderVideoResponseSchema = z.object({
+  job: renderJobSchema.nullable(),
+  render: videoRenderInfoSchema.nullable(),
+})
+
 export const renderVideoRequestSchema = z.object({
   version: z.number().int().positive().optional(),
   fps: videoFpsSchema.default(DEFAULT_VIDEO_FPS),

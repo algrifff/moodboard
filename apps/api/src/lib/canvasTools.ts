@@ -1,6 +1,7 @@
 import {
   agentIdSchema,
   assetMediaKindSchema,
+  figmaCardSize,
   DESIGN_BRIEF_MAX,
   DESIGN_VARIANTS_MAX,
   outputFormatSchema,
@@ -51,6 +52,7 @@ import {
   updateOutputSlotsTool,
 } from './outputTools'
 import { listGroupStates } from './groupState'
+import { figmaKitFromFileTool, getFigmaFrameTool, importFigmaFrameTool } from './figmaTools'
 import { designVideoTool, getRenderJobTool, renderVideoTool } from './videoAgentTools'
 import { routeUrlToImporter, type DispatchOk } from './mcpUrlDispatch'
 import type { ModelClient, ToolRunOptions } from './orchestrator'
@@ -72,8 +74,17 @@ export type ToolContext = {
 
 export type ToolEffects = { objects: VersionedObject[]; groups: GroupState[] }
 
+// A picture a tool wants the model to see (a Figma frame). It rides on the
+// result for the turn it was asked for and is not stored in the thread.
+export type ToolImage = { mediaType: 'image/png'; data: Buffer }
+
 export type ToolOutcome =
-  | { ok: true; payload: AgentToolPayload; effects?: Partial<ToolEffects> }
+  | {
+      ok: true
+      payload: AgentToolPayload
+      effects?: Partial<ToolEffects>
+      images?: ToolImage[]
+    }
   | { ok: false; error: string }
 
 export type CanvasTool = {
@@ -208,6 +219,13 @@ function objectFromImport(result: DispatchOk, objects: CanvasObject[]): CanvasOb
       return placed(objects, 'spotify-track', SPOTIFY_TRACK_SIZE, result.data)
     case 'spotify-album':
       return placed(objects, 'spotify-album', SPOTIFY_PLAYLIST_SIZE, result.data)
+    case 'figma-frame':
+      return placed(
+        objects,
+        'figma-frame',
+        figmaCardSize(result.data.width, result.data.height),
+        result.data,
+      )
   }
 }
 
@@ -244,6 +262,8 @@ export function objectLabel(o: CanvasObject): string {
     case 'image':
       return str('url')
     case 'output':
+      return clip(str('name'))
+    case 'figma-frame':
       return clip(str('name'))
   }
 }
@@ -303,6 +323,14 @@ const objectIdsSchema = z
 const agentsDescription = listAgents()
   .map((a) => `- ${a.id} (${a.label}): ${a.blurb}`)
   .join('\n')
+
+const figmaFramesInput = z
+  .array(z.string().min(1).max(300))
+  .max(4)
+  .optional()
+  .describe(
+    'Figma frames already on the board to use as visual references: names, ids or Figma links (see import_figma_frame). The designer sees each frame’s picture and a summary of its layers, text, spacing and colours, and matches its layout — in the kit’s colours and fonts.',
+  )
 
 // ---------------------------------------------------------------------------
 // Tools
@@ -416,7 +444,7 @@ const addUrl = defineTool({
   name: 'add_url',
   title: 'Add a URL to the board',
   description:
-    'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Google Drive file, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Drive require the user to have connected those providers first; the tool returns a clear instruction when missing.',
+    'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Google Drive file, a Figma frame, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Drive/Figma require the user to have connected those providers first; the tool returns a clear instruction when missing.',
   input: {
     url: z
       .string()
@@ -820,6 +848,7 @@ const designOutputDef = defineTool({
       .describe(`How many options, default ${DESIGN_VARIANTS_MAX}.`),
     regenerate: z.boolean().optional(),
     linearIssue: z.string().min(1).max(64).optional(),
+    figmaFrames: figmaFramesInput,
   },
   run: (ctx, input) => designOutputTool(ctx, input),
 })
@@ -861,6 +890,7 @@ const designVideoDef = defineTool({
     kit: z.string().min(1).optional().describe("Kit name or id (one of the client's kits)."),
     fps: videoFpsSchema.optional().describe('30 (default) or 60.'),
     regenerate: z.boolean().optional(),
+    figmaFrames: figmaFramesInput,
   },
   run: (ctx, input) => designVideoTool(ctx, input),
 })
@@ -886,6 +916,58 @@ const getRenderJobDef = defineTool({
     "Status of a render job (queued, running with progress, done with the video's details, failed with the reason, or cancelled) by the id render_video or design_video returned. Only for when the user asks how a render is going — the sidebar card already shows live progress.",
   input: { job: z.string().min(1).max(64) },
   run: (ctx, input) => getRenderJobTool(ctx, input),
+})
+
+// ---------------------------------------------------------------------------
+// Figma (bodies in figmaTools.ts)
+// ---------------------------------------------------------------------------
+
+const importFigmaFrameDef = defineTool({
+  name: 'import_figma_frame',
+  title: 'Import a Figma frame',
+  description:
+    'Import a frame from Figma (read-only): it is rendered to a PNG, saved to the asset library and placed on this board as a card that remembers its Figma file, frame, name and last-modified time. Pass a frame link (…?node-id=…); for a file link pass frame (its name) too, or the tool lists the file’s frames. A frame already on the board is refreshed in place when the file has changed. Uses the signed-in user’s own Figma connection. Nothing is ever written to Figma.',
+  input: {
+    url: z.string().min(1).max(2000).describe('A figma.com file or frame link.'),
+    frame: z.string().min(1).max(200).optional().describe('Frame name, for a file link.'),
+    client: z
+      .string()
+      .min(1)
+      .optional()
+      .describe('Client name or slug to file the render under; default the board’s.'),
+  },
+  run: (ctx, input) => importFigmaFrameTool(ctx, input),
+})
+
+const getFigmaFrameDef = defineTool({
+  name: 'get_figma_frame',
+  title: 'Look at a Figma frame',
+  description:
+    'Read a Figma frame that is on this board: its picture (attached to the result) and a compact outline of its layers — names, text, auto-layout direction and spacing, sizes, colours, fonts. Use it to see what a reference looks like, or to describe it. To design from one, pass it as figmaFrames to design_output or design_video.',
+  input: {
+    frame: z.string().min(1).max(300).describe('Frame card id, name or Figma link.'),
+  },
+  run: (ctx, input) => getFigmaFrameTool(ctx, input),
+})
+
+const figmaKitFromFileDef = defineTool({
+  name: 'figma_kit_from_file',
+  title: 'Style kit from a Figma file',
+  description:
+    'Read a Figma file’s local and published colour and text styles (and variables, where its plan allows) and map them to style-kit tokens: palette roles, display/body/mono fonts with weights. Creates a new kit for the client, or with kit a new version of that kit (its logos, voice and imagery rules are kept). Reports what was mapped and what was skipped. Only when the user asks for a kit from Figma; pass dryRun:true to preview the mapping without saving.',
+  input: {
+    url: z.string().min(1).max(2000).describe('A figma.com file link (a frame link works too).'),
+    client: z.string().min(1).optional().describe('Client name or slug; default the board’s.'),
+    kit: z.string().min(1).optional().describe('An existing kit to add a version to.'),
+    name: z
+      .string()
+      .min(1)
+      .max(80)
+      .optional()
+      .describe('Name for a new kit; default the file’s name.'),
+    dryRun: z.boolean().optional(),
+  },
+  run: (ctx, input) => figmaKitFromFileTool(ctx, input),
 })
 
 const addAssetToBoardDef = defineTool({
@@ -915,6 +997,9 @@ export const CANVAS_TOOLS: CanvasTool[] = [
   getStyleKit,
   searchAssets,
   addAssetToBoardDef,
+  importFigmaFrameDef,
+  getFigmaFrameDef,
+  figmaKitFromFileDef,
   getLinearIssue,
   listTemplatesDef,
   createOutputDef,

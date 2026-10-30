@@ -7,7 +7,9 @@ import {
 } from '@moodboard/shared'
 import { describe, expect, it } from 'vitest'
 import {
+  DESIGNER_MAX_FIGMA_LOOKS,
   DESIGNER_SYSTEM,
+  DESIGNER_TOOLS,
   planVariants,
   runDesign,
   runDesignVariant,
@@ -69,6 +71,7 @@ const context = (patch: Partial<DesignContext> = {}): DesignContext => ({
     },
   ],
   linearIssue: 'LIN-123',
+  figmaFrames: [],
   ...patch,
 })
 
@@ -99,6 +102,11 @@ function recordingToolbox(overrides: Partial<DesignToolbox> = {}) {
     getSource: rec('getSource', async () => ({ ok: true, text: '{"html":"<h1>x</h1>"}' })),
     updateSlots: rec('updateSlots', async () => ({ ok: true, text: 'ok', version: ++version })),
     updateHtml: rec('updateHtml', async () => ({ ok: true, text: 'ok', version: ++version })),
+    getFigmaFrame: rec('getFigmaFrame', async () => ({
+      ok: true,
+      text: '{"frame":"Hero","structure":"Frame “Hero”, 1440×900, vertical auto-layout, gap 24"}',
+      png: PNG,
+    })),
     render: rec('render', async () => ({
       ok: true,
       text: 'v1 1280×720',
@@ -409,6 +417,112 @@ describe('runDesignVariant', () => {
     expect(idle).toMatchObject({
       status: 'failed',
       error: expect.stringMatching(/Ran out of steps/),
+    })
+  })
+})
+
+describe('Figma references', () => {
+  const withFrames = context({
+    figmaFrames: [{ name: 'Hero', fileName: 'Acme Brand', width: 1440, height: 900 }],
+  })
+
+  it('lists the attached frames in the brief and the tool in the stable set', () => {
+    const prompt = variantPrompt(withFrames, plan)
+    expect(prompt).toContain('# Figma reference frames')
+    expect(prompt).toContain('“Hero” (Acme Brand) 1440×900')
+    expect(variantPrompt(context(), plan)).not.toContain('Figma')
+    expect(DESIGNER_TOOLS.map((t) => t.name)).toContain('get_figma_frame')
+  })
+
+  it('shows the model the frame as an image with its layer outline, then builds', async () => {
+    const { toolbox, calls } = recordingToolbox()
+    const { client, requests } = scriptedModel([
+      { tools: [{ name: 'get_figma_frame', input: { frame: 'Hero' } }] },
+      {
+        tools: [
+          { name: 'create_output', input: { template: 'YouTube thumbnail', name: 'A', slots: {} } },
+        ],
+      },
+      { tools: [{ name: 'render_output_frame', input: {} }] },
+      { tools: [{ name: 'finish_variant', input: { name: 'A', critique: 'Matches the frame.' } }] },
+    ])
+    const progress: DesignProgress[] = []
+    const variant = await runDesignVariant({
+      model: client,
+      toolbox,
+      context: withFrames,
+      plan,
+      onProgress: (p) => progress.push(p),
+    })
+    expect(variant.status).toBe('done')
+    expect(calls[0]).toEqual({ name: 'getFigmaFrame', args: ['Hero'] })
+    const blocks = toolResults(requests[1]!)[0]!.content as Anthropic.ContentBlockParam[]
+    expect(blocks[0]).toMatchObject({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/png', data: PNG.toString('base64') },
+    })
+    expect(blocks[1]).toMatchObject({ type: 'text' })
+    expect((blocks[1] as { text: string }).text).toContain('vertical auto-layout, gap 24')
+    expect(progress.map((p) => p.stage)).toContain('reference')
+  })
+
+  it('says so when nothing was attached, and bounds the looks', async () => {
+    const none = recordingToolbox()
+    const first = scriptedModel([
+      { tools: [{ name: 'get_figma_frame', input: { frame: 'Hero' } }] },
+      { text: 'ok' },
+    ])
+    await runDesignVariant({
+      model: first.client,
+      toolbox: none.toolbox,
+      context: context(),
+      plan,
+      onProgress: () => undefined,
+      maxSteps: 2,
+    })
+    const refused = toolResults(first.requests[1]!)[0]!
+    expect(refused.is_error).toBe(true)
+    expect(refused.content).toBe('No Figma frames were attached to this brief.')
+    expect(none.calls).toEqual([])
+
+    const many = recordingToolbox()
+    const looping = scriptedModel(
+      Array.from({ length: DESIGNER_MAX_FIGMA_LOOKS + 2 }, () => ({
+        tools: [{ name: 'get_figma_frame', input: { frame: 'Hero' } }],
+      })),
+    )
+    await runDesignVariant({
+      model: looping.client,
+      toolbox: many.toolbox,
+      context: withFrames,
+      plan,
+      onProgress: () => undefined,
+      maxSteps: DESIGNER_MAX_FIGMA_LOOKS + 2,
+    })
+    expect(many.calls).toHaveLength(DESIGNER_MAX_FIGMA_LOOKS)
+    const last = toolResults(looping.requests.at(-1)!)[0]!
+    expect(last.is_error).toBe(true)
+  })
+
+  it('passes a missing frame’s error back to the model', async () => {
+    const { toolbox } = recordingToolbox({
+      getFigmaFrame: async () => ({ ok: false, error: 'No attached Figma frame “Nope”.' }),
+    })
+    const { client, requests } = scriptedModel([
+      { tools: [{ name: 'get_figma_frame', input: { frame: 'Nope' } }] },
+      { text: 'ok' },
+    ])
+    await runDesignVariant({
+      model: client,
+      toolbox,
+      context: withFrames,
+      plan,
+      onProgress: () => undefined,
+      maxSteps: 2,
+    })
+    expect(toolResults(requests[1]!)[0]).toMatchObject({
+      is_error: true,
+      content: 'No attached Figma frame “Nope”.',
     })
   })
 })

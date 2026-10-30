@@ -1,5 +1,6 @@
 import { viewportSize, type TemplateSummary } from '@moodboard/shared'
 import { designToolbox } from './designToolbox'
+import type { FigmaReference } from './figmaTools'
 import { composeDoc, outputRenderDoc } from './outputs'
 import { enqueueVideoRender } from './outputVideo'
 import { RenderTimeoutError, withDocument } from './renderFrame'
@@ -17,6 +18,7 @@ export function videoToolbox(args: {
   clientId: string | null
   kitId: string | null
   templates: TemplateSummary[]
+  figmaFrames?: FigmaReference[]
 }): VideoToolbox {
   const base = designToolbox(args)
   const fail = (error: string) => ({ ok: false as const, error })
@@ -27,6 +29,7 @@ export function videoToolbox(args: {
     getSource: base.getSource,
     updateSlots: base.updateSlots,
     updateHtml: base.updateHtml,
+    getFigmaFrame: base.getFigmaFrame,
 
     async renderFrames(outputId, version, timesMs) {
       const doc = await outputRenderDoc(outputId, version)

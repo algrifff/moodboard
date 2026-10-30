@@ -13,10 +13,12 @@ import { DEEP_MODEL } from './modelTags'
 // - modelTag: DEEP_MODEL + the designer prompt/tool version
 
 // v1 = Phase 24 designer: outline/create/edit/render/finish tool set.
-export const DESIGNER_MODEL_TAG = `designer@${DEEP_MODEL}@v1`
+// v2 = Phase 26: get_figma_frame and the Figma reference section of the brief.
+export const DESIGNER_MODEL_TAG = `designer@${DEEP_MODEL}@v2`
 
 // v1 = Phase 25 video agent: script / create / edit / key frames / finish.
-export const VIDEO_AGENT_MODEL_TAG = `video-agent@${DEEP_MODEL}@v1`
+// v2 = Phase 26: get_figma_frame and the Figma reference section of the brief.
+export const VIDEO_AGENT_MODEL_TAG = `video-agent@${DEEP_MODEL}@v2`
 
 export type DesignCacheInput = {
   brief: string
@@ -28,6 +30,9 @@ export type DesignCacheInput = {
   format: string
   variantIndex: number
   modelTag: string
+  // The Figma frames attached as references, as file key + node id +
+  // last-modified: a frame edited in Figma and refreshed is a new key.
+  figmaFrames?: string[]
 }
 
 export function designCacheKey(input: DesignCacheInput): string {
@@ -42,6 +47,9 @@ export function designCacheKey(input: DesignCacheInput): string {
       .sort()
       .join(',')}`,
     `assets:${[...new Set(input.assetIds)].sort().join(',')}`,
+    ...(input.figmaFrames && input.figmaFrames.length > 0
+      ? [`figma:${[...new Set(input.figmaFrames)].sort().join(',')}`]
+      : []),
     `brief:${input.brief.replace(/\s+/g, ' ').trim()}`,
   ]
   return createHash('sha256').update(parts.join('\n')).digest('hex')

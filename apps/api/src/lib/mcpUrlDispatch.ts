@@ -1,10 +1,12 @@
 import {
   extractDriveFileId,
+  parseFigmaUrl,
   extractSpotifyRef,
   extractVideoRef,
   extractWebUrl,
   type DriveFileData,
   type DriveFolderData,
+  type FigmaFrameData,
   type ImageData,
   type PDFData,
   type SpotifyAlbumData,
@@ -15,6 +17,15 @@ import {
 } from '@moodboard/shared'
 import { and, desc, eq } from 'drizzle-orm'
 import { db, schema } from '../db'
+import { figmaForUser, FigmaUnavailableError } from './figmaConnection'
+import { FigmaApiError } from './figma'
+import {
+  describeFrames,
+  FigmaImportError,
+  importFigmaFrames,
+  nodeIdsFor,
+  readFileTree,
+} from './figmaImport'
 import { importDriveFile } from './importers/drive'
 import { TokenDecryptError } from './importers/errors'
 import { importSpotifyRef } from './importers/spotify'
@@ -39,12 +50,13 @@ export type DispatchOk =
   | { kind: 'spotify-playlist'; data: SpotifyPlaylistData }
   | { kind: 'spotify-track'; data: SpotifyTrackData }
   | { kind: 'spotify-album'; data: SpotifyAlbumData }
+  | { kind: 'figma-frame'; data: FigmaFrameData }
 
 export type DispatchError = {
   code: 'UNRECOGNISED' | 'CONNECTION_REQUIRED' | 'CONNECTION_DOWN' | 'EXTRACT_FAILED'
   message: string
   // For CONNECTION_REQUIRED — which provider the user needs to connect.
-  provider?: 'drive' | 'spotify'
+  provider?: 'drive' | 'spotify' | 'figma'
 }
 
 export type DispatchResult = { ok: true; result: DispatchOk } | { ok: false; error: DispatchError }
@@ -125,7 +137,60 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
   // Drive only accepts http(s) URLs — the recogniser doesn't assert a
   // scheme so we filter here.
   if (/^https?:\/\//i.test(trimmed)) {
-    // 2. Drive
+    // 2. Figma frame (a file link lists its frames instead)
+    const figmaRef = parseFigmaUrl(trimmed)
+    if (figmaRef) {
+      try {
+        if (figmaRef.kind === 'make') {
+          return {
+            ok: false,
+            error: {
+              code: 'EXTRACT_FAILED',
+              message: 'Figma Make files can’t be imported — use a Design or FigJam link.',
+            },
+          }
+        }
+        const api = await figmaForUser(userId)
+        const nodeIds = nodeIdsFor(figmaRef)
+        if (nodeIds.length === 0) {
+          const tree = await readFileTree(api, figmaRef)
+          const frames = tree.pages.flatMap((p) => p.frames)
+          if (frames.length !== 1) {
+            return {
+              ok: false,
+              error: {
+                code: 'EXTRACT_FAILED',
+                message: `That Figma link is a whole file — add a frame link.\n${describeFrames(tree)}`,
+              },
+            }
+          }
+          nodeIds.push(frames[0]!.id)
+        }
+        const [data] = await importFigmaFrames(api, {
+          userId,
+          fileKey: figmaRef.fileKey,
+          nodeIds,
+        })
+        return { ok: true, result: { kind: 'figma-frame', data: data! } }
+      } catch (e) {
+        if (e instanceof FigmaUnavailableError) {
+          return {
+            ok: false,
+            error: {
+              code: e.code === 'reconnect' ? 'CONNECTION_DOWN' : 'CONNECTION_REQUIRED',
+              provider: 'figma',
+              message: e.message,
+            },
+          }
+        }
+        if (e instanceof FigmaImportError || e instanceof FigmaApiError) {
+          return { ok: false, error: { code: 'EXTRACT_FAILED', message: e.message } }
+        }
+        throw e
+      }
+    }
+
+    // 3. Drive
     const driveFileId = extractDriveFileId(trimmed)
     if (driveFileId) {
       const conn = await findConnection(userId, 'drive')
@@ -168,7 +233,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 3. Video (YouTube / TikTok / Instagram / X / Vimeo)
+    // 4. Video (YouTube / TikTok / Instagram / X / Vimeo)
     const videoRef = extractVideoRef(trimmed)
     if (videoRef) {
       try {
@@ -183,7 +248,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 4. Image-by-extension — path ends in a recognised image suffix.
+    // 5. Image-by-extension — path ends in a recognised image suffix.
     if (hasImageExtension(trimmed)) {
       try {
         const data = await saveImageFromUrl(trimmed, userId)
@@ -197,7 +262,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 5. Generic web page (catch-all for http(s)).
+    // 6. Generic web page (catch-all for http(s)).
     const webUrl = extractWebUrl(trimmed)
     if (webUrl) {
       try {

@@ -10,6 +10,7 @@ import { loadBoardObjects } from './boardObjects'
 import { resolveDesignTarget } from './designAgentTools'
 import { VIDEO_AGENT_MODEL_TAG, designCacheKey } from './designHash'
 import { dbDesignCache } from './designRuns'
+import { figmaReferenceKey, resolveFigmaReferences, type FigmaReference } from './figmaTools'
 import { getRenderJob } from './jobs'
 import { defaultModelClient } from './orchestrator'
 import { getOutputSummary } from './outputs'
@@ -53,10 +54,17 @@ export async function designVideoTool(
     kit?: string
     fps?: VideoFps
     regenerate?: boolean
+    figmaFrames?: string[]
   },
 ): Promise<ToolOutcome> {
   const target = await resolveDesignTarget(ctx, { ...input, format: 'video' })
   if (!target.ok) return target
+  let figmaFrames: FigmaReference[] = []
+  if (input.figmaFrames && input.figmaFrames.length > 0) {
+    const resolved = await resolveFigmaReferences(ctx.boardId, input.figmaFrames)
+    if (!resolved.ok) return resolved
+    figmaFrames = resolved.frames
+  }
   const { client, templates } = target
   const clips = await boardClips(ctx.boardId)
   const fps = input.fps ?? DEFAULT_VIDEO_FPS
@@ -69,6 +77,12 @@ export async function designVideoTool(
     assets: target.assets,
     clips,
     fps,
+    figmaFrames: figmaFrames.map((f) => ({
+      name: f.name,
+      fileName: f.fileName,
+      width: f.width,
+      height: f.height,
+    })),
   }
   const run = await runVideo({
     model: ctx.model === undefined ? defaultModelClient() : ctx.model,
@@ -79,6 +93,7 @@ export async function designVideoTool(
       clientId: client.id,
       kitId: target.kitId,
       templates,
+      figmaFrames,
     }),
     cache: dbDesignCache(VIDEO_AGENT_MODEL_TAG),
     key: designCacheKey({
@@ -91,6 +106,7 @@ export async function designVideoTool(
       format: 'video',
       variantIndex: 1,
       modelTag: VIDEO_AGENT_MODEL_TAG,
+      figmaFrames: figmaFrames.map(figmaReferenceKey),
     }),
     regenerate: input.regenerate,
     onProgress: ctx.onProgress ?? (() => undefined),
@@ -115,6 +131,7 @@ export async function designVideoTool(
       template: run.template,
       critique: run.critique,
       script: run.script,
+      figmaFrames: figmaFrames.map((f) => f.name),
       durationMs: run.durationMs,
       fps: run.fps,
       cached: run.cached,

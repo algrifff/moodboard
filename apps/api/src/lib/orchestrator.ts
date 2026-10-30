@@ -63,7 +63,7 @@ export type OrchestratorStore = {
 export const SYSTEM_PROMPT = `You are the studio's design agent, working inside moodboard.ai — an infinite-canvas mood board shared by one internal creative team. You sit in a sidebar next to the board the user has open, and you act on that board with tools.
 
 How the board works:
-- Items are images, sticky notes, text, web pages, videos, PDFs, Spotify, Drive files, fonts, voice notes and design outputs, each with a position and size in world pixels.
+- Items are images, sticky notes, text, web pages, videos, PDFs, Spotify, Drive files, fonts, voice notes, Figma frames and design outputs, each with a position and size in world pixels.
 - Items whose boxes are within 48px of each other automatically form a group; a group shows a coloured outline, a palette and an analysis panel. Isolated items are not groups.
 - Specialist agents (art director, copywriter, business analyst, audience profiler, channel strategist, video editor) read a group. Running two or more synthesises their reads into a one-page brief that appears on the group's panel.
 
@@ -84,6 +84,11 @@ Clients, kits, assets and Linear:
 Templates and outputs:
 - Designs are self-contained HTML outputs made from templates (list_templates: thumbnail, social post, 16:9 deck, landing page, one-pager, plus the team's own). A template's slots are named text or image fields; the client's kit skins it.
 - create_output makes one (template + client + kit + slot values); get_output reads it back; update_output_slots edits slots as a new version; update_output_html makes exact find/replace edits to its HTML/CSS (structure, layout, adding or removing deck slides); place_output_on_board shows it on the canvas. Text slots are plain text — write copy in the kit's voice, no HTML. Image slots take a library asset URL from search_assets. add_asset_to_board lays a library asset out on the canvas as a reference.
+
+Figma (read-only; HTML is the output, nothing goes back to Figma):
+- import_figma_frame brings a Figma frame onto the board as a card (rendered to PNG, saved to the library, remembering its file and frame). A file link needs a frame name; the tool lists the frames if you don't have one. get_figma_frame shows you a frame on the board — its picture and an outline of its layers, text, spacing and colours.
+- A Figma frame is a visual reference, not a deliverable. When the user wants something made "like this" or "from this frame", pass the frame's name as figmaFrames to design_output / design_video: the designer sees it and matches its layout in the client's kit — not Figma's colours, unless they are the kit's.
+- figma_kit_from_file turns a Figma file's styles into a style kit (a new kit for the client, or a new version of one). Only when the user asks; dryRun:true shows the mapping without saving, and the result lists what was mapped and skipped.
 
 Making designs ("I need X for client Y"):
 - design_output is the designer: it builds 2–3 distinct options (different templates, layouts or copy angles), renders each, critiques it visually and revises, and shows them to the user as cards with thumbnails. Use it for any request to make a thumbnail, social post, deck, landing page or one-pager; use create_output/update_output_* yourself only for small direct edits to an existing output.
@@ -276,7 +281,10 @@ export async function runOrchestrator({
 
     // Sequential: tools write to the same board, and each should see the
     // previous one's changes.
+    // `results` is what the thread stores; `forModel` also carries any
+    // pictures a tool attached (Figma frames), for this run's next turn only.
     const results: AgentToolResultBlock[] = []
+    const forModel: Anthropic.ToolResultBlockParam[] = []
     for (const use of toolUses) {
       let outcome: ToolOutcome
       try {
@@ -293,22 +301,40 @@ export async function runOrchestrator({
         if (objects.length > 0) emit({ type: 'board', objects, removed: [] })
         const groups = outcome.effects?.groups ?? []
         if (groups.length > 0) emit({ type: 'groups', groups })
-        results.push({
+        const text = JSON.stringify(outcome.payload)
+        results.push({ type: 'tool_result', tool_use_id: use.id, content: text })
+        forModel.push({
           type: 'tool_result',
           tool_use_id: use.id,
-          content: JSON.stringify(outcome.payload),
+          content: outcome.images?.length
+            ? [
+                { type: 'text', text },
+                ...outcome.images.map(
+                  (img): Anthropic.ImageBlockParam => ({
+                    type: 'image',
+                    source: {
+                      type: 'base64',
+                      media_type: img.mediaType,
+                      data: img.data.toString('base64'),
+                    },
+                  }),
+                ),
+              ]
+            : text,
         })
       } else {
-        results.push({
-          type: 'tool_result',
+        const block = {
+          type: 'tool_result' as const,
           tool_use_id: use.id,
           content: outcome.error,
           is_error: true,
-        })
+        }
+        results.push(block)
+        forModel.push(block)
       }
     }
     await persist('user', results)
-    messages.push({ role: 'user', content: results })
+    messages.push({ role: 'user', content: forModel })
   }
 
   await notice(`Stopped after ${maxIterations} steps. Ask me to carry on if there’s more to do.`)

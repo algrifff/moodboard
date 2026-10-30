@@ -18,9 +18,13 @@ import { z } from 'zod'
 import type { TextEdit } from './docEdits'
 import {
   assetLine,
+  figmaSection,
+  GET_FIGMA_FRAME_SHAPE,
+  DESIGNER_MAX_FIGMA_LOOKS,
   kitSection,
   templateLine,
   type DesignAsset,
+  type DesignFigmaFrame,
   type DesignCache,
   type DesignContext,
   type DesignToolbox,
@@ -62,13 +66,14 @@ export type VideoContext = {
   assets: DesignAsset[]
   clips: BoardClip[]
   fps: VideoFps
+  figmaFrames: DesignFigmaFrame[]
 }
 
 export type KeyFrame = { timeMs: number; png: Buffer }
 
 export type VideoToolbox = Pick<
   DesignToolbox,
-  'searchAssets' | 'createOutput' | 'getSource' | 'updateSlots' | 'updateHtml'
+  'searchAssets' | 'createOutput' | 'getSource' | 'updateSlots' | 'updateHtml' | 'getFigmaFrame'
 > & {
   renderFrames(
     outputId: string,
@@ -138,6 +143,7 @@ const TOOL_SHAPES = {
       css: z.array(textEdit).max(20).optional(),
     },
   },
+  get_figma_frame: GET_FIGMA_FRAME_SHAPE,
   render_key_frames: {
     description: `Look at the film: render up to ${VIDEO_AGENT_MAX_FRAMES} frames at the given times (ms) and see them. Omit times to get the middle of your first scenes. The result also lists any animation that runs past data-duration. You get ${VIDEO_AGENT_MAX_RENDERS} of these calls, so choose times that test the riskiest moments (the headline in, the busiest beat, the end card).`,
     input: {
@@ -178,6 +184,7 @@ export const VIDEO_AGENT_TOOLS: Anthropic.Tool[] = Object.entries(TOOL_SHAPES).m
 export const VIDEO_AGENT_SYSTEM = `You are a motion designer at a small studio. You make one short, silent promo film as a self-contained HTML composition: the studio's video templates, skinned by the client's style kit, filled with the client's library imagery and your copy. The film is rendered to MP4 by stepping its CSS animations frame by frame, so everything on screen is a function of time.
 
 How to work:
+0. If the brief lists Figma reference frames, look at each with get_figma_frame first: they show the layout, hierarchy and proportions to build toward (stills of the look, not of the motion). Wear the kit's colours and fonts, not Figma's.
 1. write_script first: a logline and the scene list with start/length in ms. Silent film — every idea has to land in on-screen words and motion. One idea per scene; headlines under ~8 words; numbers big; a clear call to action at the end.
 2. create_output from the best-fitting video template, filling every text slot with copy from your script in the kit's voice. Image slots take only a library url (or a clip poster from your brief); if nothing fits, leave the slot at its default rather than forcing an unrelated image.
 3. If the script needs a different length or number of beats than the template, read get_output_source and retime with update_output_html: change data-duration and the scenes' --at / --len / animation delays together so every scene still starts where the last one ends and nothing runs past data-duration. Prefer small edits to the template's timeline over rewriting it.
@@ -199,6 +206,7 @@ export function videoPrompt(context: VideoContext): string {
     `# Brief\n${context.brief}`,
     `Client: ${context.client?.name ?? 'none'}\nFrame rate: ${context.fps} fps`,
     kitSection(context.kit),
+    figmaSection(context.figmaFrames),
     `# Video templates\n${context.templates.map(templateLine).join('\n')}`,
     `# Library assets${context.client ? ` for ${context.client.name}` : ''}\n${
       context.assets.length > 0
@@ -227,6 +235,7 @@ type State = {
   renderCalls: number
   framesRendered: number
   renderedVersion: number | null
+  figmaLooks: number
   finished: { name: string; critique: string; fps: VideoFps } | null
   lastText: string
   steps: number
@@ -262,6 +271,7 @@ export async function runVideoAgent({
     renderCalls: 0,
     framesRendered: 0,
     renderedVersion: null,
+    figmaLooks: 0,
     finished: null,
     lastText: '',
     steps: 0,
@@ -406,6 +416,30 @@ export async function runVideoAgent({
         if (!r.ok) return err(use.id, r.error)
         state.version = r.version
         return ok(use.id, r.text)
+      }
+      case 'get_figma_frame': {
+        if (context.figmaFrames.length === 0) {
+          return err(use.id, 'No Figma frames were attached to this brief.')
+        }
+        if (state.figmaLooks >= DESIGNER_MAX_FIGMA_LOOKS) {
+          return err(
+            use.id,
+            'You have looked at the Figma references enough — build from what you saw.',
+          )
+        }
+        state.figmaLooks++
+        progress('reference', typeof input.frame === 'string' ? input.frame : undefined)
+        const r = await toolbox.getFigmaFrame(input.frame as string)
+        if (!r.ok) return err(use.id, r.error)
+        const content: ResultContent[] = []
+        if (r.png) {
+          content.push({
+            type: 'image',
+            source: { type: 'base64', media_type: 'image/png', data: r.png.toString('base64') },
+          })
+        }
+        content.push({ type: 'text', text: r.text })
+        return { type: 'tool_result', tool_use_id: use.id, content }
       }
       case 'render_key_frames': {
         const missing = needsOutput()

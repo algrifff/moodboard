@@ -5,6 +5,7 @@ import { RenderTimeoutError } from './renderFrame'
 import { renderOutputFrame } from './outputRender'
 import { addOutputVersion, createOutput, getOutputDetail } from './outputs'
 import { editOutputDocument } from './outputTools'
+import { loadReferenceImage, referenceText, type FigmaReference } from './figmaTools'
 
 // The designer's tools against the real thing: outputs in Postgres (every
 // edit a new version), the client's library, and the frame renderer. One
@@ -19,6 +20,7 @@ export function designToolbox(args: {
   clientId: string | null
   kitId: string | null
   templates: TemplateSummary[]
+  figmaFrames?: FigmaReference[]
 }): DesignToolbox {
   const fail = (error: string): ToolResult<never> => ({ ok: false, error })
 
@@ -123,6 +125,22 @@ export function designToolbox(args: {
       })
       if (!result.ok) return fail(result.error)
       return { ok: true, version: result.version, text: `Saved v${result.version}.` }
+    },
+
+    async getFigmaFrame(frame) {
+      const frames = args.figmaFrames ?? []
+      const m = matchNamed(
+        frames.map((f) => ({ id: f.objectId, name: f.name, ref: f })),
+        frame,
+      )
+      if (m.kind !== 'found') {
+        return fail(
+          `No attached Figma frame “${frame}”. Attached: ${frames.map((f) => f.name).join(', ') || 'none'}.`,
+        )
+      }
+      const ref = m.item.ref
+      const image = await loadReferenceImage(ref)
+      return { ok: true, png: image?.png ?? null, text: referenceText(ref) }
     },
 
     async render(outputId, version, { section }) {

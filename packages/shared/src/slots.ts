@@ -312,6 +312,102 @@ export function removeSlot(html: string, name: string): string {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Slot candidates — what save-as-template's proposer may turn into slots
+// ---------------------------------------------------------------------------
+
+const CANDIDATE_TEXT_TAGS = new Set([
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'p',
+  'span',
+  'li',
+  'a',
+  'button',
+  'figcaption',
+  'blockquote',
+  'small',
+  'strong',
+  'em',
+  'b',
+  'label',
+  'dt',
+  'dd',
+  'td',
+  'th',
+  'cite',
+])
+
+// A candidate is referred to as `@<index>` (document order) wherever a slot
+// name would go, e.g. in a save-as-template edit's `from`.
+export const SLOT_CANDIDATE_RE = /^@(\d{1,4})$/
+
+export type SlotCandidate = { ref: string; kind: SlotKind; tag: string; text: string }
+
+type CandidateSite = { kind: SlotKind; tag: Tag; text: string }
+
+// Elements that could be slots but aren't marked: images, and leaf text
+// elements (nothing inside but text and <br>), outside every existing slot.
+function candidateSites(html: string): CandidateSite[] {
+  const tags = scanTags(html)
+  const taken = slotSites(html).map((s) => ({
+    start: s.tag.start,
+    end: Math.max(s.tag.end, s.contentEnd),
+  }))
+  const inSlot = (t: Tag) => taken.some((r) => t.start >= r.start && t.start < r.end)
+  const out: CandidateSite[] = []
+  tags.forEach((tag, index) => {
+    if (tag.closing || attr(tag, 'data-slot') || inSlot(tag)) return
+    if (tag.name === 'img') {
+      out.push({ kind: 'image', tag, text: decodeEntities(attr(tag, 'alt')?.value ?? '') })
+      return
+    }
+    if (!CANDIDATE_TEXT_TAGS.has(tag.name) || tag.selfClosing) return
+    for (let k = index + 1; k < tags.length; k++) {
+      const t = tags[k]!
+      if (t.closing && t.name === tag.name) {
+        const text = textOf(html.slice(tag.end, t.start))
+        if (text) out.push({ kind: 'text', tag, text })
+        return
+      }
+      if (t.name !== 'br') return
+    }
+  })
+  return out
+}
+
+export function slotCandidates(html: string): SlotCandidate[] {
+  return candidateSites(html).map((c, i) => ({
+    ref: `@${i}`,
+    kind: c.kind,
+    tag: c.tag.name,
+    text: c.text,
+  }))
+}
+
+// Marks candidates (by `@<index>` on this same html) as slots.
+export function markCandidates(
+  html: string,
+  marks: { ref: string; name: string; label?: string }[],
+): string {
+  const sites = candidateSites(html)
+  const picked = marks.flatMap((m) => {
+    const index = SLOT_CANDIDATE_RE.exec(m.ref)?.[1]
+    const site = index === undefined ? undefined : sites[Number(index)]
+    return site ? [{ ...m, tag: site.tag }] : []
+  })
+  let out = html
+  for (const m of picked.sort((a, b) => b.tag.start - a.tag.start)) {
+    const labelled = m.label ? ` data-slot-label="${escapeHtml(m.label)}"` : ''
+    out = `${out.slice(0, m.tag.attrsEnd)} data-slot="${escapeHtml(m.name)}"${labelled}${out.slice(m.tag.attrsEnd)}`
+  }
+  return out
+}
+
 // `/api/files/<name>` references anywhere in a document's text. These are
 // the assets composition inlines.
 export const FILE_REF_RE = /\/api\/files\/([A-Za-z0-9_-]+\.[A-Za-z0-9]+)/g

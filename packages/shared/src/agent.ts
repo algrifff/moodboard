@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { designProgressSchema } from './design'
 import { groupStateSchema, storedCanvasObjectSchema } from './schemas'
 
 // Phase 21 — agent sidebar. Messages are stored in Anthropic content-block
@@ -103,6 +104,8 @@ export const boardObjectChangeSchema = z.object({
 // of tool results). `text` streams the in-progress assistant turn; it is
 // superseded by that turn's `message`. `board` / `groups` carry what the
 // tools changed so the open canvas can fold them in without a reload.
+// `tool-progress` reports a long tool (design_output) while it runs, keyed by
+// its tool_use id; it is never stored.
 export const agentStreamEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message'), message: agentMessageSchema }),
   z.object({ type: z.literal('text'), delta: z.string() }),
@@ -113,6 +116,11 @@ export const agentStreamEventSchema = z.discriminatedUnion('type', [
     removed: z.array(z.string()),
   }),
   z.object({ type: z.literal('groups'), groups: z.array(groupStateSchema) }),
+  z.object({
+    type: z.literal('tool-progress'),
+    toolUseId: z.string(),
+    progress: designProgressSchema,
+  }),
   z.object({ type: z.literal('done') }),
 ])
 export type AgentStreamEvent = z.infer<typeof agentStreamEventSchema>

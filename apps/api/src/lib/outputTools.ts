@@ -11,6 +11,7 @@ import { eq } from 'drizzle-orm'
 import { db, schema } from '../db'
 import type { ToolContext, ToolOutcome } from './canvasTools'
 import { listClients } from './clients'
+import { applyTextEdits, documentProblems, type TextEdit } from './docEdits'
 import { listKits } from './kits'
 import {
   addOutputVersion,
@@ -71,7 +72,7 @@ const templateBrief = (t: TemplateSummary) => ({
   slots: t.slots,
 })
 
-const outputRef = (o: OutputSummary) => ({
+export const outputRef = (o: OutputSummary) => ({
   id: o.id,
   name: o.name,
   format: o.format,
@@ -103,7 +104,7 @@ export async function listTemplatesTool(
   }
 }
 
-async function resolveOutput(query: string): Promise<{ item: OutputSummary } | Fail> {
+export async function resolveOutput(query: string): Promise<{ item: OutputSummary } | Fail> {
   const direct = await getOutputSummary(query.trim())
   if (direct) return { item: direct }
   return pick('output', await listOutputs(), query)
@@ -254,5 +255,80 @@ export async function placeOutputTool(
       output: outputRef(found.item),
     },
     effects: { objects: [result.added] },
+  }
+}
+
+// Plain-text edits to an output's HTML/CSS as a new version: every find
+// must match (once, unless `all`), and the result must still be a document
+// composition can serve safely (docEdits.ts).
+export async function editOutputDocument(args: {
+  outputId: string
+  html?: TextEdit[]
+  css?: TextEdit[]
+  baseVersion?: number
+  note?: string
+  userId: string
+}): Promise<{ ok: true; version: number } | { ok: false; error: string }> {
+  const detail = await getOutputDetail(args.outputId)
+  if (!detail) return { ok: false, error: 'Output not found.' }
+  const latest = detail.output.latestVersion
+  if (args.baseVersion !== undefined && args.baseVersion !== latest) {
+    return {
+      ok: false,
+      error: `Someone saved v${latest} in the meantime — read the output again and redo the edits on top of it.`,
+    }
+  }
+  if (!args.html?.length && !args.css?.length) return { ok: false, error: 'No edits given.' }
+  const html = applyTextEdits(detail.version.html, args.html ?? [])
+  if (!html.ok) return { ok: false, error: `HTML — ${html.error}` }
+  const css = applyTextEdits(detail.version.css, args.css ?? [])
+  if (!css.ok) return { ok: false, error: `CSS — ${css.error}` }
+  const problems = documentProblems(html.text, css.text)
+  if (problems.length > 0) return { ok: false, error: problems.join('; ') }
+  const result = await addOutputVersion({
+    outputId: args.outputId,
+    patch: {
+      baseVersion: latest,
+      ...(args.html?.length ? { html: html.text } : {}),
+      ...(args.css?.length ? { css: css.text } : {}),
+      ...(args.note ? { note: args.note } : {}),
+    },
+    userId: args.userId,
+  })
+  if (!result.ok) {
+    return {
+      ok: false,
+      error:
+        result.status === 409
+          ? `Someone saved v${result.latest} in the meantime — read the output again and redo the edits on top of it.`
+          : result.error,
+    }
+  }
+  return { ok: true, version: result.version }
+}
+
+export async function updateOutputHtmlTool(
+  ctx: ToolContext,
+  input: {
+    output: string
+    html?: TextEdit[]
+    css?: TextEdit[]
+    baseVersion?: number
+    note?: string
+  },
+): Promise<ToolOutcome> {
+  const found = await resolveOutput(input.output)
+  if ('ok' in found) return found
+  const result = await editOutputDocument({ outputId: found.item.id, ...input, userId: ctx.userId })
+  if (!result.ok) return fail(result.error)
+  const detail = (await getOutputDetail(found.item.id, result.version))!
+  return {
+    ok: true,
+    payload: {
+      summary: `Edited “${detail.output.name}” — v${result.version}`,
+      output: outputRef(detail.output),
+      version: result.version,
+      slots: detail.version.slots,
+    },
   }
 }

@@ -5,6 +5,7 @@ import type {
   AgentStreamEvent,
   AgentToolResultBlock,
   AgentToolUseBlock,
+  DesignProgress,
 } from '@moodboard/shared'
 import type { ToolOutcome } from './canvasTools'
 import { DEEP_MODEL } from './modelTags'
@@ -34,9 +35,21 @@ export function anthropicModelClient(client: Anthropic): ModelClient {
   }
 }
 
+// The server's client, or null when no key is configured.
+export function defaultModelClient(): ModelClient | null {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  return apiKey ? anthropicModelClient(new Anthropic({ apiKey })) : null
+}
+
+export type ToolRunOptions = {
+  // A long tool (design_output) reports where it is; streamed, not stored.
+  onProgress?: (progress: DesignProgress) => void
+  signal?: AbortSignal
+}
+
 export type OrchestratorTools = {
   definitions: Anthropic.Tool[]
-  run: (name: string, input: unknown) => Promise<ToolOutcome>
+  run: (name: string, input: unknown, opts?: ToolRunOptions) => Promise<ToolOutcome>
 }
 
 export type OrchestratorStore = {
@@ -65,12 +78,20 @@ How to work:
 Clients, kits, assets and Linear:
 - Work is done for a client. list_clients shows the studio's clients and which one this board belongs to. A client's style kit holds its palette, fonts, logos, voice and imagery rules; "use the Acme kit" means get_style_kit with client "Acme". Read the kit before choosing colours or writing copy, and keep to its voice and its don'ts. list_kits shows what exists.
 - search_assets finds images, PDFs and fonts already in the asset library (by words, client or kind). Prefer library assets to inventing imagery.
-- A message may begin with a "[Linear issue LIN-123] …" block: that issue is the brief for the thread. Take the client from it (the block names the client when its team or project is mapped; otherwise use the board's client or ask), read that client's kit, and say what you would make before making it. get_linear_issue re-reads an issue or reads another. Linear is read-only here — never claim to have updated an issue.
+- A message may begin with a "[Linear issue LIN-123] …" block: that issue is the brief for the thread. Take the client from it (the block names the client when its team or project is mapped; otherwise use the board's client or ask) and read that client's kit. get_linear_issue re-reads an issue or reads another. The only write to Linear is post_linear_comment (below) — never claim to have changed an issue any other way.
 - If a client or kit can't be found, say so and list what does exist instead of guessing.
 
 Templates and outputs:
 - Designs are self-contained HTML outputs made from templates (list_templates: thumbnail, social post, 16:9 deck, landing page, one-pager, plus the team's own). A template's slots are named text or image fields; the client's kit skins it.
-- create_output makes one (template + client + kit + slot values); get_output reads it back; update_output_slots edits slots as a new version; place_output_on_board shows it on the canvas. Text slots are plain text — write copy in the kit's voice, no HTML. Image slots take a library asset URL from search_assets.
+- create_output makes one (template + client + kit + slot values); get_output reads it back; update_output_slots edits slots as a new version; update_output_html makes exact find/replace edits to its HTML/CSS (structure, layout, adding or removing deck slides); place_output_on_board shows it on the canvas. Text slots are plain text — write copy in the kit's voice, no HTML. Image slots take a library asset URL from search_assets. add_asset_to_board lays a library asset out on the canvas as a reference.
+
+Making designs ("I need X for client Y"):
+- design_output is the designer: it builds 2–3 distinct options (different templates, layouts or copy angles), renders each, critiques it visually and revises, and shows them to the user as cards with thumbnails. Use it for any request to make a thumbnail, social post, deck, landing page or one-pager; use create_output/update_output_* yourself only for small direct edits to an existing output.
+- Before calling it you need: the client (and its kit, when it has more than one), the format, and the core message. Audience and tone sharpen the brief; take them from the request, the kit's voice or the Linear issue, and only ask if nothing gives them. Ask for what's missing in one short message — never for what you already have — otherwise go straight to design_output. "Thumbnail for Acme's launch video, punchy, dark" is complete: client Acme, format thumbnail, message the launch, tone punchy and dark.
+- With a Linear issue attached, the issue is the brief: take the client from it (or the board), the format and message from its title and description, and pass its identifier as linearIssue. Don't re-ask what the issue says.
+- Write design_output's brief as the designer's whole brief: core message, audience, tone, must-include copy or facts, anything the issue or the user said to avoid. It reuses earlier results for an identical brief; pass regenerate:true only when the user asks for fresh options.
+- After it returns, don't describe every option in detail — the cards show them. One or two lines: what differs between the options and which you'd pick and why. The user picks on the card (or tells you; then call pick_design_variant).
+- post_linear_comment posts a picked option to the Linear issue with a share link and its thumbnail (pass design_output's runId as run to post whatever they picked on the card). Only when the user has picked an option and asks you to post it — never on your own initiative, never an option nobody picked. The card also has its own post button.
 
 Style: brief, specific, designer-to-designer. Plain sentences, light markdown at most, no headings, no emoji.`
 
@@ -130,7 +151,7 @@ function storableBlocks(content: Anthropic.ContentBlock[]): AgentContentBlock[] 
   return out
 }
 
-function describeModelError(e: unknown): string {
+export function describeModelError(e: unknown): string {
   if (e instanceof Anthropic.RateLimitError) {
     return 'The model is rate-limited right now. Give it a minute and try again.'
   }
@@ -254,7 +275,10 @@ export async function runOrchestrator({
     for (const use of toolUses) {
       let outcome: ToolOutcome
       try {
-        outcome = await tools.run(use.name, use.input)
+        outcome = await tools.run(use.name, use.input, {
+          signal,
+          onProgress: (progress) => emit({ type: 'tool-progress', toolUseId: use.id, progress }),
+        })
       } catch (e) {
         console.error('orchestrator tool failed', use.name, e)
         outcome = { ok: false, error: `Tool crashed: ${e instanceof Error ? e.message : e}` }

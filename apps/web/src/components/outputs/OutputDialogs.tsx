@@ -1,10 +1,4 @@
-import type {
-  BoardSummary,
-  LibraryAsset,
-  OutputDetail,
-  OutputShare,
-  TemplateSlot,
-} from '@moodboard/shared'
+import type { BoardSummary, LibraryAsset, OutputDetail, OutputShare } from '@moodboard/shared'
 import { slotNameSchema } from '@moodboard/shared'
 import { Check, Copy, UploadSimple } from '@phosphor-icons/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -384,7 +378,14 @@ function ShareBody({
 // Save as template
 // ---------------------------------------------------------------------------
 
-type SlotRow = { from: string; to: string; label: string; keep: boolean; kind: string }
+type SlotRow = {
+  from: string
+  to: string
+  label: string
+  keep: boolean
+  kind: string
+  sample: string
+}
 
 export function SaveTemplateDialog({
   open,
@@ -419,17 +420,18 @@ function SaveTemplateForm({
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    // The slot proposer: today the markers the output already has; Phase
-    // 24's agent will propose new ones through the same endpoint.
+    // The slot proposer: the markers the output already has, renamed and
+    // joined by new candidates (`from` = @n) when the server has a model.
     proposedSlots(detail.output.id, detail.version.version)
-      .then((slots: TemplateSlot[]) =>
+      .then((slots) =>
         setRows(
           slots.map((s) => ({
-            from: s.name,
+            from: s.from,
             to: s.name,
             label: s.label,
             keep: true,
             kind: s.kind,
+            sample: s.sample,
           })),
         ),
       )
@@ -520,7 +522,10 @@ function SaveTemplateForm({
       ) : (
         <ul className="flex max-h-[40vh] flex-col gap-1.5 overflow-y-auto px-1">
           {rows.map((r, i) => (
-            <li key={r.from} className="grid grid-cols-[24px_1fr_1fr_48px] items-center gap-2">
+            <li
+              key={r.from}
+              className="grid grid-cols-[24px_1fr_1fr_48px] items-center gap-x-2 gap-y-0.5"
+            >
               <input
                 type="checkbox"
                 checked={r.keep}
@@ -542,7 +547,19 @@ function SaveTemplateForm({
                 className={inputClass}
                 aria-label={`Label for ${r.from}`}
               />
-              <span className="text-xs text-[var(--text-mute)]">{r.kind}</span>
+              <span className="text-xs text-[var(--text-mute)]">
+                {r.kind}
+                {r.from.startsWith('@') && (
+                  <span className="ml-1 text-[var(--accent)]" title="Proposed new slot">
+                    new
+                  </span>
+                )}
+              </span>
+              {r.sample && r.kind === 'text' && (
+                <span className="col-span-3 col-start-2 truncate text-[11px] text-[var(--text-faint)]">
+                  {r.sample}
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -18,10 +18,10 @@ const definitions: Anthropic.Tool[] = CANVAS_TOOLS.map((tool) => {
 export function boardToolset(ctx: ToolContext): OrchestratorTools {
   return {
     definitions,
-    run: async (name, input) => {
+    run: async (name, input, opts) => {
       const tool = CANVAS_TOOLS.find((t) => t.name === name)
       if (!tool) return { ok: false, error: `Unknown tool: ${name}` }
-      return tool.run(ctx, input)
+      return tool.run({ ...ctx, ...opts }, input)
     },
   }
 }

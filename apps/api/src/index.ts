@@ -8,17 +8,20 @@ import { logger } from 'hono/logger'
 import { auth, type AuthSession, type AuthUser } from './auth'
 import { db } from './db'
 import { runMigrations } from './db/migrate'
+import { closeBrowser } from './lib/browser'
 import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
 import { syncStarterTemplates } from './lib/starterTemplates'
 import { ensureDataDirs } from './lib/storage'
-import { agentRoutes, defaultModelClient } from './routes/agent'
+import { defaultModelClient } from './lib/orchestrator'
+import { agentRoutes } from './routes/agent'
 import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
 import { boardGroups } from './routes/boardGroups'
 import { boards } from './routes/boards'
 import { clients } from './routes/clients'
 import { connections } from './routes/connections'
+import { designRuns } from './routes/designRuns'
 import { external } from './routes/external'
 import { files } from './routes/files'
 import { kits } from './routes/kits'
@@ -142,6 +145,7 @@ api.route('/library', library)
 api.route('/templates', templates)
 api.route('/outputs', outputs)
 api.route('/output-shares', outputShares)
+api.route('/design-runs', designRuns)
 api.route('/linear', linear)
 api.route('/external', external)
 api.route('/voice', voice)
@@ -157,6 +161,15 @@ await ensureDataDirs()
 await syncStarterTemplates()
 startMaintenance()
 
-serve({ fetch: app.fetch, port }, (info) => {
+const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`)
 })
+
+// The shared headless Chromium (PDFs, output frames) is a child process;
+// close it with the server rather than leaving it to the OS.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    server.close()
+    void closeBrowser().finally(() => process.exit(0))
+  })
+}

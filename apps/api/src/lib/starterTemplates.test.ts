@@ -7,10 +7,11 @@ import {
   kitTokensSchema,
   type KitTokens,
 } from '@moodboard/shared'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { chromium, type Browser } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { chromiumAvailable, chromiumExecutablePath } from './browser'
 import { composeDocument } from './compose'
 import { loadStarterTemplates, type StarterTemplate } from './starterTemplateFiles'
 
@@ -79,8 +80,8 @@ describe('starter templates', () => {
 // Standalone render: each starter composed with two different kits, loaded
 // with every network request refused, animations seeked to their end (as
 // the Phase 25 renderer will), then checked and screenshotted. Needs a
-// Chromium: Playwright's own build, or CHROMIUM_PATH; skipped where there is
-// none (CI). OUTPUT_SHOTS_DIR saves each screenshot and document.
+// Chromium: Playwright's own build (CI installs it), or CHROMIUM_PATH; skipped
+// where there is none. OUTPUT_SHOTS_DIR saves each screenshot and document.
 // ---------------------------------------------------------------------------
 
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="60" viewBox="0 0 240 60"><rect width="60" height="60" rx="14" fill="#F3B61F"/><text x="74" y="42" font-family="Georgia" font-size="34" fill="#F4F1EA">Ember</text></svg>`
@@ -123,14 +124,8 @@ const KITS: { name: string; tokens: KitTokens; assets: Map<string, string> }[] =
 ]
 
 const SHOTS = process.env.OUTPUT_SHOTS_DIR
-const executablePath = process.env.CHROMIUM_PATH || undefined
-const hasChromium = (() => {
-  try {
-    return existsSync(executablePath ?? chromium.executablePath())
-  } catch {
-    return false
-  }
-})()
+const executablePath = chromiumExecutablePath()
+const hasChromium = chromiumAvailable()
 
 describe.skipIf(!hasChromium)('starter templates render standalone', () => {
   let browser: Browser

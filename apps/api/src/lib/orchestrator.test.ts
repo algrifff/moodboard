@@ -177,6 +177,32 @@ describe('runOrchestrator', () => {
     expect(h.calls).toHaveLength(2)
   })
 
+  it('streams a long tool’s progress, keyed by its tool_use id, without storing it', async () => {
+    const h = harness([
+      { tools: [{ id: 'tu_design', name: 'get_board', input: {} }] },
+      { text: 'Three options are up.' },
+    ])
+    h.tools.run = async (_name, _input, opts) => {
+      opts?.onProgress?.({ variant: 1, of: 3, stage: 'rendering' })
+      opts?.onProgress?.({ variant: 1, of: 3, stage: 'done', detail: 'Liftoff' })
+      return { ok: true, payload: { summary: 'ran' } }
+    }
+    await runOrchestrator({ ...h, history: [userMessage('design it')] })
+    expect(h.events.filter((e) => e.type === 'tool-progress')).toEqual([
+      {
+        type: 'tool-progress',
+        toolUseId: 'tu_design',
+        progress: { variant: 1, of: 3, stage: 'rendering' },
+      },
+      {
+        type: 'tool-progress',
+        toolUseId: 'tu_design',
+        progress: { variant: 1, of: 3, stage: 'done', detail: 'Liftoff' },
+      },
+    ])
+    expect(JSON.stringify(h.stored)).not.toContain('rendering')
+  })
+
   it('caches the system prompt and the tool definitions', async () => {
     const h = harness([{ text: 'ok' }])
     await runOrchestrator({ ...h, history: [userMessage('hi')] })

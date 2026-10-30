@@ -8,10 +8,11 @@ import {
 } from '@moodboard/shared'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db'
-import { searchAssets } from './assetLibrary'
+import { getLibraryAsset, searchAssets } from './assetLibrary'
 import type { ToolContext, ToolOutcome } from './canvasTools'
 import { getClient, listClients } from './clients'
 import { getKitDetail, listKits } from './kits'
+import { addAssetToBoard } from './libraryBoard'
 import { LinearApiError } from './linear'
 import { clientNameFor, getIssueDetail, LinearUnavailableError } from './linearConnection'
 
@@ -228,5 +229,39 @@ export async function getLinearIssueTool(
     if (e instanceof LinearUnavailableError) return fail(e.message)
     if (e instanceof LinearApiError) return fail(`Linear request failed: ${e.message}`)
     throw e
+  }
+}
+
+// Lays a library asset out on this board as the canvas object it would have
+// been had it been uploaded here (image, PDF or font specimen).
+export async function addAssetToBoardTool(
+  ctx: ToolContext,
+  input: { asset: string; x?: number; y?: number },
+): Promise<ToolOutcome> {
+  const ref = input.asset.trim()
+  let id = ref
+  const file = /^\/api\/files\/([A-Za-z0-9_-]+\.[A-Za-z0-9]+)$/.exec(ref)?.[1]
+  if (file) {
+    const [row] = await db
+      .select({ id: schema.asset.id })
+      .from(schema.asset)
+      .where(eq(schema.asset.filename, file))
+      .limit(1)
+    if (!row) return fail(`No library asset has the url ${ref}.`)
+    id = row.id
+  }
+  const asset = await getLibraryAsset(id)
+  if (!asset) return fail(`No library asset “${ref}” — use an id or url from search_assets.`)
+  const at = input.x !== undefined && input.y !== undefined ? { x: input.x, y: input.y } : undefined
+  const result = await addAssetToBoard(asset.id, ctx.boardId, ctx.userId, at)
+  if (!result.ok) return fail(result.error)
+  return {
+    ok: true,
+    payload: {
+      summary: `Added ${asset.name} to the board`,
+      objectIds: [result.added.object.id],
+      asset: { id: asset.id, name: asset.name, kind: asset.kind, url: asset.url },
+    },
+    effects: { objects: [result.added] },
   }
 }

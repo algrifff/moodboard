@@ -19,7 +19,8 @@ concurrency:
 jobs:
   check:
     name: format / typecheck / test
-    runs-on: ubuntu-latest
+    # Pinned: Playwright 1.60 has no Chromium deps for ubuntu-latest (26.04).
+    runs-on: ubuntu-24.04
     # Real Postgres so the board-object versioning tests run against the
     # actual migrations (they skip when DATABASE_URL is unset).
     services:
@@ -55,6 +56,12 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      # The frame renderer and starter-template tests drive a real headless
+      # Chromium; without one they skip. Install the build this Playwright
+      # version expects (plus its system libraries).
+      - name: Install Chromium
+        run: pnpm --filter @moodboard/api exec playwright install --with-deps chromium
 
       - name: Format check
         run: pnpm format:check

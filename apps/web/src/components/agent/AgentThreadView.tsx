@@ -18,7 +18,7 @@ import { AgentToolCard, foldToolCalls, type ToolCall } from './AgentToolCard'
 
 const SUGGESTIONS = [
   'Pull the selected items into a group and give me a brief',
-  'What’s on this board so far?',
+  'Thumbnail for our launch video — punchy, dark',
   'Which style kits do we have?',
 ]
 
@@ -206,8 +206,9 @@ function EmptyThread({ boardId }: { boardId: string }) {
           What should we make of this board?
         </div>
         <p className="mt-1.5 text-[12.5px] leading-relaxed text-[var(--text-mute)]">
-          The agent can read the board, add notes and links, pull items into groups and run the
-          specialists for a brief. Select items on the canvas to point at them.
+          The agent can read the board, pull items into groups and run the specialists for a brief,
+          and design thumbnails, decks and pages in the client’s kit. Select items on the canvas to
+          point at them.
         </p>
       </div>
       <div className="flex flex-col gap-1.5">

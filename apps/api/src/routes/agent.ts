@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import {
   createAgentThreadRequestSchema,
   deriveThreadTitle,
@@ -27,15 +26,10 @@ import { boardContext } from '../lib/agentContext'
 import { boardToolset } from '../lib/agentToolset'
 import { LinearApiError } from '../lib/linear'
 import { clientNameFor, getIssueDetail, LinearUnavailableError } from '../lib/linearConnection'
-import { anthropicModelClient, runOrchestrator, type ModelClient } from '../lib/orchestrator'
+import { runOrchestrator, type ModelClient } from '../lib/orchestrator'
 import { rateLimit } from '../lib/rateLimit'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
-
-export function defaultModelClient(): ModelClient | null {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  return apiKey ? anthropicModelClient(new Anthropic({ apiKey })) : null
-}
 
 // One run per thread at a time on this instance — a second send while the
 // first is streaming would interleave two loops over the same history.
@@ -155,7 +149,7 @@ export function agentRoutes(modelClient: ModelClient | null) {
         await runOrchestrator({
           history: [...prior, userMessage],
           client: modelClient,
-          tools: boardToolset({ boardId, userId: user.id }),
+          tools: boardToolset({ boardId, userId: user.id, model: modelClient }),
           store: {
             append: (role, content, isError) => appendMessage(thread.id, role, content, isError),
           },

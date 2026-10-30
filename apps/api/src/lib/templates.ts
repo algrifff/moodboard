@@ -1,14 +1,10 @@
 import {
-  labelSlot,
   outputFormatSchema,
-  removeSlot,
-  renameSlot,
   slotSchema,
   templateViewportSchema,
   type OutputFormat,
   type TemplateDetail,
   type TemplateSlot,
-  type TemplateSlotEdit,
   type TemplateSummary,
   type TemplateViewport,
   type VersionMeta,
@@ -224,27 +220,3 @@ export async function deleteTemplate(id: string): Promise<DeleteTemplateResult> 
   await db.delete(schema.template).where(eq(schema.template.id, id))
   return 'deleted'
 }
-
-// Save as template: applies the editor's marker edits to the output's HTML.
-// Unknown names are ignored; a rename onto an existing name merges the two.
-export function applySlotEdits(html: string, edits: TemplateSlotEdit[]): string {
-  let out = html
-  // Labels first, under the old names, then renames/removals.
-  for (const e of edits) {
-    if (e.to !== null && e.label) out = labelSlot(out, e.from, e.label)
-  }
-  for (const e of edits) {
-    if (e.to === null) out = removeSlot(out, e.from)
-    else if (e.to !== e.from) out = renameSlot(out, e.from, e.to)
-  }
-  return out
-}
-
-// The hook Phase 24's agent plugs into: given a document, propose slot
-// markers. Without a model it is deterministic — the markers the document
-// already has, with their labels — and the person names/renames them in the
-// save-as-template editor.
-export type SlotProposal = { name: string; kind: 'text' | 'image'; label: string }
-export type SlotProposer = (doc: { html: string; css: string }) => Promise<SlotProposal[]>
-
-export const existingMarkers: SlotProposer = async ({ html }) => slotSchema(html)

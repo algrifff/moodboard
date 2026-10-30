@@ -8,6 +8,7 @@ import { desc, eq, and } from 'drizzle-orm'
 import { db, schema } from '../db'
 import { decryptToken, encryptToken } from './cryptoTokens'
 import {
+  canComment,
   LinearApiError,
   linearApi,
   linearEnv,
@@ -90,8 +91,9 @@ export async function listLinearMappings(): Promise<LinearMapping[]> {
 }
 
 // A ready API client for this user, or a LinearUnavailableError saying
-// which step is missing.
-export async function linearForUser(userId: string) {
+// which step is missing. `comment` also requires a connection that may post
+// comments (made after Phase 24 added that scope).
+export async function linearForUser(userId: string, opts: { comment?: boolean } = {}) {
   if (!linearEnv()) {
     throw new LinearUnavailableError(
       'not-configured',
@@ -103,6 +105,12 @@ export async function linearForUser(userId: string) {
     throw new LinearUnavailableError(
       'not-connected',
       'Linear isn’t connected. Connect it from the Sources drawer or Settings.',
+    )
+  }
+  if (opts.comment && !canComment(row.scopes)) {
+    throw new LinearUnavailableError(
+      'reconnect',
+      'Your Linear connection is read-only. Reconnect Linear (Settings → Linear) to let the studio post comments.',
     )
   }
   try {

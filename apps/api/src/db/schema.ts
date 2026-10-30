@@ -594,3 +594,50 @@ export const outputShare = pgTable(
   },
   (t) => ({ outputIdx: uniqueIndex('output_share_output_idx').on(t.outputId) }),
 )
+
+// Phase 24 — design runs. The designer agent asked for a format + brief
+// returns 1–3 variants, each an output it built, rendered and critiqued
+// (`variants` is the DesignVariant[] it reported). The person picks one
+// (`chosen_output_id`); only a picked variant can be posted back to the run's
+// Linear issue.
+export const designRun = pgTable(
+  'design_run',
+  {
+    id: text('id').primaryKey(),
+    boardId: text('board_id').references(() => board.id, { onDelete: 'set null' }),
+    format: text('format').notNull(),
+    brief: text('brief').notNull(),
+    clientId: text('client_id').references(() => client.id, { onDelete: 'set null' }),
+    kitId: text('kit_id').references(() => styleKit.id, { onDelete: 'set null' }),
+    kitVersion: integer('kit_version'),
+    linearIssue: text('linear_issue'),
+    variants: jsonb('variants').notNull().default([]),
+    chosenOutputId: text('chosen_output_id').references(() => output.id, {
+      onDelete: 'set null',
+    }),
+    linearCommentUrl: text('linear_comment_url'),
+    postedAt: timestamp('posted_at'),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    boardIdx: index('design_run_board_id_idx').on(t.boardId),
+    clientIdx: index('design_run_client_id_idx').on(t.clientId),
+    kitIdx: index('design_run_kit_id_idx').on(t.kitId),
+    chosenIdx: index('design_run_chosen_output_id_idx').on(t.chosenOutputId),
+    createdByIdx: index('design_run_created_by_idx').on(t.createdBy),
+  }),
+)
+
+// The designer's AI cache, one row per variant. Key = sha256 of (brief +
+// client + kit version + candidate template versions + the client's asset
+// ids + format + variant index + model tag) — lib/designHash.ts. A hit
+// reuses the variant's output instead of re-running the model; a hit whose
+// output has since been deleted counts as a miss.
+export const designCache = pgTable('design_cache', {
+  cacheKey: text('cache_key').primaryKey(),
+  model: text('model').notNull(),
+  result: jsonb('result').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})

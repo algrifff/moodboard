@@ -1,29 +1,4 @@
-import { chromium, type Browser } from 'playwright'
-
-// Module-level Chromium instance, reused across PDF requests. Cold launch
-// costs ~1.5s; keeping one open trims subsequent renders to ~600ms. The
-// process exits with the API server so we don't need explicit teardown.
-let browserPromise: Promise<Browser> | null = null
-
-function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = chromium
-      .launch({
-        // --no-sandbox is required on Railway / most container hosts
-        // where user namespaces aren't available. Safe here because
-        // the viewer page we render is *our* page; no untrusted JS.
-        args: ['--no-sandbox', '--disable-dev-shm-usage'],
-        headless: true,
-      })
-      .catch((e) => {
-        // Reset so the next call retries the launch rather than
-        // permanently failing with the same rejected promise.
-        browserPromise = null
-        throw e
-      })
-  }
-  return browserPromise
-}
+import { getBrowser } from './browser'
 
 // 30s ceiling — the viewer rarely takes more than 5s in practice (Konva
 // hydrate + image loads) but a slow network image shouldn't hang the

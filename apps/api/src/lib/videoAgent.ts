@@ -18,6 +18,7 @@ import { z } from 'zod'
 import type { TextEdit } from './docEdits'
 import {
   assetLine,
+  figmaLookResult,
   figmaSection,
   GET_FIGMA_FRAME_SHAPE,
   DESIGNER_MAX_FIGMA_LOOKS,
@@ -430,16 +431,7 @@ export async function runVideoAgent({
         state.figmaLooks++
         progress('reference', typeof input.frame === 'string' ? input.frame : undefined)
         const r = await toolbox.getFigmaFrame(input.frame as string)
-        if (!r.ok) return err(use.id, r.error)
-        const content: ResultContent[] = []
-        if (r.png) {
-          content.push({
-            type: 'image',
-            source: { type: 'base64', media_type: 'image/png', data: r.png.toString('base64') },
-          })
-        }
-        content.push({ type: 'text', text: r.text })
-        return { type: 'tool_result', tool_use_id: use.id, content }
+        return r.ok ? figmaLookResult(use.id, r) : err(use.id, r.error)
       }
       case 'render_key_frames': {
         const missing = needsOutput()

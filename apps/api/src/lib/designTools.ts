@@ -37,7 +37,7 @@ function describeMatch<T extends { name: string }>(
   return fail(`No ${noun} matches “${query}”.`)
 }
 
-async function boardClientId(boardId: string): Promise<string | null> {
+export async function boardClientId(boardId: string): Promise<string | null> {
   const [row] = await db
     .select({ clientId: schema.board.clientId })
     .from(schema.board)

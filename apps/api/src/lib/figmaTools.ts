@@ -1,7 +1,5 @@
 import { matchNamed, parseFigmaUrl, type FigmaRef } from '@moodboard/shared'
-import { eq } from 'drizzle-orm'
 import { readFile } from 'node:fs/promises'
-import { db, schema } from '../db'
 import {
   boardFigmaFrames,
   placeFigmaFrame,
@@ -11,6 +9,7 @@ import {
 import type { ToolContext, ToolImage, ToolOutcome } from './canvasTools'
 import { listClients } from './clients'
 import { FigmaApiError } from './figma'
+import { boardClientId } from './designTools'
 import { figmaForUser, FigmaUnavailableError } from './figmaConnection'
 import {
   describeFrames,
@@ -135,15 +134,6 @@ export function referenceText(ref: FigmaReference): string {
     structure:
       ref.structure ?? '(no structure stored for this frame — refresh the card to read its layers)',
   })
-}
-
-async function boardClientId(boardId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ clientId: schema.board.clientId })
-    .from(schema.board)
-    .where(eq(schema.board.id, boardId))
-    .limit(1)
-  return row?.clientId ?? null
 }
 
 // Figma problems the model can act on become tool errors; anything else is a bug.

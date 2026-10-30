@@ -170,6 +170,33 @@ export const GET_FIGMA_FRAME_SHAPE = {
   input: { frame: z.string().min(1).max(300).describe('The frame’s name from your brief.') },
 }
 
+// The result of get_figma_frame: the picture (when the render is still there)
+// and the layer outline. Shared with the video agent.
+export function figmaLookResult(
+  toolUseId: string,
+  look: { png: Buffer | null; text: string },
+): Anthropic.ToolResultBlockParam {
+  return {
+    type: 'tool_result',
+    tool_use_id: toolUseId,
+    content: [
+      ...(look.png
+        ? [
+            {
+              type: 'image' as const,
+              source: {
+                type: 'base64' as const,
+                media_type: 'image/png' as const,
+                data: look.png.toString('base64'),
+              },
+            },
+          ]
+        : []),
+      { type: 'text' as const, text: look.text },
+    ],
+  }
+}
+
 export function figmaSection(frames: DesignFigmaFrame[]): string | null {
   if (frames.length === 0) return null
   return [
@@ -555,26 +582,7 @@ export async function runDesignVariant({
         state.figmaLooks++
         progress('reference', typeof input.frame === 'string' ? input.frame : undefined)
         const r = await toolbox.getFigmaFrame(input.frame as string)
-        if (!r.ok) return err(use.id, r.error)
-        return {
-          type: 'tool_result',
-          tool_use_id: use.id,
-          content: [
-            ...(r.png
-              ? [
-                  {
-                    type: 'image' as const,
-                    source: {
-                      type: 'base64' as const,
-                      media_type: 'image/png' as const,
-                      data: r.png.toString('base64'),
-                    },
-                  },
-                ]
-              : []),
-            { type: 'text' as const, text: r.text },
-          ],
-        }
+        return r.ok ? figmaLookResult(use.id, r) : err(use.id, r.error)
       }
       case 'render_output_frame': {
         const missing = needsOutput()

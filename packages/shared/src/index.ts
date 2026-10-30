@@ -23,3 +23,7 @@ export * from './kits'
 export * from './kitCss'
 export * from './library'
 export * from './linear'
+
+// Phase 23 — templates + outputs (HTML), the data-slot contract.
+export * from './slots'
+export * from './outputs'

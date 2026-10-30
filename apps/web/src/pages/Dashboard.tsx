@@ -291,6 +291,23 @@ function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
   if (o.type === 'font') {
     return <FontPreviewCell o={o} />
   }
+  if (o.type === 'output') {
+    // A design output card: a framed panel, no document render.
+    const r = Math.min(o.w, o.h) * 0.04
+    return (
+      <rect
+        x={o.x}
+        y={o.y}
+        width={o.w}
+        height={o.h}
+        rx={r}
+        fill="var(--bg-elevated)"
+        stroke="var(--accent)"
+        strokeOpacity={0.6}
+        strokeWidth={Math.max(2, o.w * 0.012)}
+      />
+    )
+  }
   // Text — render as a faint underline at the baseline. No content, no
   // height ratios; just enough to communicate "text is here".
   return (

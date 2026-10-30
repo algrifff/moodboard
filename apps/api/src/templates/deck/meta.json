@@ -1,0 +1,5 @@
+{
+  "name": "16:9 deck",
+  "format": "deck",
+  "viewport": { "kind": "fixed", "width": 1920, "height": 1080 }
+}

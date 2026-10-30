@@ -4,6 +4,7 @@ import type {
   DriveFolderData,
   FontData,
   ImageData,
+  OutputCardData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
   SpotifyTrackData,
@@ -102,6 +103,12 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       // excluded for the same reason as everywhere else.
       const d = o.data as VoiceNoteData
       parts.push(`${o.id}|voice-note|${d.url}|${d.durationSec}|${d.transcript}`)
+    } else if (o.type === 'output') {
+      // The AD reads an output card as its name + format. Card geometry
+      // (width/height) is presentation; the output's own edits don't reach
+      // the prompt, so they mustn't bust the cache either.
+      const d = o.data as OutputCardData
+      parts.push(`${o.id}|output|${d.outputId}|${d.name}|${d.format}`)
     }
   }
   return createHash('sha256')

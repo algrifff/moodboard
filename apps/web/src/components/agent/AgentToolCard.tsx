@@ -18,6 +18,8 @@ import {
   Palette,
   Swatches,
   Image as ImageIcon,
+  Layout,
+  PencilSimple,
   LinkSimple,
   NoteBlank,
   Sparkle,
@@ -27,7 +29,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react'
 import { AGENT_META } from '@/components/canvas/AgentRow'
-import { AssetsToolCard, KitToolCard } from './DesignToolCards'
+import { AssetsToolCard, KitToolCard, OutputToolCard } from './DesignToolCards'
 import { ArtDirectorGlance } from '@/components/canvas/readouts/ArtDirectorReadout'
 import { BriefGlance } from '@/components/canvas/readouts/BriefReadout'
 import { SectionedGlance } from '@/components/canvas/readouts/SectionedReadout'
@@ -49,6 +51,11 @@ const TOOL_META: Record<string, { icon: Icon; running: string }> = {
   get_style_kit: { icon: Palette, running: 'Reading the style kit' },
   search_assets: { icon: Images, running: 'Searching the asset library' },
   get_linear_issue: { icon: LinkSimple, running: 'Reading the Linear issue' },
+  list_templates: { icon: Layout, running: 'Looking up templates' },
+  create_output: { icon: Layout, running: 'Creating an output' },
+  get_output: { icon: Layout, running: 'Reading the output' },
+  update_output_slots: { icon: PencilSimple, running: 'Editing the output' },
+  place_output_on_board: { icon: Layout, running: 'Placing the output' },
 }
 
 // Consecutive successful adds of one kind fold into one card.
@@ -119,6 +126,14 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
 
   if (first.use.name === 'get_style_kit' && payload.kit) {
     return <KitToolCard payload={payload} title={title} />
+  }
+  if (
+    (first.use.name === 'create_output' ||
+      first.use.name === 'update_output_slots' ||
+      first.use.name === 'get_output') &&
+    payload.output
+  ) {
+    return <OutputToolCard payload={payload} title={title} />
   }
   if (first.use.name === 'search_assets') {
     return <AssetsToolCard payload={payload} title={title} />

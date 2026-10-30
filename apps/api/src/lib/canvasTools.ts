@@ -1,6 +1,9 @@
 import {
   agentIdSchema,
   assetMediaKindSchema,
+  outputFormatSchema,
+  slotNameSchema,
+  SLOT_TEXT_MAX,
   groupId,
   proximityGroups,
   type AgentToolPayload,
@@ -34,6 +37,13 @@ import {
   searchAssetsTool,
 } from './designTools'
 import { analysisNotConfigured, runAgentOnGroup, runSynthesisOnGroup } from './groupAnalysis'
+import {
+  createOutputTool,
+  getOutputTool,
+  listTemplatesTool,
+  placeOutputTool,
+  updateOutputSlotsTool,
+} from './outputTools'
 import { listGroupStates } from './groupState'
 import { routeUrlToImporter, type DispatchOk } from './mcpUrlDispatch'
 import { saveImageFromUrl } from './saveImageFromUrl'
@@ -219,6 +229,8 @@ export function objectLabel(o: CanvasObject): string {
       return clip(str('name') || str('filename') || 'PDF')
     case 'image':
       return str('url')
+    case 'output':
+      return clip(str('name'))
   }
 }
 
@@ -674,6 +686,79 @@ const getLinearIssue = defineTool({
   run: (ctx, input) => getLinearIssueTool(ctx, input),
 })
 
+// ---------------------------------------------------------------------------
+// Templates + outputs (bodies in outputTools.ts)
+// ---------------------------------------------------------------------------
+
+const outputQuery = z.string().min(1).max(200).describe('Output id (from create_output) or name.')
+const slotValues = z
+  .record(slotNameSchema, z.string().max(SLOT_TEXT_MAX))
+  .describe(
+    'Slot name → value. Text slots take plain text (escaped; newlines become line breaks — no HTML). Image slots take a library asset URL from search_assets, e.g. /api/files/abc.png.',
+  )
+
+const listTemplatesDef = defineTool({
+  name: 'list_templates',
+  title: 'List templates',
+  description:
+    "List design templates — self-contained HTML/CSS for a format (thumbnail 1280×720, social 1080×1080, 16:9 deck, responsive landing page, A4 one-pager, or the team's own) — with each one's slots (name, kind text|image, label). Templates are style-agnostic: a client's kit skins them. Optionally filter by format or client (a client also sees the general templates).",
+  input: {
+    format: outputFormatSchema.optional(),
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+  },
+  run: (ctx, input) => listTemplatesTool(ctx, input),
+})
+
+const createOutputDef = defineTool({
+  name: 'create_output',
+  title: 'Create an output',
+  description:
+    "Create a design output from a template for a client, skinned with one of the client's style kits, optionally filling slots. Defaults: client = this board's client; kit = the client's only kit (otherwise the neutral house style). Unfilled slots keep the template's default copy. Returns the output id, its URL and its slots. The output belongs to this board; use place_output_on_board to show it on the canvas.",
+  input: {
+    template: z.string().min(1).describe('Template name or id from list_templates.'),
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+    kit: z.string().min(1).optional().describe("Kit name or id (one of the client's kits)."),
+    name: z.string().min(1).max(120).optional().describe('Defaults to the template name.'),
+    slots: slotValues.optional(),
+  },
+  run: (ctx, input) => createOutputTool(ctx, input),
+})
+
+const getOutputDef = defineTool({
+  name: 'get_output',
+  title: 'Read an output',
+  description:
+    "Read an output: its slots (label, kind, current value, template default), template and kit versions, recent versions, and a summary of the composed document (size, assets that couldn't be inlined). Pass includeSource:true for the HTML and CSS themselves. Defaults to the latest version.",
+  input: {
+    output: outputQuery,
+    version: z.number().int().min(1).optional(),
+    includeSource: z.boolean().optional(),
+  },
+  run: (ctx, input) => getOutputTool(ctx, input),
+})
+
+const updateOutputSlotsDef = defineTool({
+  name: 'update_output_slots',
+  title: 'Edit output slots',
+  description:
+    "Set slot values on an output, creating a new version (old versions are kept). Values merge into the current ones; null resets a slot to its template default. Pass baseVersion (from get_output) to be told instead of building on a teammate's newer save.",
+  input: {
+    output: outputQuery,
+    slots: z.record(slotNameSchema, z.string().max(SLOT_TEXT_MAX).nullable()),
+    baseVersion: z.number().int().min(1).optional(),
+  },
+  run: (ctx, input) => updateOutputSlotsTool(ctx, input),
+})
+
+const placeOutputDef = defineTool({
+  name: 'place_output_on_board',
+  title: 'Put an output on the board',
+  description:
+    'Drop an output onto this board as a live card that previews the latest version. Lands in free space unless x/y (world px, card centre) are given.',
+  input: { output: outputQuery, x: z.number().optional(), y: z.number().optional() },
+  run: (ctx, input) => placeOutputTool(ctx, input),
+})
+
 export const CANVAS_TOOLS: CanvasTool[] = [
   getBoard,
   addNote,
@@ -688,4 +773,9 @@ export const CANVAS_TOOLS: CanvasTool[] = [
   getStyleKit,
   searchAssets,
   getLinearIssue,
+  listTemplatesDef,
+  createOutputDef,
+  getOutputDef,
+  updateOutputSlotsDef,
+  placeOutputDef,
 ]

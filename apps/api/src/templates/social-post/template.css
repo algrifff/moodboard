@@ -1,0 +1,183 @@
+/* 1080×1080. Reads only --kit-* variables; html[data-kit-logo] is set by
+   the composer. Motion is CSS keyframes only (seekable). */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html,
+body {
+  width: 1080px;
+  height: 1080px;
+  overflow: hidden;
+}
+
+body {
+  background: var(--kit-color-primary);
+  color: var(--kit-color-on-primary);
+  font-family: var(--kit-font-body);
+  font-weight: var(--kit-font-body-weight);
+  -webkit-font-smoothing: antialiased;
+}
+
+.post {
+  position: relative;
+  width: 1080px;
+  height: 1080px;
+  overflow: hidden;
+}
+
+.media {
+  position: absolute;
+  inset: 0 0 34% 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--kit-color-primary) 82%, var(--kit-color-on-primary));
+  animation: settle 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.media-art {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 80% 30%, var(--kit-color-accent) 0 24%, transparent 24.2%),
+    radial-gradient(
+      circle at 22% 66%,
+      transparent 0 17%,
+      color-mix(in srgb, var(--kit-color-on-primary) 35%, transparent) 17.2% 17.6%,
+      transparent 17.8%
+    ),
+    radial-gradient(
+      circle at 22% 66%,
+      color-mix(in srgb, var(--kit-color-on-primary) 12%, transparent) 0 6%,
+      transparent 6.2%
+    );
+}
+
+.media img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--kit-color-primary) 40%, transparent) 0%,
+    transparent 20%,
+    transparent 55%,
+    var(--kit-color-primary) 100%
+  );
+}
+
+.top {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  top: 64px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  animation: rise 640ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.logo {
+  display: block;
+  width: 180px;
+  height: 48px;
+  background: var(--kit-logo) left center / contain no-repeat;
+}
+
+.wordmark {
+  font-family: var(--kit-font-display);
+  font-weight: var(--kit-font-display-weight);
+  font-size: 30px;
+  letter-spacing: -0.01em;
+}
+
+[data-kit-logo='none'] .logo,
+[data-kit-logo='present'] .wordmark {
+  display: none;
+}
+
+.eyebrow {
+  margin-left: auto;
+  padding: 10px 18px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--kit-color-primary) 70%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--kit-color-on-primary) 45%, transparent);
+  font-family: var(--kit-font-mono);
+  font-weight: var(--kit-font-mono-weight);
+  font-size: 20px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.body {
+  position: absolute;
+  left: 72px;
+  right: 72px;
+  bottom: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.headline {
+  font-family: var(--kit-font-display);
+  font-weight: var(--kit-font-display-weight);
+  font-size: 82px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  animation: rise 720ms 120ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.sub {
+  max-width: 780px;
+  font-size: 32px;
+  line-height: 1.3;
+  opacity: 0.86;
+  animation: rise 720ms 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.cta {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 16px 28px;
+  border-radius: 999px;
+  background: var(--kit-color-accent);
+  color: var(--kit-color-on-accent);
+  font-size: 26px;
+  font-weight: 600;
+  animation: rise 720ms 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+  }
+}

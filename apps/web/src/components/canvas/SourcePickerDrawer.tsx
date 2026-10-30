@@ -11,6 +11,7 @@ import { isPickerConnection, useSourcePickerStore } from '@/store/sourcePicker'
 import { AddSourceSection } from './sourcePicker/ConnectSources'
 import { ConnectionSection } from './sourcePicker/ConnectionSection'
 import { LibrarySection } from './sourcePicker/LibrarySection'
+import { OutputsSection } from './sourcePicker/OutputsSection'
 import { LinearSection } from './sourcePicker/LinearSection'
 import { RecentsSection } from './sourcePicker/RecentsSection'
 import { spawnDriveAtViewportCenter, spawnSpotifyAtViewportCenter } from './sourcePicker/spawn'
@@ -30,6 +31,7 @@ import { showToast } from './Toast'
 //   │ └────────────────────────────────────────┘│
 //   │                                            │
 //   │  Asset library     (click or drag to add)  │
+//   │  Outputs           (click to add)          │
 //   │  Linear            (pick an issue → thread)│
 //   │                                            │
 //   │  Recently added                            │
@@ -245,6 +247,7 @@ function DrawerContent({
           onConnectLinear={() => void connectLinear()}
         />
         <LibrarySection boardId={boardId} query={query} />
+        <OutputsSection boardId={boardId} query={query} />
         <LinearSection boardId={boardId} query={query} />
         {!query && pickerConnections.length > 0 && (
           <RecentsSection

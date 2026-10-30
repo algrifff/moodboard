@@ -100,6 +100,16 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 
 Every design the agents produce is a self-contained HTML/CSS document — no PPTX, no PDF export, no image generation, no new rendering libraries. Video is the same HTML on a seekable CSS/WAAPI timeline, captured by Playwright + ffmpeg. See the roadmap in PLAN.md.
 
+- **Templates and outputs are versioned text in Postgres.** `template_version` / `output_version` rows are immutable (HTML + CSS + slot values + pinned kit version); edits append, restores copy forward, stale `baseVersion` → 409. Same rules as kits.
+- **The slot contract** (`packages/shared/src/slots.ts`): `data-slot="name"` (lowercase, digits, dashes) on an `<img>` is an image slot (value replaces `src`), on anything else a text slot (value replaces the content). The markup inside is the default; a missing value keeps it; a name may repeat. `data-slot-label` is the label — the HTML is the single source of truth, the `slots` column is a cache. Parse/fill/rename only through these helpers, never ad-hoc regex.
+- **Slot values are never markup.** Text is escaped, newlines become `<br>`. Image values must be library files (`/api/files/<name>`, `isSlotImageValue`). Structure lives in the output's HTML, which agents edit directly.
+- **Templates read only the fixed `--kit-*` variables** (plus custom properties they define), with motion as CSS keyframes/WAAPI only — no `setTimeout`/rAF. The composer sets `html[data-kit-logo="present|none"]` so a template can swap a logo for a wordmark. `starterTemplates.test.ts` enforces both for the starters.
+- **Starter templates are files** in `apps/api/src/templates/<key>/` (`meta.json`, `template.html`, `template.css`, optional `template.js`), synced on boot by key: changed files append a version. Edit the files, not the DB.
+- **Compose, don't serve parts.** `lib/compose.ts` builds the one document every surface uses (preview, share, download, board card, Phase 25 renderer): template HTML with slots filled, `kitToCss` then template CSS, every `/api/files` reference inlined as a `data:` URI (`lib/inlineAssets.ts`; unresolvable → blank + `X-Missing-Assets`). External `http(s)` kit assets are not fetched.
+- **CSP is part of the document.** A `<meta>` policy allows no network (`default-src 'none'`, `img/font/media-src data:`), inline styles, and only the scripts composition put there, by sha256 hash: the template's `js` and, on authenticated `?edit=1` renders, the inline editor. Render routes repeat it as a header plus `frame-ancestors 'self'; sandbox allow-scripts` and `nosniff`. `js` is copied from template versions only — no route accepts it.
+- **Previews are sandboxed iframes without `allow-same-origin`** (`components/outputs/OutputFrame.tsx`). The inline editor talks to the app only by `postMessage` (`SLOT_EDIT_MESSAGE` / `SLOT_FOCUS_MESSAGE`); the parent checks `event.source` against its own frames.
+- **Output share links** reuse Phase 18's token model (`output_share`, one per output, pinned to a version; "update" moves the pin, keeps the token). `/api/output-shares/:token/*` is the only public surface.
+
 ### File storage
 
 - Files on Railway volume at `/data/{uploads,thumbnails,pdfs,pdf-thumbs}/`

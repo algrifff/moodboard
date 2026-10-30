@@ -106,7 +106,8 @@ export function SnapshotCanvas({
       o.type === 'spotify-track' ||
       o.type === 'spotify-album' ||
       o.type === 'video-clip' ||
-      o.type === 'voice-note',
+      o.type === 'voice-note' ||
+      o.type === 'output',
   )
 
   return (

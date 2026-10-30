@@ -12,6 +12,7 @@ import type {
   TextData,
   VideoClipData,
   VoiceNoteData,
+  OutputCardData,
   WebPageData,
 } from '@moodboard/shared'
 import { readFile } from 'node:fs/promises'
@@ -290,6 +291,9 @@ export async function buildGroupContent(objects: CanvasObject[]): Promise<Conten
     } else if (o.type === 'video-clip' && isVideoClipData(o.data)) {
       videoCount += 1
       videoBlocks.push(formatVideoClip(o.data))
+    } else if (o.type === 'output') {
+      const d = o.data as OutputCardData
+      textLines.push(`- Design output (${d.format}): "${d.name}"`)
     } else if (o.type === 'voice-note' && isVoiceNoteData(o.data)) {
       voiceNoteCount += 1
       // Voice notes get a dedicated block (below) rather than mixing

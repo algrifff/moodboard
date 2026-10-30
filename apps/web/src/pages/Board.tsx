@@ -11,13 +11,14 @@ import { useCallback, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AgentSidebar } from '@/components/agent/AgentSidebar'
 import { BoardSync } from '@/components/BoardSync'
+import { BoardClientPicker } from '@/components/clients/BoardClientPicker'
 import { MoodBoardCanvas } from '@/components/canvas/MoodBoardCanvas'
 import { ShareDialog } from '@/components/canvas/ShareDialog'
 import { SourcePickerDrawer } from '@/components/canvas/SourcePickerDrawer'
 import { ToastHost } from '@/components/canvas/Toast'
 import { Toolbar } from '@/components/canvas/Toolbar'
 import { nanoid } from 'nanoid'
-import { renameBoard } from '@/lib/boardsApi'
+import { renameBoard, setBoardClient } from '@/lib/boardsApi'
 import { importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import {
   createDriveFile,
@@ -46,6 +47,7 @@ export function BoardPage() {
   const [name, setName] = useState('Untitled board')
   const [editingName, setEditingName] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const [clientId, setClientId] = useState<string | null>(null)
   const scale = useCanvasStore((s) => s.scale)
   const sidebarOpen = useAgentSidebarStore((s) => s.open)
   const setSidebarOpen = useAgentSidebarStore((s) => s.setOpen)
@@ -218,15 +220,19 @@ export function BoardPage() {
 
   return (
     <div className="fixed inset-0 flex bg-background text-foreground">
-      <AgentSidebar boardId={boardId} />
+      <AgentSidebar boardId={boardId} clientId={clientId} />
       {/* The canvas region: everything below positions against it, so the
           viewport, toolbar and pills reflow around the docked sidebar. */}
       <div className="relative min-w-0 flex-1">
-        <BoardSync boardId={boardId} onTitle={onTitle}>
+        <BoardSync boardId={boardId} onTitle={onTitle} onClient={setClientId}>
           <MoodBoardCanvas boardId={boardId} />
           <Toolbar />
           <ToastHost />
-          <SourcePickerDrawer onConnectDrive={onConnectDrive} onConnectSpotify={onConnectSpotify} />
+          <SourcePickerDrawer
+            boardId={boardId}
+            onConnectDrive={onConnectDrive}
+            onConnectSpotify={onConnectSpotify}
+          />
 
           <div
             className="absolute top-4 left-4 z-30 flex items-center gap-2 bg-card/95 backdrop-blur-md px-3 py-1.5 text-sm shadow-[var(--shadow-toast)]"
@@ -288,6 +294,25 @@ export function BoardPage() {
               <ShareNetwork size={13} weight="regular" />
               Share
             </button>
+          </div>
+
+          <div
+            className="absolute top-[58px] left-4 z-30 bg-card/95 backdrop-blur-md px-3 py-1 shadow-[var(--shadow-toast)]"
+            style={{ borderRadius: 'var(--radius-lg)' }}
+          >
+            <BoardClientPicker
+              value={clientId}
+              onChange={async (next) => {
+                const previous = clientId
+                setClientId(next)
+                try {
+                  await setBoardClient(boardId, next)
+                } catch (e) {
+                  console.error('assigning client failed', e)
+                  setClientId(previous)
+                }
+              }}
+            />
           </div>
 
           <ShareDialog

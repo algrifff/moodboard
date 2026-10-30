@@ -1,6 +1,7 @@
 import type { ImageData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
-import { db, schema } from '../db'
+import { recordAsset } from './assetLibrary'
+import { nameFromUrl } from './assetSearch'
 import { saveUpload } from './storage'
 import {
   ALLOWED_IMAGE_MIME,
@@ -140,13 +141,8 @@ export async function saveImageFromUrl(url: string, userId: string): Promise<Ima
 
   const id = nanoid()
   const saved = await saveUpload(buffer, id, ext, contentType)
-  await db.insert(schema.asset).values({
-    id: nanoid(),
-    createdBy: userId,
-    filename: saved.filename,
-    mimeType: saved.mimeType,
-    size: saved.size,
-    kind: 'upload',
+  await recordAsset(userId, saved.filename, saved.mimeType, saved.size, 'upload', {
+    originalName: nameFromUrl(url),
   })
   return { url: `/api/files/${saved.filename}` }
 }

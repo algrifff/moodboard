@@ -11,8 +11,12 @@ import {
   ArrowsOutCardinal,
   ArrowSquareOut,
   BoundingBox,
+  Buildings,
   Crosshair,
   Eye,
+  Images,
+  Palette,
+  Swatches,
   Image as ImageIcon,
   LinkSimple,
   NoteBlank,
@@ -23,6 +27,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react'
 import { AGENT_META } from '@/components/canvas/AgentRow'
+import { AssetsToolCard, KitToolCard } from './DesignToolCards'
 import { ArtDirectorGlance } from '@/components/canvas/readouts/ArtDirectorReadout'
 import { BriefGlance } from '@/components/canvas/readouts/BriefReadout'
 import { SectionedGlance } from '@/components/canvas/readouts/SectionedReadout'
@@ -39,6 +44,11 @@ const TOOL_META: Record<string, { icon: Icon; running: string }> = {
   move_objects: { icon: ArrowsOutCardinal, running: 'Moving items' },
   group_objects: { icon: BoundingBox, running: 'Pulling items into a group' },
   analyze_group: { icon: Sparkle, running: 'Running specialists' },
+  list_clients: { icon: Buildings, running: 'Looking up clients' },
+  list_kits: { icon: Swatches, running: 'Looking up style kits' },
+  get_style_kit: { icon: Palette, running: 'Reading the style kit' },
+  search_assets: { icon: Images, running: 'Searching the asset library' },
+  get_linear_issue: { icon: LinkSimple, running: 'Reading the Linear issue' },
 }
 
 // Consecutive successful adds of one kind fold into one card.
@@ -106,6 +116,13 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
     calls.length > 1 && PLURAL[first.use.name]
       ? PLURAL[first.use.name]!(calls.length)
       : payload.summary
+
+  if (first.use.name === 'get_style_kit' && payload.kit) {
+    return <KitToolCard payload={payload} title={title} />
+  }
+  if (first.use.name === 'search_assets') {
+    return <AssetsToolCard payload={payload} title={title} />
+  }
 
   if (first.use.name === 'analyze_group' && payload.display) {
     return <AnalysisCard payload={payload} title={title} objectIds={objectIds} />

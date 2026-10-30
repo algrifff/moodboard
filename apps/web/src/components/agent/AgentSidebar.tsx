@@ -1,15 +1,17 @@
 import type { AgentThread } from '@moodboard/shared'
 import { CaretDown, NotePencil, SidebarSimple, Sparkle, Trash } from '@phosphor-icons/react'
+import { LinearLogo } from '@/components/canvas/sourceLogos'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { AI_PANEL_DURATION, EASE_OUT_STANDARD } from '@/lib/motion'
 import { AGENT_SIDEBAR_WIDTH, useAgentSidebarStore } from '@/store/agentSidebar'
 import { AgentGroupView } from './AgentGroupView'
+import { AgentLinearView } from './AgentLinearView'
 import { AgentThreadView } from './AgentThreadView'
 
 // Docked to the left of the canvas, T3-chat style: the canvas viewport
 // shrinks to make room rather than sliding under it.
-export function AgentSidebar({ boardId }: { boardId: string }) {
+export function AgentSidebar({ boardId, clientId }: { boardId: string; clientId: string | null }) {
   const open = useAgentSidebarStore((s) => s.open)
   const view = useAgentSidebarStore((s) => s.view)
   const enterBoard = useAgentSidebarStore((s) => s.enterBoard)
@@ -39,7 +41,14 @@ export function AgentSidebar({ boardId }: { boardId: string }) {
       <div className="flex h-full flex-col" style={{ width: AGENT_SIDEBAR_WIDTH }}>
         <Header />
         {view.kind === 'group' ? (
-          <AgentGroupView key={view.groupKey} boardId={boardId} groupKey={view.groupKey} />
+          <AgentGroupView
+            key={view.groupKey}
+            boardId={boardId}
+            groupKey={view.groupKey}
+            clientId={clientId}
+          />
+        ) : view.kind === 'linear' ? (
+          <AgentLinearView boardId={boardId} />
         ) : (
           <AgentThreadView boardId={boardId} />
         )}
@@ -51,6 +60,7 @@ export function AgentSidebar({ boardId }: { boardId: string }) {
 function Header() {
   const setOpen = useAgentSidebarStore((s) => s.setOpen)
   const newThread = useAgentSidebarStore((s) => s.newThread)
+  const openLinear = useAgentSidebarStore((s) => s.openLinear)
   const threads = useAgentSidebarStore((s) => s.threads)
   const activeThreadId = useAgentSidebarStore((s) => s.activeThreadId)
   const running = useAgentSidebarStore((s) => s.run !== null)
@@ -80,6 +90,9 @@ function Header() {
         }}
       >
         <NotePencil size={16} />
+      </IconButton>
+      <IconButton label="Start from a Linear issue" disabled={running} onClick={openLinear}>
+        <LinearLogo size={15} />
       </IconButton>
       <IconButton label="Collapse sidebar" onClick={() => setOpen(false)}>
         <SidebarSimple size={16} />

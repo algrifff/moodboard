@@ -16,3 +16,10 @@ export * from './transform'
 
 // Phase 21 — agent sidebar threads, messages, stream events.
 export * from './agent'
+
+// Phase 22 — clients, style kits (tokens → --kit-* CSS), asset library, Linear.
+export * from './clients'
+export * from './kits'
+export * from './kitCss'
+export * from './library'
+export * from './linear'

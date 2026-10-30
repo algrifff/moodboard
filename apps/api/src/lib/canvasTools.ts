@@ -1,5 +1,6 @@
 import {
   agentIdSchema,
+  assetMediaKindSchema,
   groupId,
   proximityGroups,
   type AgentToolPayload,
@@ -25,6 +26,13 @@ import {
   type VersionedObject,
 } from './boardObjects'
 import { clusterLayout, nextSpot } from './canvasPlacement'
+import {
+  getLinearIssueTool,
+  getStyleKitTool,
+  listClientsTool,
+  listKitsTool,
+  searchAssetsTool,
+} from './designTools'
 import { analysisNotConfigured, runAgentOnGroup, runSynthesisOnGroup } from './groupAnalysis'
 import { listGroupStates } from './groupState'
 import { routeUrlToImporter, type DispatchOk } from './mcpUrlDispatch'
@@ -603,6 +611,69 @@ Pass the ids of the group's members (any of them identifies the group; all must 
   },
 })
 
+// ---------------------------------------------------------------------------
+// Clients, style kits, asset library, Linear (bodies in designTools.ts)
+// ---------------------------------------------------------------------------
+
+const listClients = defineTool({
+  name: 'list_clients',
+  title: 'List clients',
+  description:
+    'List the studio\'s clients (id, name, slug, how many boards and kits each has) and which client this board belongs to. Call this to resolve "for Acme" to a real client.',
+  input: {},
+  run: (ctx) => listClientsTool(ctx),
+})
+
+const listKits = defineTool({
+  name: 'list_kits',
+  title: 'List style kits',
+  description:
+    "List style kits — a client's brand tokens (palette, fonts, logos, voice) — with a palette and font preview. Optionally for one client (name or slug). Use get_style_kit to read one in full.",
+  input: {
+    client: z.string().min(1).optional().describe('Client name or slug, e.g. "Acme".'),
+  },
+  run: (ctx, input) => listKitsTool(ctx, input),
+})
+
+const getStyleKit = defineTool({
+  name: 'get_style_kit',
+  title: 'Read a style kit',
+  description:
+    'Read a client\'s style kit: its tokens (palette roles with usage, fonts, logos, voice do/don\'t, imagery rules, notes) and the compiled CSS — a :root block of --kit-* custom properties plus @font-face rules. Resolve "use the Acme kit" with client:"Acme" (a client with one kit needs nothing more; with several, also pass kit). With no arguments it reads the kit for this board\'s client. Defaults to the kit\'s latest version.',
+  input: {
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+    kit: z.string().min(1).optional().describe('Kit name or id.'),
+    version: z.number().int().min(1).optional().describe('A specific version; default latest.'),
+  },
+  run: (ctx, input) => getStyleKitTool(ctx, input),
+})
+
+const searchAssets = defineTool({
+  name: 'search_assets',
+  title: 'Search the asset library',
+  description:
+    "Search the studio's asset library (every uploaded or imported image, PDF and font). Full-text over file name, AI caption and tags; each result carries its url, dimensions and dominant colours. Filter by client (name or slug), kind (image, pdf, font, audio) or tag. With no query it returns the newest assets.",
+  input: {
+    query: z.string().max(200).optional().describe('Words to look for, e.g. "hero photo warm".'),
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+    kind: assetMediaKindSchema.optional(),
+    tag: z.string().min(1).max(40).optional(),
+    limit: z.number().int().min(1).max(30).optional().describe('Default 12.'),
+  },
+  run: (ctx, input) => searchAssetsTool(ctx, input),
+})
+
+const getLinearIssue = defineTool({
+  name: 'get_linear_issue',
+  title: 'Read a Linear issue',
+  description:
+    "Read a Linear issue as a brief: identifier, title, description, labels, comments, attachment links, and the client its team/project maps to. Pass an identifier like LIN-123, an issue URL or an id. Uses the signed-in user's own Linear connection. Read-only.",
+  input: {
+    issue: z.string().min(1).max(300).describe('Identifier (LIN-123), issue URL, or id.'),
+  },
+  run: (ctx, input) => getLinearIssueTool(ctx, input),
+})
+
 export const CANVAS_TOOLS: CanvasTool[] = [
   getBoard,
   addNote,
@@ -612,4 +683,9 @@ export const CANVAS_TOOLS: CanvasTool[] = [
   moveObjects,
   groupObjects,
   analyzeGroup,
+  listClients,
+  listKits,
+  getStyleKit,
+  searchAssets,
+  getLinearIssue,
 ]

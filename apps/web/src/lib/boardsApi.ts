@@ -22,12 +22,17 @@ export async function listBoards(): Promise<BoardSummary[]> {
   return body.boards
 }
 
-export async function createBoard(name?: string): Promise<FullBoard> {
+export async function createBoard(
+  options: { name?: string; clientId?: string } = {},
+): Promise<FullBoard> {
   const res = await fetch('/api/boards', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(name ? { name } : {}),
+    body: JSON.stringify({
+      ...(options.name ? { name: options.name } : {}),
+      ...(options.clientId ? { clientId: options.clientId } : {}),
+    }),
   })
   return boardResponseSchema.parse(await jsonOrThrow(res)).board as FullBoard
 }
@@ -46,6 +51,17 @@ export async function renameBoard(id: string, name: string): Promise<void> {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name }),
+  })
+  await jsonOrThrow(res)
+}
+
+// Null detaches the board from its client.
+export async function setBoardClient(id: string, clientId: string | null): Promise<void> {
+  const res = await fetch(`/api/boards/${id}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId }),
   })
   await jsonOrThrow(res)
 }

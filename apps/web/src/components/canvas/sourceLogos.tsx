@@ -49,3 +49,21 @@ export function DriveLogo({ size = 14 }: { size?: number }) {
     </svg>
   )
 }
+
+// A generic "issue tracker" mark in Linear's indigo — a disc with a check
+// stroke — rather than a copy of their logo.
+export function LinearLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }} aria-hidden>
+      <circle cx="12" cy="12" r="11" fill="#5E6AD2" />
+      <path
+        d="M7 12.5l3.2 3.2L17 8.9"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}

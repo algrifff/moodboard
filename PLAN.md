@@ -648,13 +648,30 @@ Already on Postgres; this makes it production-grade and ready for structured des
 
 ### Phase 22 — Clients, Style Kits, Asset Library, Linear
 
-- [ ] `client` table; boards/assets/kits/outputs belong to a client; client switcher
-- [ ] "Save as Style Kit" from a group brief; kits versioned, editable, compile to `--kit-*` CSS
-- [ ] Asset library: every asset tagged (AI captions, colours, kind), searchable via Postgres full-text
-- [ ] Agent tools: `search_assets`, `get_style_kit`, `list_kits`, `list_clients`
-- [ ] Linear connection (OAuth, reuses `connection` table): pick an issue → it becomes the brief (title, description, comments, attachments); Linear team/project ↔ client mapping
+- [x] `client` table; boards/assets/kits/outputs belong to a client; client switcher
+- [x] "Save as Style Kit" from a group brief; kits versioned, editable, compile to `--kit-*` CSS
+- [x] Asset library: every asset tagged (AI captions, colours, kind), searchable via Postgres full-text
+- [x] Agent tools: `search_assets`, `get_style_kit`, `list_kits`, `list_clients`
+- [x] Linear connection (OAuth, reuses `connection` table): pick an issue → it becomes the brief (title, description, comments, attachments); Linear team/project ↔ client mapping
 
 **Deliverable:** "Use the Acme kit for LIN-123" means something concrete and repeatable.
+
+**How it fits together:**
+
+- Tables: `client`, `style_kit` + `style_kit_version`, `linear_mapping`; `board.client_id`; library columns on `asset` (`media_kind`, `width/height`, `colors`, `caption`, `tags`, `client_id`, `enriched_at`, generated `search` tsvector + GIN). Migration `0014` backfills `media_kind` for existing assets.
+- Shared (`packages/shared`): `clients.ts`, `kits.ts` (token schema + `kitFromBrief`), `kitCss.ts` (`kitToCss`, the `--kit-*` contract), `library.ts`, `linear.ts`.
+- API: `/api/clients`, `/api/kits` (+ `/:id/css`), `/api/library` (search, edit, `add-to-board`), `/api/linear` (status, issues, mappings), Linear OAuth at `/api/connections/linear/*`. A message may carry `linearIssue`; the issue is attached to it as the brief.
+- Tools (`CANVAS_TOOLS`): `list_clients`, `list_kits`, `get_style_kit`, `search_assets`, `get_linear_issue`. The orchestrator also gets the board's client + kits as per-run context.
+- Web: dashboard client switcher/assignment, `/kits`, `/kits/:id`, `/library`, Settings → Linear, sidebar Linear picker + "Save as style kit", library + Linear sections in the Sources drawer (click or drag an asset onto the canvas).
+
+**Deferred / notes:**
+
+- No live Linear or Anthropic run was possible here: Linear was exercised through the real routes with recorded-shape fixture responses (the GraphQL field names and `issue(id: "LIN-123")` identifier lookup are from Linear's docs and untested against the live API); captioning through a fake client. First real runs should be watched.
+- Assets enriched while no `ANTHROPIC_API_KEY` was set are not re-captioned later (edit the caption in the library).
+- Uploaded kit fonts/logos are `/api/files/…` URLs, which need the session cookie. Phase 23's sandboxed output iframes will need them inlined or served publicly.
+- No agent tool creates or edits kits or assets yet (read-only); no "add library asset" tool — Phase 24's loop will want one.
+- Clients have no page of their own; deleting a client deletes its kits and Linear mappings, and detaches boards and assets.
+- Threads are board-scoped; a thread's client is the board's (or the issue's, via its context block), not a column.
 
 ### Phase 23 — Templates + Outputs (HTML)
 

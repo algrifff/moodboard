@@ -1,0 +1,58 @@
+{
+  "data": {
+    "issue": {
+      "id": "7f1c5a3e-0b1d-4f6a-9e0a-1d2c3b4a5f60",
+      "identifier": "LIN-123",
+      "title": "Thumbnail for the launch video",
+      "url": "https://linear.app/acme/issue/LIN-123/thumbnail-for-the-launch-video",
+      "priorityLabel": "High",
+      "updatedAt": "2026-10-20T09:30:00.000Z",
+      "state": { "name": "In Progress", "type": "started" },
+      "assignee": { "name": "Ada Lovelace" },
+      "team": { "id": "team-launch", "key": "LIN", "name": "Launch" },
+      "project": { "id": "proj-rebrand", "name": "Acme rebrand" },
+      "description": "Punchy, dark. 1280x720.\n\nShow the product mid-air.",
+      "labels": { "nodes": [{ "name": "design" }, { "name": "video" }] },
+      "comments": {
+        "nodes": [
+          {
+            "id": "c-2",
+            "body": "Use the yellow from the brand kit.",
+            "createdAt": "2026-10-19T11:00:00.000Z",
+            "user": { "name": "Bo Chen" }
+          },
+          {
+            "id": "c-1",
+            "body": "Reference attached.",
+            "createdAt": "2026-10-18T08:00:00.000Z",
+            "user": null
+          },
+          {
+            "id": "c-3",
+            "body": null,
+            "createdAt": "2026-10-19T12:00:00.000Z",
+            "user": { "name": "Bo Chen" }
+          }
+        ]
+      },
+      "attachments": {
+        "nodes": [
+          {
+            "id": "att-1",
+            "title": "Moodboard",
+            "subtitle": "Figma frame",
+            "url": "https://www.figma.com/file/abc",
+            "sourceType": "figma"
+          },
+          {
+            "id": "att-2",
+            "title": null,
+            "subtitle": null,
+            "url": "https://example.com/ref.png",
+            "sourceType": null
+          }
+        ]
+      }
+    }
+  }
+}

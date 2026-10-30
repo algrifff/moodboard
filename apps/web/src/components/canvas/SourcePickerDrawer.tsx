@@ -6,9 +6,12 @@ import { createPortal } from 'react-dom'
 import { deleteConnection, importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
 import { AGENT_SIDEBAR_WIDTH, useAgentSidebarStore } from '@/store/agentSidebar'
-import { useSourcePickerStore } from '@/store/sourcePicker'
-import { AddSourceSection, EmptySourcesState } from './sourcePicker/ConnectSources'
+import { useLinearStore } from '@/store/linear'
+import { isPickerConnection, useSourcePickerStore } from '@/store/sourcePicker'
+import { AddSourceSection } from './sourcePicker/ConnectSources'
 import { ConnectionSection } from './sourcePicker/ConnectionSection'
+import { LibrarySection } from './sourcePicker/LibrarySection'
+import { LinearSection } from './sourcePicker/LinearSection'
 import { RecentsSection } from './sourcePicker/RecentsSection'
 import { spawnDriveAtViewportCenter, spawnSpotifyAtViewportCenter } from './sourcePicker/spawn'
 import { showToast } from './Toast'
@@ -23,11 +26,11 @@ import { showToast } from './Toast'
 //   │ [🔍 Search across all sources           ] │
 //   │                                            │
 //   │ ┌─ + SOURCES ────────────────────────────┐│
-//   │ │ [G] Google Drive        ✓ Connected   ││
-//   │ │     1 connected · add another          ││
-//   │ │ [S] Spotify                            ││
-//   │ │     Connect                            ││
+//   │ │ [G] Drive   [S] Spotify   [L] Linear  ││
 //   │ └────────────────────────────────────────┘│
+//   │                                            │
+//   │  Asset library     (click or drag to add)  │
+//   │  Linear            (pick an issue → thread)│
 //   │                                            │
 //   │  Recently added                            │
 //   │  · Brand Bible                       2d   │
@@ -40,21 +43,23 @@ import { showToast } from './Toast'
 //
 // Each connection is its own collapsible section that owns its tile/cursor/
 // expand state. Add Source sits at the top so adding a new workspace is
-// always one click away. Recents lives between Add Source and the
-// per-connection sections. When the user has no connections the body
-// switches to a centred empty state with the same provider chips.
+// always one click away. The asset library and Linear issues follow, then
+// Recents and the per-connection sections. Library and Linear don't need a
+// Drive/Spotify connection, so they show regardless.
 // ---------------------------------------------------------------------------
 
 const DRAWER_WIDTH = 'min(720px, max(480px, 50vw))'
 
 type ConnectProps = {
+  boardId: string
   onConnectDrive: () => void
   onConnectSpotify: () => void
 }
 
-export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: ConnectProps) {
+export function SourcePickerDrawer({ boardId, onConnectDrive, onConnectSpotify }: ConnectProps) {
   const open = useSourcePickerStore((s) => s.open)
   const closePicker = useSourcePickerStore((s) => s.closePicker)
+  const draggingAsset = useSourcePickerStore((s) => s.draggingAsset)
   const connections = useSourcePickerStore((s) => s.connections)
   const loadingConnections = useSourcePickerStore((s) => s.loadingConnections)
   const sidebarWidth = useAgentSidebarStore((s) => (s.open ? AGENT_SIDEBAR_WIDTH : 0))
@@ -79,7 +84,7 @@ export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: Connect
                     left: sidebarWidth,
                     backgroundColor: 'var(--scrim)',
                     zIndex: 79,
-                    pointerEvents: 'auto',
+                    pointerEvents: draggingAsset ? 'none' : 'auto',
                   }}
                   aria-hidden
                 />
@@ -103,6 +108,8 @@ export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: Connect
                 {open && (
                   <DrawerContent
                     key="source-picker-drawer"
+                    boardId={boardId}
+                    passThrough={draggingAsset}
                     connections={connections}
                     loadingConnections={loadingConnections}
                     onConnectDrive={onConnectDrive}
@@ -120,12 +127,17 @@ export function SourcePickerDrawer({ onConnectDrive, onConnectSpotify }: Connect
 }
 
 function DrawerContent({
+  boardId,
+  passThrough,
   connections,
   loadingConnections,
   onConnectDrive,
   onConnectSpotify,
   onClose,
 }: {
+  boardId: string
+  // A library asset is mid-drag: let the drop reach the canvas underneath.
+  passThrough: boolean
   connections: ConnectionSummary[]
   loadingConnections: boolean
   onConnectDrive: () => void
@@ -136,6 +148,8 @@ function DrawerContent({
   // string hides per-section searches and shows the Recents block.
   const [query, setQuery] = useState('')
   const [importingId, setImportingId] = useState<string | null>(null)
+  const connectLinear = useLinearStore((s) => s.connect)
+  const pickerConnections = connections.filter(isPickerConnection)
 
   // Escape closes the drawer — same affordance as the modals.
   useEffect(() => {
@@ -216,47 +230,40 @@ function DrawerContent({
         boxShadow: 'var(--shadow-drawer)',
         display: 'flex',
         flexDirection: 'column',
-        pointerEvents: 'auto',
+        pointerEvents: passThrough ? 'none' : 'auto',
       }}
     >
       <Header onClose={onClose} />
 
-      {connections.length === 0 ? (
-        <EmptySourcesState
+      <SearchBar query={query} onChange={setQuery} />
+      <div className="flex-1 overflow-y-auto px-3 pb-3">
+        <AddSourceSection
+          connections={connections}
           loading={loadingConnections}
           onConnectDrive={onConnectDrive}
           onConnectSpotify={onConnectSpotify}
+          onConnectLinear={() => void connectLinear()}
         />
-      ) : (
-        <>
-          <SearchBar query={query} onChange={setQuery} />
-          <div className="flex-1 overflow-y-auto px-3 pb-3">
-            <AddSourceSection
-              connections={connections}
-              loading={loadingConnections}
-              onConnectDrive={onConnectDrive}
-              onConnectSpotify={onConnectSpotify}
-            />
-            {!query && (
-              <RecentsSection
-                connections={connections}
-                onImport={onImport}
-                importingId={importingId}
-              />
-            )}
-            {connections.map((c) => (
-              <ConnectionSection
-                key={c.id}
-                connection={c}
-                query={query}
-                onImport={onImport}
-                onDisconnect={() => onDisconnect(c.id)}
-                importingId={importingId}
-              />
-            ))}
-          </div>
-        </>
-      )}
+        <LibrarySection boardId={boardId} query={query} />
+        <LinearSection boardId={boardId} query={query} />
+        {!query && pickerConnections.length > 0 && (
+          <RecentsSection
+            connections={pickerConnections}
+            onImport={onImport}
+            importingId={importingId}
+          />
+        )}
+        {pickerConnections.map((c) => (
+          <ConnectionSection
+            key={c.id}
+            connection={c}
+            query={query}
+            onImport={onImport}
+            onDisconnect={() => onDisconnect(c.id)}
+            importingId={importingId}
+          />
+        ))}
+      </div>
     </motion.div>
   )
 }

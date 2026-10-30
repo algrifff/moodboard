@@ -19,6 +19,8 @@
 // host slips through, the fetch will time out / abort once it's hit.
 
 import { createCanvas, loadImage } from '@napi-rs/canvas'
+import { nameFromUrl } from './assetSearch'
+import { dominantColors } from './imageColors'
 import { saveUpload } from './storage'
 import type { ImageData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
@@ -506,14 +508,9 @@ async function downloadAndSaveImage(
   // db is imported lazily so unit tests (which exercise the pure
   // helpers below without env vars) don't try to dial Postgres at
   // module load.
-  const { db, schema } = await import('../db')
-  await db.insert(schema.asset).values({
-    id: nanoid(),
-    createdBy: userId,
-    filename: saved.filename,
-    mimeType: sniffedMime,
-    size: saved.size,
-    kind: 'upload',
+  const { recordAsset } = await import('./assetLibrary')
+  await recordAsset(userId, saved.filename, sniffedMime, saved.size, 'upload', {
+    originalName: nameFromUrl(parsed),
   })
   return { url: `/api/files/${saved.filename}` }
 }
@@ -630,51 +627,12 @@ async function samplePalette(source: LogoCandidate): Promise<{ hex: string; role
     ctx.drawImage(img, 0, 0, targetW, targetH)
     const pixels = ctx.getImageData(0, 0, targetW, targetH).data
 
-    // Quantise to 5-bits-per-channel (32 buckets each), count, sort.
-    const buckets = new Map<number, { count: number; r: number; g: number; b: number }>()
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i]!
-      const g = pixels[i + 1]!
-      const b = pixels[i + 2]!
-      const a = pixels[i + 3]!
-      if (a < 128) continue
-      // Drop near-greys and near-whites/blacks — they dominate logo
-      // backgrounds and aren't useful brand colour signal.
-      const maxC = Math.max(r, g, b)
-      const minC = Math.min(r, g, b)
-      const sat = maxC === 0 ? 0 : (maxC - minC) / maxC
-      const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-      if (sat < 0.12 && (luma > 0.92 || luma < 0.08)) continue
-      const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
-      const bucket = buckets.get(key)
-      if (bucket) {
-        bucket.count += 1
-        bucket.r += r
-        bucket.g += g
-        bucket.b += b
-      } else {
-        buckets.set(key, { count: 1, r, g, b })
-      }
-    }
-    const top = [...buckets.values()]
-      .sort((a, b) => b.count - a.count)
-      .slice(0, PALETTE_SIZE)
-      .map((b) => {
-        const r = Math.round(b.r / b.count)
-        const g = Math.round(b.g / b.count)
-        const bb = Math.round(b.b / b.count)
-        return rgbToHex(r, g, bb)
-      })
+    const top = dominantColors(pixels, { max: PALETTE_SIZE })
     const roles = ['primary', 'secondary', 'accent', 'support', 'support']
     return top.map((hex, i) => ({ hex, role: roles[i] ?? 'support' }))
   } catch {
     return []
   }
-}
-
-function rgbToHex(r: number, g: number, b: number): string {
-  const h = (n: number) => n.toString(16).padStart(2, '0')
-  return `#${h(r)}${h(g)}${h(b)}`.toUpperCase()
 }
 
 // ---------------------------------------------------------------------------

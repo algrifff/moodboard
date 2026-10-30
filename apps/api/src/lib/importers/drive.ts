@@ -10,7 +10,7 @@ import {
 } from '../drive'
 import { processPdf } from '../pdfProcessing'
 import { savePdf, savePdfThumbnail, saveUpload } from '../storage'
-import { recordAsset } from './assets'
+import { recordAsset } from '../assetLibrary'
 import { TokenDecryptError } from './errors'
 import { upsertRecent } from './recents'
 
@@ -99,7 +99,9 @@ export async function importDriveFile(args: {
   if (extracted.kind === 'pdf') {
     const id = nanoid()
     const savedPdf = await savePdf(extracted.bytes, id)
-    await recordAsset(args.userId, savedPdf.filename, 'application/pdf', savedPdf.size, 'pdf')
+    await recordAsset(args.userId, savedPdf.filename, 'application/pdf', savedPdf.size, 'pdf', {
+      originalName: extracted.summary.name,
+    })
     let pdfResult
     try {
       pdfResult = await processPdf(extracted.bytes)
@@ -133,7 +135,9 @@ export async function importDriveFile(args: {
   if (extracted.kind === 'image') {
     const id = nanoid()
     const saved = await saveUpload(extracted.bytes, id, extracted.ext, extracted.summary.mimeType)
-    await recordAsset(args.userId, saved.filename, saved.mimeType, saved.size, 'upload')
+    await recordAsset(args.userId, saved.filename, saved.mimeType, saved.size, 'upload', {
+      originalName: extracted.summary.name,
+    })
     const data: ImageData = { url: `/api/files/${saved.filename}` }
     return { kind: 'image', data }
   }

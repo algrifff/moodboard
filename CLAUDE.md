@@ -87,6 +87,15 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - **Server-originated board writes** reach the open canvas as `{ object, version }` and must be folded into the autosave's synced state (`foldServerObjects`) before `applyRemote` — otherwise they read as local edits or conflicts.
 - **The orchestrator's model client is injected** (`agentRoutes(defaultModelClient())`); tests use a fake streaming client. Model is `DEEP_MODEL`.
 
+### Clients, kits, library, Linear (Phase 22)
+
+- **`--kit-*` is a contract.** `kitToCss` (`packages/shared/src/kitCss.ts`) emits fixed variables (`--kit-color-{background,surface,text,primary,accent,on-primary,on-accent}`, `--kit-font-{display,body,mono}` + `-weight`, `--kit-logo`) plus one per palette role / logo. Templates read only these; names only ever get added, never renamed. Documented in that file.
+- **Kit versions are immutable.** Edits append a `style_kit_version` (stale `baseVersion` → 409); the kit row only points at its latest. Never update a version in place.
+- **Assets have two kinds.** `asset.kind` is the storage directory (`upload`/`pdf`/`pdf-thumb`); `asset.mediaKind` is the library kind. Record every asset through `recordAsset` in `lib/assetLibrary.ts` — never insert into `asset` directly.
+- **Library search is Postgres full-text** over the generated `asset.search` column (name + tags + caption); build queries with `buildTsQuery`, never interpolate user text into a tsquery. Captioning (FAST_MODEL) is skipped without `ANTHROPIC_API_KEY`.
+- **Linear is read-only and manual.** Only picking an issue starts a thread; `lib/linear.ts` is pure (fetch injected) and tested with fixture responses. Team/project → client mappings are team-wide; the Linear connection itself is personal.
+- **Client/kit/asset/Linear agent tools live in `CANVAS_TOOLS`** (bodies in `lib/designTools.ts`) so MCP and the sidebar get them together.
+
 ### Design output = HTML (Phase 23+)
 
 Every design the agents produce is a self-contained HTML/CSS document — no PPTX, no PDF export, no image generation, no new rendering libraries. Video is the same HTML on a seekable CSS/WAAPI timeline, captured by Playwright + ffmpeg. See the roadmap in PLAN.md.

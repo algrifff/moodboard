@@ -38,6 +38,8 @@ import {
   ZOOM_RESET_DURATION_MS,
 } from '@/lib/motion'
 import { screenToWorld, zoomAroundPoint, type Point } from '@moodboard/shared'
+import { pushServerObjects } from '@/lib/boardSync'
+import { addLibraryAssetToBoard, ASSET_DRAG_TYPE } from '@/lib/libraryApi'
 import { tweenTransform } from '@/lib/tweenTransform'
 import { useCanvasStore } from '@/store/canvas'
 import { useSourcePickerStore } from '@/store/sourcePicker'
@@ -387,6 +389,20 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
       const screenPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top }
       const worldPoint = screenToWorld(screenPoint, { scale, x: offset.x, y: offset.y })
 
+      const assetId = e.dataTransfer.getData(ASSET_DRAG_TYPE)
+      if (assetId && boardId) {
+        useSourcePickerStore.getState().closePicker()
+        try {
+          const change = await addLibraryAssetToBoard(assetId, boardId, worldPoint)
+          pushServerObjects(boardId, [
+            { object: change.object as CanvasObject, version: change.version },
+          ])
+        } catch (err) {
+          showToast(`Couldn’t add it: ${err instanceof Error ? err.message : 'unknown error'}`)
+        }
+        return
+      }
+
       const fileList = e.dataTransfer.files
       if (fileList.length > 0) {
         let i = 0
@@ -407,7 +423,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
         await addImageFromUrl(uri, worldPoint)
       }
     },
-    [scale, offset, addImageFromBlob, addImageFromUrl, addPdfFromBlob],
+    [boardId, scale, offset, addImageFromBlob, addImageFromUrl, addPdfFromBlob],
   )
 
   // Generic web URL paste — no OAuth, no connection. Server fetches the page

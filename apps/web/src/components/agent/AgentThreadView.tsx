@@ -1,4 +1,5 @@
 import {
+  parseLinearIssueBlock,
   parseSelectionBlock,
   type AgentMessage,
   type AgentToolResultBlock,
@@ -8,6 +9,7 @@ import { ArrowUp, Info, SelectionAll, Stop, X } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { LinearLogo } from '@/components/canvas/sourceLogos'
 import { focusObjects } from '@/lib/canvasCamera'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
 import { useAgentSidebarStore } from '@/store/agentSidebar'
@@ -17,7 +19,7 @@ import { AgentToolCard, foldToolCalls, type ToolCall } from './AgentToolCard'
 const SUGGESTIONS = [
   'Pull the selected items into a group and give me a brief',
   'What’s on this board so far?',
-  'Add three tagline stickies for the main group',
+  'Which style kits do we have?',
 ]
 
 export function AgentThreadView({ boardId }: { boardId: string }) {
@@ -112,8 +114,9 @@ function MessageRow({
     const texts = message.content.filter((b) => b.type === 'text')
     if (texts.length === 0) return null
     const selection = texts.flatMap((b) => parseSelectionBlock(b) ?? [])
+    const issues = texts.flatMap((b) => parseLinearIssueBlock(b) ?? [])
     const body = texts
-      .filter((b) => parseSelectionBlock(b) === null)
+      .filter((b) => parseSelectionBlock(b) === null && parseLinearIssueBlock(b) === null)
       .map((b) => (b.type === 'text' ? b.text : ''))
       .join('\n')
     return (
@@ -124,6 +127,17 @@ function MessageRow({
         >
           {body}
         </div>
+        {issues.map((issue) => (
+          <span
+            key={issue.identifier}
+            className="inline-flex max-w-full items-center gap-1.5 text-[11px] text-[var(--text-mute)]"
+            title="The Linear issue the agent was given as the brief"
+          >
+            <LinearLogo size={12} />
+            <span className="font-mono">{issue.identifier}</span>
+            <span className="truncate">{issue.title}</span>
+          </span>
+        ))}
         {selection.length > 0 && (
           <button
             type="button"
@@ -179,6 +193,7 @@ function AssistantText({ text, streaming }: { text: string; streaming?: boolean 
 
 function EmptyThread({ boardId }: { boardId: string }) {
   const send = useAgentSidebarStore((s) => s.send)
+  const openLinear = useAgentSidebarStore((s) => s.openLinear)
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -207,6 +222,15 @@ function EmptyThread({ boardId }: { boardId: string }) {
             {s}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={openLinear}
+          className="inline-flex items-center gap-2 px-3 py-2 text-left text-[12.5px] text-[var(--text-soft)] hover:text-foreground hover:bg-[var(--bg-elevated)] transition-colors"
+          style={{ borderRadius: 'var(--radius-lg)', boxShadow: '0 0 0 1px var(--border-soft)' }}
+        >
+          <LinearLogo size={14} />
+          Start from a Linear issue
+        </button>
       </div>
     </motion.div>
   )

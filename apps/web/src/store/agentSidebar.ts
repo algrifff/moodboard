@@ -6,6 +6,7 @@ import {
   type AgentStreamEvent,
   type AgentThread,
   type CanvasObject,
+  type LinearIssueSummary,
 } from '@moodboard/shared'
 import { create } from 'zustand'
 import {
@@ -42,7 +43,10 @@ function writeOpen(open: boolean): void {
   }
 }
 
-export type SidebarView = { kind: 'chat' } | { kind: 'group'; groupKey: string }
+export type SidebarView =
+  | { kind: 'chat' }
+  | { kind: 'group'; groupKey: string }
+  | { kind: 'linear' }
 
 type Run = { threadId: string; controller: AbortController; streamingText: string }
 
@@ -61,13 +65,22 @@ type AgentSidebarState = {
 
   setOpen: (open: boolean) => void
   openGroup: (groupKey: string) => void
+  openLinear: () => void
   showChat: () => void
   enterBoard: (boardId: string) => Promise<void>
   leaveBoard: () => void
   selectThread: (threadId: string) => Promise<void>
   newThread: () => void
   deleteThread: (threadId: string) => Promise<void>
-  send: (boardId: string, text: string, selection?: string[]) => Promise<void>
+  send: (
+    boardId: string,
+    text: string,
+    selection?: string[],
+    options?: { linearIssue?: string },
+  ) => Promise<void>
+  // Picking a Linear issue is the manual trigger: a fresh thread whose
+  // first message carries the issue as the brief.
+  startFromLinearIssue: (boardId: string, issue: LinearIssueSummary) => Promise<void>
   stop: () => void
 }
 
@@ -175,6 +188,10 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
       writeOpen(true)
       set({ open: true, view: { kind: 'group', groupKey } })
     },
+    openLinear: () => {
+      writeOpen(true)
+      set({ open: true, view: { kind: 'linear' } })
+    },
     showChat: () => set({ view: { kind: 'chat' } }),
 
     enterBoard: async (boardId) => {
@@ -242,7 +259,7 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
       }))
     },
 
-    send: async (boardId, text, selection) => {
+    send: async (boardId, text, selection, options) => {
       const trimmed = text.trim()
       if (!trimmed || get().run) return
       writeOpen(true)
@@ -277,7 +294,11 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
         await streamAgentMessage(
           boardId,
           id,
-          { text: trimmed, ...(selection && selection.length > 0 ? { selection } : {}) },
+          {
+            text: trimmed,
+            ...(selection && selection.length > 0 ? { selection } : {}),
+            ...(options?.linearIssue ? { linearIssue: options.linearIssue } : {}),
+          },
           (event) => applyEvent(boardId, id, event),
           controller.signal,
         )
@@ -297,6 +318,17 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
           if (get().activeThreadId === id && !get().run) void get().selectThread(id)
         }, 600)
       }
+    },
+
+    startFromLinearIssue: async (boardId, issue) => {
+      if (get().run) return
+      get().newThread()
+      await get().send(
+        boardId,
+        `${issue.identifier} · ${issue.title}\nRead the brief, work out the client and its style kit, and tell me what you'd make.`,
+        undefined,
+        { linearIssue: issue.identifier },
+      )
     },
 
     stop: () => get().run?.controller.abort(),

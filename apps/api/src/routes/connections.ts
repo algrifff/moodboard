@@ -14,6 +14,13 @@ import {
   listFolderChildren as driveListFolderChildren,
   searchFiles as driveSearchFiles,
 } from '../lib/drive'
+import {
+  exchangeLinearCode,
+  LINEAR_AUTHORIZE_URL,
+  LINEAR_SCOPES,
+  linearApi,
+  linearEnv,
+} from '../lib/linear'
 import { rateLimit } from '../lib/rateLimit'
 import {
   exchangeCode as spotifyExchangeCode,
@@ -104,7 +111,7 @@ connections.use('*', async (c, next) => {
 // Returns the connection id (whether existing or freshly inserted).
 async function upsertConnection(args: {
   userId: string
-  provider: 'drive' | 'spotify'
+  provider: 'drive' | 'spotify' | 'linear'
   accountEmail: string
   accessTokenEnc: string
   refreshTokenEnc: string | null
@@ -344,6 +351,76 @@ connections.get('/spotify/callback', async (c) => {
       scopes: token.scope ?? SPOTIFY_SCOPES,
     })
 
+    return callbackHtml(c, { kind: 'done', id })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return callbackHtml(c, { kind: 'error', message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/linear/start
+//
+// Same state-cookie CSRF pattern as the other providers. Unlike them, an
+// unconfigured server answers with the popup's error page rather than a bare
+// 500 — Linear is optional and the person should see why nothing happened.
+// ---------------------------------------------------------------------------
+connections.get('/linear/start', async (c) => {
+  const env = linearEnv()
+  if (!env) {
+    return callbackHtml(c, {
+      kind: 'error',
+      message:
+        'Linear isn’t configured on this server (LINEAR_CLIENT_ID / LINEAR_CLIENT_SECRET / LINEAR_REDIRECT_URI).',
+    })
+  }
+  const state = randomBytes(24).toString('hex')
+  setCookie(c, STATE_COOKIE('linear'), state, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  })
+  const url = new URL(LINEAR_AUTHORIZE_URL)
+  url.searchParams.set('client_id', env.clientId)
+  url.searchParams.set('redirect_uri', env.redirectUri)
+  url.searchParams.set('response_type', 'code')
+  url.searchParams.set('scope', LINEAR_SCOPES)
+  url.searchParams.set('state', state)
+  return c.redirect(url.toString())
+})
+
+connections.get('/linear/callback', async (c) => {
+  const user = c.get('user')!
+  const code = c.req.query('code')
+  const stateParam = c.req.query('state')
+  const stateCookie = getCookie(c, STATE_COOKIE('linear'))
+  deleteCookie(c, STATE_COOKIE('linear'), { path: '/' })
+
+  if (!code) {
+    return callbackHtml(c, { kind: 'error', message: c.req.query('error') ?? 'Missing code' })
+  }
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    return callbackHtml(c, { kind: 'error', message: 'Invalid state' })
+  }
+
+  try {
+    const env = linearEnv()
+    if (!env) throw new Error('Linear OAuth env vars are not configured')
+    const token = await exchangeLinearCode({ code, ...env })
+    const viewer = await linearApi(token.accessToken).viewer()
+    const id = await upsertConnection({
+      userId: user.id,
+      provider: 'linear',
+      accountEmail: viewer.email,
+      accessTokenEnc: encryptToken(token.accessToken),
+      refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
+      expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
+      scopes: token.scope ?? LINEAR_SCOPES,
+      workspaceId: viewer.workspace.id,
+      workspaceName: viewer.workspace.name,
+    })
     return callbackHtml(c, { kind: 'done', id })
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

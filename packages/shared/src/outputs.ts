@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { kitTokensSchema, type KitTokens } from './kits'
-import { SLOT_NAME_RE, isSlotImageValue } from './slots'
+import { SLOT_CANDIDATE_RE, SLOT_NAME_RE, isSlotImageValue } from './slots'
 
 // Phase 23 — templates and outputs. A template is style-agnostic HTML + CSS
 // with `data-slot` markers that reads only `--kit-*` variables; an output is
@@ -141,9 +141,11 @@ export const TEMPLATE_NAME_MAX = 80
 const templateNameSchema = z.string().trim().min(1).max(TEMPLATE_NAME_MAX)
 
 // Save as template: every slot marker in the output, renamed (`to`), given a
-// label, or dropped (`to: null` removes the marker; the content stays).
+// label, or dropped (`to: null` removes the marker; the content stays). A
+// `from` of `@<index>` is an unmarked candidate element (slotCandidates),
+// which becomes a new slot named `to`.
 export const templateSlotEditSchema = z.object({
-  from: slotNameSchema,
+  from: z.union([slotNameSchema, z.string().regex(SLOT_CANDIDATE_RE)]),
   to: slotNameSchema.nullable(),
   label: z.string().trim().max(60).optional(),
 })
@@ -282,7 +284,15 @@ export const outputShareViewSchema = z.object({
 export type OutputShareView = z.infer<typeof outputShareViewSchema>
 export const outputShareViewResponseSchema = z.object({ share: outputShareViewSchema })
 
-export const proposedSlotsResponseSchema = z.object({ slots: z.array(templateSlotSchema) })
+// A proposed slot for save-as-template: an existing marker (`from` is its
+// name) or a candidate element to mark (`from` is `@<index>`), with the
+// name and label to save it under, and its current content for context.
+export const proposedSlotSchema = templateSlotSchema.extend({
+  from: z.string(),
+  sample: z.string(),
+})
+export type ProposedSlot = z.infer<typeof proposedSlotSchema>
+export const proposedSlotsResponseSchema = z.object({ slots: z.array(proposedSlotSchema) })
 
 // Paths the app serves a composed document from. Shared so the web preview,
 // board cards and agent tools build the same URLs.

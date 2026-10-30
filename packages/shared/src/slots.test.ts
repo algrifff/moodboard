@@ -6,8 +6,10 @@ import {
   findSlots,
   isSlotImageValue,
   labelSlot,
+  markCandidates,
   removeSlot,
   renameSlot,
+  slotCandidates,
   slotTextToHtml,
 } from './slots'
 
@@ -153,5 +155,42 @@ describe('helpers', () => {
     expect(isSlotImageValue('https://evil.test/a.png')).toBe(false)
     expect(isSlotImageValue('/api/files/a.png" onerror="x')).toBe(false)
     expect(isSlotImageValue('data:image/png;base64,AAAA')).toBe(false)
+  })
+})
+
+describe('slot candidates', () => {
+  const page = `
+<section class="hero">
+  <h1 data-slot="title">Already a slot <span>inside</span></h1>
+  <p class="kicker">Spring <br>launch</p>
+  <div class="cta"><a href="#">Book a call</a><span></span></div>
+  <p>Mixed <strong>markup</strong> here</p>
+  <img class="photo" src="/api/files/a_1.png" alt="Team at work">
+  <img data-slot="logo" src="/api/files/l.png" alt="">
+</section>`
+
+  it('lists unmarked leaf text elements and images outside every slot', () => {
+    expect(slotCandidates(page)).toEqual([
+      { ref: '@0', kind: 'text', tag: 'p', text: 'Spring\nlaunch' },
+      { ref: '@1', kind: 'text', tag: 'a', text: 'Book a call' },
+      { ref: '@2', kind: 'text', tag: 'strong', text: 'markup' },
+      { ref: '@3', kind: 'image', tag: 'img', text: 'Team at work' },
+    ])
+  })
+
+  it('marks candidates by ref, leaving everything else as it was', () => {
+    const marked = markCandidates(page, [
+      { ref: '@3', name: 'photo', label: 'Team "photo"' },
+      { ref: '@1', name: 'cta' },
+      { ref: '@9', name: 'nothing' },
+    ])
+    expect(findSlots(marked).map((s) => [s.name, s.kind, s.label])).toEqual([
+      ['title', 'text', null],
+      ['cta', 'text', null],
+      ['photo', 'image', 'Team "photo"'],
+      ['logo', 'image', null],
+    ])
+    expect(marked).toContain('<a href="#" data-slot="cta">Book a call</a>')
+    expect(slotCandidates(marked).map((c) => c.text)).toEqual(['Spring\nlaunch', 'markup'])
   })
 })

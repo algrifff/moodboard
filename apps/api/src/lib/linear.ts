@@ -15,8 +15,14 @@ import { z } from 'zod'
 export const LINEAR_API = 'https://api.linear.app/graphql'
 export const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize'
 export const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token'
-// Read-only: picking an issue never writes back until Phase 24.
-export const LINEAR_SCOPES = 'read'
+// Read, plus one write: posting a picked design back as a comment (Phase 24).
+export const LINEAR_SCOPES = 'read,comments:create'
+
+// Whether a stored connection's scopes allow posting comments. Connections
+// made before Phase 24 are read-only and must be reconnected.
+export function canComment(scopes: string): boolean {
+  return /(^|[\s,])(write|comments:create)($|[\s,])/.test(scopes)
+}
 
 export type FetchLike = typeof fetch
 
@@ -93,6 +99,19 @@ const Q_TEAMS = `
 query Teams {
   teams(first: 100) {
     nodes { id key name projects(first: 100) { nodes { id name } } }
+  }
+}`
+
+const M_COMMENT_CREATE = `
+mutation CommentCreate($input: CommentCreateInput!) {
+  commentCreate(input: $input) { success comment { id url } }
+}`
+
+const M_FILE_UPLOAD = `
+mutation FileUpload($contentType: String!, $filename: String!, $size: Int!) {
+  fileUpload(contentType: $contentType, filename: $filename, size: $size) {
+    success
+    uploadFile { uploadUrl assetUrl headers { key value } }
   }
 }`
 
@@ -311,6 +330,38 @@ export function linearApi(token: string, fetchImpl: FetchLike = fetch) {
       if (!parsed.success) throw new LinearApiError(502, 'Unexpected issue shape from Linear')
       return parsed.data
     },
+    // `issueId` is the issue's UUID (LinearIssueSummary.id).
+    async commentCreate(issueId: string, body: string): Promise<{ id: string; url: string }> {
+      const data = (await run(M_COMMENT_CREATE, { input: { issueId, body } })) as {
+        commentCreate?: { success?: boolean; comment?: { id: string; url: string } | null }
+      }
+      const comment = data.commentCreate?.comment
+      if (!data.commentCreate?.success || !comment)
+        throw new LinearApiError(502, 'Linear did not create the comment')
+      return comment
+    },
+    // A signed upload target; PUT the bytes there (uploadToLinear), then
+    // reference `assetUrl` from markdown.
+    async fileUpload(
+      contentType: string,
+      filename: string,
+      size: number,
+    ): Promise<{ uploadUrl: string; assetUrl: string; headers: { key: string; value: string }[] }> {
+      const data = (await run(M_FILE_UPLOAD, { contentType, filename, size })) as {
+        fileUpload?: {
+          success?: boolean
+          uploadFile?: {
+            uploadUrl: string
+            assetUrl: string
+            headers?: { key: string; value: string }[]
+          } | null
+        }
+      }
+      const file = data.fileUpload?.uploadFile
+      if (!data.fileUpload?.success || !file)
+        throw new LinearApiError(502, 'Linear did not accept the upload')
+      return { uploadUrl: file.uploadUrl, assetUrl: file.assetUrl, headers: file.headers ?? [] }
+    },
     async teams(): Promise<LinearTeam[]> {
       return nodes(await run(Q_TEAMS), ['teams']).map((n) => {
         const t = n as {
@@ -345,7 +396,11 @@ const tokenResponseSchema = z.object({
   access_token: z.string(),
   refresh_token: z.string().optional(),
   expires_in: z.number().optional(),
-  scope: z.string().optional(),
+  // A comma-separated string or a list, depending on the endpoint version.
+  scope: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((s) => (Array.isArray(s) ? s.join(',') : s)),
 })
 
 export async function tokenRequest(
@@ -386,4 +441,27 @@ export function exchangeLinearCode(
     },
     fetchImpl,
   )
+}
+
+// Uploads a file to Linear's storage and returns the URL a comment can
+// embed: ask for a signed target, then PUT the bytes with its headers.
+export async function uploadToLinear(
+  api: ReturnType<typeof linearApi>,
+  file: { bytes: Buffer; contentType: string; filename: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<string> {
+  const target = await api.fileUpload(file.contentType, file.filename, file.bytes.length)
+  const headers: Record<string, string> = {
+    'Content-Type': file.contentType,
+    'Cache-Control': 'public, max-age=31536000',
+  }
+  for (const h of target.headers) headers[h.key] = h.value
+  const res = await fetchImpl(target.uploadUrl, {
+    method: 'PUT',
+    headers,
+    body: new Uint8Array(file.bytes),
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!res.ok) throw new LinearApiError(res.status, `Upload to Linear failed (${res.status})`)
+  return target.assetUrl
 }

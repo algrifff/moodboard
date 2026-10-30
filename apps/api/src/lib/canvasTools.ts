@@ -1,6 +1,8 @@
 import {
   agentIdSchema,
   assetMediaKindSchema,
+  DESIGN_BRIEF_MAX,
+  DESIGN_VARIANTS_MAX,
   outputFormatSchema,
   slotNameSchema,
   SLOT_TEXT_MAX,
@@ -29,7 +31,9 @@ import {
   type VersionedObject,
 } from './boardObjects'
 import { clusterLayout, nextSpot } from './canvasPlacement'
+import { designOutputTool, pickDesignVariantTool, postLinearCommentTool } from './designAgentTools'
 import {
+  addAssetToBoardTool,
   getLinearIssueTool,
   getStyleKitTool,
   listClientsTool,
@@ -42,10 +46,12 @@ import {
   getOutputTool,
   listTemplatesTool,
   placeOutputTool,
+  updateOutputHtmlTool,
   updateOutputSlotsTool,
 } from './outputTools'
 import { listGroupStates } from './groupState'
 import { routeUrlToImporter, type DispatchOk } from './mcpUrlDispatch'
+import type { ModelClient, ToolRunOptions } from './orchestrator'
 import { saveImageFromUrl } from './saveImageFromUrl'
 
 // Canvas tools, implemented once and exposed over two transports: the MCP
@@ -54,7 +60,13 @@ import { saveImageFromUrl } from './saveImageFromUrl'
 // Each tool returns a payload for the model plus the rows it changed, so
 // the orchestrator can push them to the open canvas.
 
-export type ToolContext = { boardId: string; userId: string }
+export type ToolContext = {
+  boardId: string
+  userId: string
+  // The model client for tools that run their own agent (design_output).
+  // Undefined means "use the server's"; null means none is configured.
+  model?: ModelClient | null
+} & ToolRunOptions
 
 export type ToolEffects = { objects: VersionedObject[]; groups: GroupState[] }
 
@@ -759,6 +771,91 @@ const placeOutputDef = defineTool({
   run: (ctx, input) => placeOutputTool(ctx, input),
 })
 
+const textEdits = z
+  .array(
+    z.object({
+      find: z.string().min(1).max(20_000).describe('Exact text currently in the document.'),
+      replace: z.string().max(60_000),
+      all: z.boolean().optional().describe('Replace every occurrence (default: must match once).'),
+    }),
+  )
+  .max(20)
+
+const updateOutputHtmlDef = defineTool({
+  name: 'update_output_html',
+  title: 'Edit output HTML/CSS',
+  description:
+    "Edit an output's HTML and/or CSS with exact find/replace edits, creating a new version. For structure the slots can't express: add, remove or reorder deck slides and page sections (copy a whole <section>…</section> to add one), change layout CSS, add a decorative element. Read the source first (get_output with includeSource:true); each find must match exactly once unless all:true, and edits apply in order. Keep data-slot markers on anything holding copy or imagery and change copy itself with update_output_slots. Body markup only — no <script>, <style>, <link> or event handlers, no external URLs (images are library /api/files/… urls); CSS reads only --kit-* variables and its own custom properties; motion only as CSS keyframes.",
+  input: {
+    output: outputQuery,
+    html: textEdits.optional(),
+    css: textEdits.optional(),
+    baseVersion: z.number().int().min(1).optional(),
+    note: z.string().max(200).optional().describe('What changed, for the version list.'),
+  },
+  run: (ctx, input) => updateOutputHtmlTool(ctx, input),
+})
+
+// ---------------------------------------------------------------------------
+// Output agents (bodies in designAgentTools.ts)
+// ---------------------------------------------------------------------------
+
+const designOutputDef = defineTool({
+  name: 'design_output',
+  title: 'Design options',
+  description: `Run the designer: it makes ${DESIGN_VARIANTS_MAX} distinct options (by default) of one design for a client — each built from a template in the client's kit with library imagery, rendered, critiqued visually and revised — and shows them to the user as cards with thumbnails to pick from. Takes a few minutes. Needs the client (default: this board's), the format and a brief with the core message; pass the kit when the client has several. The brief is everything the designer gets: message, audience, tone, must-include copy, things to avoid. Identical requests reuse earlier options; regenerate:true runs fresh ones (only when the user asks). Pass linearIssue (e.g. LIN-123) when the brief came from a Linear issue so the pick can be posted back.`,
+  input: {
+    format: outputFormatSchema,
+    brief: z.string().min(1).max(DESIGN_BRIEF_MAX),
+    client: z.string().min(1).optional().describe('Client name or slug.'),
+    kit: z.string().min(1).optional().describe("Kit name or id (one of the client's kits)."),
+    variants: z
+      .number()
+      .int()
+      .min(1)
+      .max(DESIGN_VARIANTS_MAX)
+      .optional()
+      .describe(`How many options, default ${DESIGN_VARIANTS_MAX}.`),
+    regenerate: z.boolean().optional(),
+    linearIssue: z.string().min(1).max(64).optional(),
+  },
+  run: (ctx, input) => designOutputTool(ctx, input),
+})
+
+const pickDesignVariantDef = defineTool({
+  name: 'pick_design_variant',
+  title: 'Pick a design option',
+  description:
+    "Mark one of design_output's options as the chosen one, when the user tells you which they want (they can also pick on the card). Only the picked option can be posted to Linear.",
+  input: { output: outputQuery },
+  run: (ctx, input) => pickDesignVariantTool(ctx, input),
+})
+
+const postLinearCommentDef = defineTool({
+  name: 'post_linear_comment',
+  title: 'Post to Linear',
+  description:
+    "Post an output to a Linear issue as a comment: its name, a share link (created if needed) and the rendered thumbnail. Only when the user asks. A design_output option must have been picked first and goes to its run's issue by default; any other output needs issue. Uses the signed-in user's Linear connection.",
+  input: {
+    output: outputQuery,
+    issue: z.string().min(1).max(300).optional().describe('Identifier (LIN-123) or issue URL.'),
+  },
+  run: (ctx, input) => postLinearCommentTool(ctx, input),
+})
+
+const addAssetToBoardDef = defineTool({
+  name: 'add_asset_to_board',
+  title: 'Put a library asset on the board',
+  description:
+    'Place a library asset (image, PDF or font from search_assets) on this board, e.g. to lay out references. Lands in free space unless x/y (world px, centre) are given; use group_objects afterwards to pull references together.',
+  input: {
+    asset: z.string().min(1).max(300).describe('Asset id or /api/files/… url from search_assets.'),
+    x: z.number().optional(),
+    y: z.number().optional(),
+  },
+  run: (ctx, input) => addAssetToBoardTool(ctx, input),
+})
+
 export const CANVAS_TOOLS: CanvasTool[] = [
   getBoard,
   addNote,
@@ -772,10 +869,15 @@ export const CANVAS_TOOLS: CanvasTool[] = [
   listKits,
   getStyleKit,
   searchAssets,
+  addAssetToBoardDef,
   getLinearIssue,
   listTemplatesDef,
   createOutputDef,
   getOutputDef,
   updateOutputSlotsDef,
+  updateOutputHtmlDef,
   placeOutputDef,
+  designOutputDef,
+  pickDesignVariantDef,
+  postLinearCommentDef,
 ]

@@ -13,13 +13,15 @@ import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
 import { syncStarterTemplates } from './lib/starterTemplates'
 import { ensureDataDirs } from './lib/storage'
-import { agentRoutes, defaultModelClient } from './routes/agent'
+import { defaultModelClient } from './lib/orchestrator'
+import { agentRoutes } from './routes/agent'
 import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
 import { boardGroups } from './routes/boardGroups'
 import { boards } from './routes/boards'
 import { clients } from './routes/clients'
 import { connections } from './routes/connections'
+import { designRuns } from './routes/designRuns'
 import { external } from './routes/external'
 import { files } from './routes/files'
 import { kits } from './routes/kits'
@@ -143,6 +145,7 @@ api.route('/library', library)
 api.route('/templates', templates)
 api.route('/outputs', outputs)
 api.route('/output-shares', outputShares)
+api.route('/design-runs', designRuns)
 api.route('/linear', linear)
 api.route('/external', external)
 api.route('/voice', voice)

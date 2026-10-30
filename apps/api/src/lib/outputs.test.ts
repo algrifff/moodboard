@@ -251,7 +251,8 @@ describe.skipIf(!hasDb)('templates + outputs', () => {
   it('saves an output as a template with renamed / dropped / labelled slots', async () => {
     const doc = (await outputs.outputRenderDoc(outputId))!
     const { fillSlots, findSlots } = await import('@moodboard/shared')
-    const html = templates.applySlotEdits(fillSlots(doc.html, doc.values), [
+    const { applySlotEdits } = await import('./slotProposer')
+    const html = applySlotEdits(fillSlots(doc.html, doc.values), [
       { from: 'headline', to: 'title', label: 'Big title' },
       { from: 'tag', to: null },
     ])

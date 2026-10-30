@@ -6,11 +6,14 @@ export const DATA_DIR = process.env.DATA_DIR ?? DEFAULT_DATA_DIR
 export const UPLOADS_DIR = path.join(DATA_DIR, 'uploads')
 export const PDF_DIR = path.join(DATA_DIR, 'pdfs')
 export const PDF_THUMB_DIR = path.join(DATA_DIR, 'pdf-thumbs')
+// Rendered output frames (PNG), cached per immutable output version.
+export const OUTPUTS_DIR = path.join(DATA_DIR, 'outputs')
 
 export async function ensureDataDirs(): Promise<void> {
   await mkdir(UPLOADS_DIR, { recursive: true })
   await mkdir(PDF_DIR, { recursive: true })
   await mkdir(PDF_THUMB_DIR, { recursive: true })
+  await mkdir(OUTPUTS_DIR, { recursive: true })
 }
 
 export type SavedUpload = {

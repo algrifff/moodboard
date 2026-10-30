@@ -35,11 +35,12 @@ import {
   type RenderDoc,
 } from '../lib/outputs'
 import { rateLimit } from '../lib/rateLimit'
+import { slotProposer } from '../lib/designRuns'
+import { removeOutputFrames, outputThumbnail } from '../lib/outputRender'
+import { applySlotEdits } from '../lib/slotProposer'
 import {
-  applySlotEdits,
   createTemplate,
   deleteTemplate,
-  existingMarkers,
   getTemplateDetail,
   getTemplateSummary,
   listTemplates,
@@ -237,14 +238,18 @@ outputs.get('/:id', async (c) => {
   return c.json(detail)
 })
 
-// The markers save-as-template starts from (the Phase 24 agent will propose
-// new ones through the same hook).
-outputs.get('/:id/proposed-slots', async (c) => {
+// The markers save-as-template starts from: proposed over the document as
+// it will be saved (values filled in), so candidate refs line up with the
+// save below. A model pass when ANTHROPIC_API_KEY is set.
+const proposeLimit = rateLimit({ scope: 'slot-proposer', limit: 20, windowMs: 60_000 })
+
+outputs.get('/:id/proposed-slots', proposeLimit, async (c) => {
   const version = versionParam(c.req.query('version'))
   if (version === null) return c.json({ error: 'Bad version' }, 400)
-  const doc = await outputRenderDoc(c.req.param('id'), version)
+  const doc = await outputRenderDoc(c.req.param('id') as string, version)
   if (!doc) return c.json({ error: 'Not found' }, 404)
-  return c.json({ slots: await existingMarkers({ html: doc.html, css: doc.css }) })
+  const html = fillSlots(doc.html, doc.values)
+  return c.json({ slots: await slotProposer()({ html, css: doc.css }) })
 })
 
 outputs.post('/:id/versions', docBodyLimit, async (c) => {
@@ -278,7 +283,29 @@ outputs.patch('/:id', async (c) => {
 
 outputs.delete('/:id', async (c) => {
   if (!(await deleteOutput(c.req.param('id')))) return c.json({ error: 'Not found' }, 404)
+  await removeOutputFrames(c.req.param('id') as string)
   return c.json({ ok: true })
+})
+
+// The rendered end-state frame (PNG) of a version — variant cards, Linear.
+// Rendered once per version, then served from the volume.
+const thumbnailLimit = rateLimit({ scope: 'output-thumbnail', limit: 120, windowMs: 60_000 })
+
+outputs.get('/:id/thumbnail', thumbnailLimit, async (c) => {
+  const version = versionParam(c.req.query('version'))
+  if (version === null) return c.json({ error: 'Bad version' }, 400)
+  const thumb = await outputThumbnail(c.req.param('id') as string, version).catch((e) => {
+    console.error('thumbnail render failed', e)
+    return undefined
+  })
+  if (thumb === undefined) return c.json({ error: 'Render failed' }, 500)
+  if (!thumb) return c.json({ error: 'Not found' }, 404)
+  return c.body(new Uint8Array(thumb.png), 200, {
+    'Content-Type': 'image/png',
+    'Cache-Control':
+      version !== undefined ? 'private, max-age=31536000, immutable' : 'private, no-cache',
+    'X-Content-Type-Options': 'nosniff',
+  })
 })
 
 outputs.get('/:id/render', async (c) => {

@@ -97,6 +97,8 @@ export const linearMappingsResponseSchema = z.object({
   teams: z.array(linearTeamSchema).nullable(),
 })
 
+export const linearMappingsOnlyResponseSchema = z.object({ mappings: z.array(linearMappingSchema) })
+
 export const putLinearMappingRequestSchema = z.object({
   kind: linearMappingKindSchema,
   linearId: z.string().min(1),

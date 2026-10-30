@@ -114,6 +114,7 @@ export const kitVersionMetaSchema = z.object({
 export type KitVersionMeta = z.infer<typeof kitVersionMetaSchema>
 
 export const kitsResponseSchema = z.object({ kits: z.array(kitSummarySchema) })
+export const kitResponseSchema = z.object({ kit: kitSummarySchema })
 
 export const kitDetailSchema = z.object({
   kit: kitSummarySchema,

@@ -10,13 +10,22 @@ import { focusObjects } from '@/lib/canvasCamera'
 import { useAgentSidebarStore } from '@/store/agentSidebar'
 import { useCanvasStore } from '@/store/canvas'
 import { useGroupPanelStore, type SlotState } from '@/store/groupPanels'
+import { SaveKitPanel } from './SaveKitPanel'
 
 const IDLE: SlotState = { kind: 'idle' }
 
 // A group's full readout in the sidebar, with the agent row to run
 // specialists by hand. Edits to a brief persist through the group-panel
 // store (GroupsLayer saves it for the team).
-export function AgentGroupView({ boardId, groupKey }: { boardId: string; groupKey: string }) {
+export function AgentGroupView({
+  boardId,
+  groupKey,
+  clientId,
+}: {
+  boardId: string
+  groupKey: string
+  clientId: string | null
+}) {
   const showChat = useAgentSidebarStore((s) => s.showChat)
   const objects = useCanvasStore((s) => s.objects)
   const slot = useGroupPanelStore((s) => s.display[groupKey]) ?? IDLE
@@ -111,6 +120,11 @@ export function AgentGroupView({ boardId, groupKey }: { boardId: string; groupKe
               }
             />
             <div className="mt-4">
+              {slot.kind === 'ready-brief' && (
+                <div className="mb-4">
+                  <SaveKitPanel brief={slot.data} items={items} clientId={clientId} />
+                </div>
+              )}
               {slot.kind === 'ready-brief' && (
                 <BriefReadout
                   data={slot.data}

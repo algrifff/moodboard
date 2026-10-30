@@ -12,6 +12,14 @@ import { listConnections } from '@/lib/connectionsApi'
 // connection yet, we stash the resource id here, open the picker drawer
 // (which shows the connect CTAs in its empty state), and after the OAuth
 // handshake completes the Board page checks this and runs the import.
+// Drive and Spotify connections have tiles to browse; Linear has issues,
+// which the drawer lists in its own section.
+export type PickerConnection = ConnectionSummary & { provider: 'drive' | 'spotify' }
+
+export function isPickerConnection(c: ConnectionSummary): c is PickerConnection {
+  return c.provider === 'drive' || c.provider === 'spotify'
+}
+
 export type PendingPaste =
   | { provider: 'drive'; fileId: string }
   | { provider: 'spotify'; ref: { kind: 'playlist' | 'track' | 'album'; id: string } }
@@ -22,7 +30,11 @@ type SourcePickerState = {
   connectionsLoaded: boolean
   loadingConnections: boolean
   pendingPaste: PendingPaste | null
+  // A library asset is being dragged out of the drawer; the drawer and its
+  // scrim let the drop through to the canvas underneath.
+  draggingAsset: boolean
 
+  setDraggingAsset: (dragging: boolean) => void
   openPicker: () => void
   closePicker: () => void
   togglePicker: () => void
@@ -38,7 +50,9 @@ export const useSourcePickerStore = create<SourcePickerState>()((set, get) => ({
   connectionsLoaded: false,
   loadingConnections: false,
   pendingPaste: null,
+  draggingAsset: false,
 
+  setDraggingAsset: (dragging) => set({ draggingAsset: dragging }),
   openPicker: () => {
     set({ open: true })
     // Fire-and-forget refresh on first open; subsequent opens reuse the
@@ -49,7 +63,7 @@ export const useSourcePickerStore = create<SourcePickerState>()((set, get) => ({
       void get().refreshConnections()
     }
   },
-  closePicker: () => set({ open: false }),
+  closePicker: () => set({ open: false, draggingAsset: false }),
   togglePicker: () => {
     if (get().open) get().closePicker()
     else get().openPicker()

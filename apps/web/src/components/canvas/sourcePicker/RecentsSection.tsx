@@ -1,6 +1,7 @@
-import type { ConnectionSummary, PickerTile } from '@moodboard/shared'
+import type { PickerTile } from '@moodboard/shared'
 import { useEffect, useRef, useState } from 'react'
 import { listRecents } from '@/lib/connectionsApi'
+import type { PickerConnection } from '@/store/sourcePicker'
 import { EmptyHint, Section, TileRow, TileSkeletonList } from './tiles'
 
 // ---------------------------------------------------------------------------
@@ -12,7 +13,7 @@ export function RecentsSection({
   onImport,
   importingId,
 }: {
-  connections: ConnectionSummary[]
+  connections: PickerConnection[]
   onImport: (tile: PickerTile) => void
   importingId: string | null
 }) {

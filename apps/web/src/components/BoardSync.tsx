@@ -48,10 +48,12 @@ export function BoardSync({
   boardId,
   children,
   onTitle,
+  onClient,
 }: {
   boardId: string
   children: React.ReactNode
   onTitle?: (name: string) => void
+  onClient?: (clientId: string | null) => void
 }) {
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +81,7 @@ export function BoardSync({
           offset: viewport?.offset ?? { x: 0, y: 0 },
         })
         onTitle?.(board.name)
+        onClient?.(board.clientId)
         setSynced({ boardId, state: syncedStateFrom(board.objects, board.versions) })
         setStatus('ready')
       })
@@ -95,7 +98,7 @@ export function BoardSync({
     return () => {
       cancelled = true
     }
-  }, [boardId, hydrate, onTitle])
+  }, [boardId, hydrate, onTitle, onClient])
 
   // Autosave: diff the store against what the server last confirmed and
   // send only the changed objects. Saves run one at a time; edits made

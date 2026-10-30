@@ -24,6 +24,7 @@ export async function addAssetToBoard(
   assetId: string,
   boardId: string,
   userId: string,
+  at?: { x: number; y: number },
 ): Promise<AddToBoardResult> {
   const asset = await getAssetRow(assetId)
   if (!asset || asset.kind === 'pdf-thumb')
@@ -76,7 +77,9 @@ export async function addAssetToBoard(
   const object: CanvasObject = {
     id: nanoid(),
     type,
-    position: nextSpot(existing, size),
+    position: at
+      ? { x: at.x - size.width / 2, y: at.y - size.height / 2 }
+      : nextSpot(existing, size),
     size,
     rotation: 0,
     zIndex: existing.length,

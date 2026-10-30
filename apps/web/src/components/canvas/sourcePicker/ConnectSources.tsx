@@ -1,53 +1,7 @@
 import type { ConnectionSummary } from '@moodboard/shared'
-import { CheckCircle, MagnifyingGlass, Plus } from '@phosphor-icons/react'
+import { CheckCircle, Plus } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { DriveLogo, SpotifyLogo } from '../sourceLogos'
-
-// ---------------------------------------------------------------------------
-// Empty state — no connections yet. Centred hero with both providers.
-// ---------------------------------------------------------------------------
-
-export function EmptySourcesState({
-  loading,
-  onConnectDrive,
-  onConnectSpotify,
-}: {
-  loading: boolean
-  onConnectDrive: () => void
-  onConnectSpotify: () => void
-}) {
-  return (
-    <div className="flex-1 flex flex-col items-center justify-center px-8 text-center gap-4">
-      <div
-        className="w-16 h-16 rounded-full flex items-center justify-center"
-        style={{ backgroundColor: 'var(--bg-elevated)' }}
-      >
-        <MagnifyingGlass size={28} weight="duotone" />
-      </div>
-      <div className="space-y-1">
-        <div className="text-base font-semibold text-foreground">No sources connected yet</div>
-        <div className="text-[13px] text-[var(--text-faint)] max-w-[40ch]">
-          Connect a workspace to pull pages and files onto the canvas alongside your visual
-          references.
-        </div>
-      </div>
-      <div className="flex flex-col gap-2 w-full max-w-[280px]">
-        <ConnectProviderButton
-          provider="drive"
-          connectedCount={0}
-          onClick={onConnectDrive}
-          disabled={loading}
-        />
-        <ConnectProviderButton
-          provider="spotify"
-          connectedCount={0}
-          onClick={onConnectSpotify}
-          disabled={loading}
-        />
-      </div>
-    </div>
-  )
-}
+import { DriveLogo, LinearLogo, SpotifyLogo } from '../sourceLogos'
 
 // ---------------------------------------------------------------------------
 // Add another source — always-visible. New providers slot in by appending
@@ -59,14 +13,17 @@ export function AddSourceSection({
   loading,
   onConnectDrive,
   onConnectSpotify,
+  onConnectLinear,
 }: {
   connections: ConnectionSummary[]
   loading: boolean
   onConnectDrive: () => void
   onConnectSpotify: () => void
+  onConnectLinear: () => void
 }) {
   const driveCount = connections.filter((c) => c.provider === 'drive').length
   const spotifyCount = connections.filter((c) => c.provider === 'spotify').length
+  const linearCount = connections.filter((c) => c.provider === 'linear').length
 
   return (
     <div
@@ -84,7 +41,7 @@ export function AddSourceSection({
           Sources
         </span>
       </div>
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
         <ConnectProviderButton
           provider="drive"
           connectedCount={driveCount}
@@ -95,6 +52,12 @@ export function AddSourceSection({
           provider="spotify"
           connectedCount={spotifyCount}
           onClick={onConnectSpotify}
+          disabled={loading}
+        />
+        <ConnectProviderButton
+          provider="linear"
+          connectedCount={linearCount}
+          onClick={onConnectLinear}
           disabled={loading}
         />
       </div>
@@ -112,12 +75,12 @@ function ConnectProviderButton({
   onClick,
   disabled,
 }: {
-  provider: 'drive' | 'spotify'
+  provider: 'drive' | 'spotify' | 'linear'
   connectedCount: number
   onClick: () => void
   disabled?: boolean
 }) {
-  const label = provider === 'drive' ? 'Google Drive' : 'Spotify'
+  const label = provider === 'drive' ? 'Google Drive' : provider === 'linear' ? 'Linear' : 'Spotify'
   const isConnected = connectedCount > 0
   return (
     <motion.button
@@ -164,9 +127,10 @@ export function ProviderGlyph({
   provider,
   size = 14,
 }: {
-  provider: 'drive' | 'spotify'
+  provider: 'drive' | 'spotify' | 'linear'
   size?: number
 }) {
   if (provider === 'drive') return <DriveLogo size={size} />
+  if (provider === 'linear') return <LinearLogo size={size} />
   return <SpotifyLogo size={size} />
 }

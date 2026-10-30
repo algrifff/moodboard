@@ -1,10 +1,14 @@
 import type { BoardPreview, BoardSummary } from '@moodboard/shared'
-import { Plus, SignOut, Trash } from '@phosphor-icons/react'
-import { useEffect, useState } from 'react'
+import { Plus, Trash } from '@phosphor-icons/react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { AppHeader } from '@/components/AppHeader'
 import { ensureFontLoaded } from '@/components/canvas/FontNode'
-import { useSession, signOut } from '@/lib/authClient'
-import { createBoard, deleteBoard, listBoards } from '@/lib/boardsApi'
+import { ClientSelect } from '@/components/clients/ClientSelect'
+import { ClientSwitcher } from '@/components/clients/ClientSwitcher'
+import { createBoard, deleteBoard, listBoards, setBoardClient } from '@/lib/boardsApi'
+import { resolveClientFilter, useClientFilter } from '@/lib/clientFilter'
+import { useClients, useClientsStore } from '@/store/clients'
 
 function formatWhen(iso: string): string {
   const date = new Date(iso)
@@ -20,8 +24,10 @@ function formatWhen(iso: string): string {
 }
 
 export function DashboardPage() {
-  const { data: session } = useSession()
   const navigate = useNavigate()
+  const { clients, loaded: clientsLoaded } = useClients()
+  const [filter, setFilter] = useClientFilter({ allowNone: true })
+  const activeClient = resolveClientFilter(filter, clients)
   const [boards, setBoards] = useState<BoardSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -43,7 +49,7 @@ export function DashboardPage() {
   const handleCreate = async () => {
     setCreating(true)
     try {
-      const board = await createBoard()
+      const board = await createBoard(activeClient ? { clientId: activeClient.id } : {})
       navigate(`/board/${board.id}`)
     } catch (e) {
       setError((e as Error).message)
@@ -58,41 +64,40 @@ export function DashboardPage() {
     setBoards((b) => (b ? b.filter((x) => x.id !== id) : b))
   }
 
-  const handleSignOut = async () => {
-    await signOut()
-    navigate('/sign-in')
+  const handleAssign = async (id: string, clientId: string | null) => {
+    const previous = boards
+    setBoards((b) => (b ? b.map((x) => (x.id === id ? { ...x, clientId } : x)) : b))
+    try {
+      await setBoardClient(id, clientId)
+      void useClientsStore.getState().load()
+    } catch (e) {
+      setBoards(previous)
+      setError((e as Error).message)
+    }
   }
+
+  // A filter naming a client that no longer exists shows everything.
+  const visible = useMemo(() => {
+    if (!boards) return null
+    if (filter.kind === 'none') return boards.filter((b) => b.clientId === null)
+    if (activeClient) return boards.filter((b) => b.clientId === activeClient.id)
+    return boards
+  }, [boards, filter.kind, activeClient])
 
   return (
     <div className="min-h-screen bg-background">
-      <header>
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
-          <h1 className="text-base font-semibold tracking-tight text-foreground">moodboard.ai</h1>
-          <div className="flex items-center gap-5 text-sm">
-            <Link
-              to="/settings"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              title="Settings"
-            >
-              {session?.user?.email}
-            </Link>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Sign out"
-            >
-              <SignOut size={14} weight="regular" />
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader />
 
       <main className="max-w-5xl mx-auto px-6 pt-6 pb-16">
-        <div className="flex items-end justify-between mb-8">
+        <div className="flex items-end justify-between mb-5">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-foreground">Team boards</h2>
+            <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+              {activeClient
+                ? `${activeClient.name} boards`
+                : filter.kind === 'none'
+                  ? 'Unassigned boards'
+                  : 'Team boards'}
+            </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
               Drop, group, and let the read come to you.
             </p>
@@ -109,8 +114,54 @@ export function DashboardPage() {
           </button>
         </div>
 
+        {clientsLoaded && (
+          <div className="mb-6">
+            <ClientSwitcher
+              clients={clients}
+              filter={activeClient || filter.kind === 'none' ? filter : { kind: 'all' }}
+              onChange={setFilter}
+              allowNone
+              counts={
+                boards
+                  ? {
+                      all: boards.length,
+                      none: boards.filter((b) => b.clientId === null).length,
+                      byClient: (c) => boards.filter((b) => b.clientId === c.id).length,
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        )}
+
         {error && <p className="text-sm text-destructive mb-4">Error: {error}</p>}
         {boards === null && !error && <DashboardSkeleton />}
+        {boards && boards.length > 0 && visible && visible.length === 0 && (
+          <div
+            className="bg-card py-12 px-6 text-center"
+            style={{ borderRadius: 'var(--radius-lg)' }}
+          >
+            <h3 className="text-base font-semibold text-foreground">
+              {activeClient ? `No boards for ${activeClient.name} yet` : 'No unassigned boards'}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {activeClient
+                ? 'Start one here, or assign an existing board from its card.'
+                : 'Every board belongs to a client.'}
+            </p>
+            {activeClient && (
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="inline-flex items-center gap-1.5 mt-5 bg-primary text-primary-foreground pl-3 pr-3.5 py-2 text-sm font-medium hover:brightness-110 transition-[filter]"
+                style={{ borderRadius: 'var(--radius)' }}
+              >
+                <Plus size={14} weight="bold" />
+                New {activeClient.name} board
+              </button>
+            )}
+          </div>
+        )}
         {boards && boards.length === 0 && (
           <div
             className="bg-card py-16 px-6 text-center"
@@ -133,9 +184,9 @@ export function DashboardPage() {
           </div>
         )}
 
-        {boards && boards.length > 0 && (
+        {visible && visible.length > 0 && (
           <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {boards.map((b) => (
+            {visible.map((b) => (
               <li key={b.id} className="group relative">
                 <Link
                   to={`/board/${b.id}`}
@@ -148,6 +199,16 @@ export function DashboardPage() {
                     Edited {formatWhen(b.updatedAt)}
                   </p>
                 </Link>
+                <div className="absolute bottom-3 right-3 w-[42%] opacity-80 transition-opacity focus-within:opacity-100 hover:opacity-100">
+                  <ClientSelect
+                    clients={clients}
+                    value={b.clientId}
+                    onChange={(clientId) => void handleAssign(b.id, clientId)}
+                    noneLabel="Unassigned"
+                    label={`Client for ${b.name}`}
+                    className="w-full"
+                  />
+                </div>
                 <button
                   type="button"
                   onClick={() => handleDelete(b.id)}

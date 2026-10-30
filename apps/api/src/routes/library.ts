@@ -61,7 +61,12 @@ library.post('/:id/add-to-board', async (c) => {
     .where(eq(schema.board.id, parsed.data.boardId))
     .limit(1)
   if (!board) return c.json({ error: 'Board not found' }, 404)
-  const result = await addAssetToBoard(c.req.param('id'), board.id, c.get('user')!.id)
+  const result = await addAssetToBoard(
+    c.req.param('id'),
+    board.id,
+    c.get('user')!.id,
+    parsed.data.position,
+  )
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json(result.added)
 })

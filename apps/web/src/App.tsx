@@ -5,6 +5,9 @@ import { PageMotion } from '@/components/PageMotion'
 import { RequireAuth } from '@/components/RequireAuth'
 import { BoardPage } from '@/pages/Board'
 import { DashboardPage } from '@/pages/Dashboard'
+import { KitPage } from '@/pages/Kit'
+import { KitsPage } from '@/pages/Kits'
+import { LibraryPage } from '@/pages/Library'
 import { SettingsPage } from '@/pages/Settings'
 import { SharePage } from '@/pages/Share'
 import { SignInPage } from '@/pages/SignIn'
@@ -60,6 +63,36 @@ function AnimatedRoutes() {
             <RequireAuth>
               <PageMotion>
                 <BoardPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/kits"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <KitsPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/kits/:id"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <KitPage />
+              </PageMotion>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/library"
+          element={
+            <RequireAuth>
+              <PageMotion>
+                <LibraryPage />
               </PageMotion>
             </RequireAuth>
           }

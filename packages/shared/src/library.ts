@@ -82,4 +82,9 @@ export const updateAssetRequestSchema = z
   .partial()
 export type UpdateAssetRequest = z.infer<typeof updateAssetRequestSchema>
 
-export const addAssetToBoardRequestSchema = z.object({ boardId: z.string().min(1) })
+export const addAssetToBoardRequestSchema = z.object({
+  boardId: z.string().min(1),
+  // World point to centre the new object on (a drop). Omitted: the next free spot.
+  position: z.object({ x: z.number(), y: z.number() }).optional(),
+})
+export type AddAssetToBoardRequest = z.infer<typeof addAssetToBoardRequestSchema>

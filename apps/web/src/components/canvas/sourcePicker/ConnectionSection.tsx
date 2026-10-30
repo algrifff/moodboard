@@ -1,8 +1,9 @@
-import type { ConnectionSummary, PickerTile } from '@moodboard/shared'
+import type { PickerTile } from '@moodboard/shared'
 import { CaretRight, Trash } from '@phosphor-icons/react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listChildPages, searchConnection } from '@/lib/connectionsApi'
+import type { PickerConnection } from '@/store/sourcePicker'
 import { EASE_OUT_QUICK } from '@/lib/motion'
 import { ProviderGlyph } from './ConnectSources'
 import { canExpandTile, EmptyHint, Section, TileRow, TileSkeletonList } from './tiles'
@@ -20,7 +21,7 @@ export function ConnectionSection({
   onDisconnect,
   importingId,
 }: {
-  connection: ConnectionSummary
+  connection: PickerConnection
   query: string
   onImport: (tile: PickerTile) => void
   onDisconnect: () => void

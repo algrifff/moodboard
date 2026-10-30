@@ -84,11 +84,12 @@ cp apps/web/.env.example apps/web/.env   # currently empty — no client-side en
 
 External knowledge sources (all **optional** — the app boots without them; each unconnected source just won't appear in the picker):
 
-| Key                                               | What it is                                                                                                                                                                                                |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CONNECTION_TOKEN_KEY`                            | 64 hex chars (32 bytes). AES-256-GCM key that encrypts every OAuth token at rest. Required for any source. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`. |
-| `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Google Cloud OAuth (Drive + Sheets + Slides APIs). Redirect: `…/api/connections/drive/callback`.                                                                                                          |
-| `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify app (scopes: `playlist-read-private`, `playlist-read-collaborative`, `user-read-email`). Redirect: `…/api/connections/spotify/callback`.                                                          |
+| Key                                               | What it is                                                                                                                                                                                                        |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONNECTION_TOKEN_KEY`                            | 64 hex chars (32 bytes). AES-256-GCM key that encrypts every OAuth token at rest. Required for any source. Generate with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.         |
+| `GOOGLE_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Google Cloud OAuth (Drive + Sheets + Slides APIs). Redirect: `…/api/connections/drive/callback`.                                                                                                                  |
+| `SPOTIFY_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | Spotify app (scopes: `playlist-read-private`, `playlist-read-collaborative`, `user-read-email`). Redirect: `…/api/connections/spotify/callback`.                                                                  |
+| `LINEAR_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`  | Linear OAuth app (Settings → API → OAuth applications; scope `read`). Redirect: `…/api/connections/linear/callback` on the **web** origin. Optional — without them the Linear picker shows a "not set up" notice. |
 
 **OAuth needs HTTPS.** Google requires HTTPS redirect URIs outside localhost; Spotify accepts `https://…` or the `http://127.0.0.1` loopback. The simplest setup that satisfies all providers is local HTTPS on `https://127.0.0.1:5173` via [mkcert](https://github.com/FiloSottile/mkcert) — see [Local HTTPS](#local-https-for-oauth) below. Set every redirect URI (and `BETTER_AUTH_URL` / `WEB_ORIGIN`) to match.
 
@@ -204,6 +205,16 @@ How it hangs together:
 - OAuth tokens are **encrypted at rest** (AES-256-GCM, `CONNECTION_TOKEN_KEY`) and refreshed transparently. The frontend only ever sees `{ id, provider, accountEmail }`.
 - Every source follows the same shape — a shared data type + Zod schema in `packages/shared`, a `lib/<provider>.ts` adapter, `/<provider>/import` + `/refresh` endpoints in `apps/api/src/routes/external.ts`, a DOM card node, and a content-hash case so the analysis cache invalidates when the snapshot changes. **Refresh** re-pulls a fresh snapshot in place.
 - **Spotify audio features** come from [ReccoBeats](https://reccobeats.com) (free, no-auth), keyed by Spotify track id — Spotify retired `/v1/audio-features` for apps registered after 2024-11-27. Playlist/album cards expand into a per-track table (BPM / energy / valence / genre / year / popularity); coverage gaps and editorial-playlist lockouts degrade gracefully.
+
+---
+
+## Clients, style kits, the asset library and Linear
+
+- **Clients** — a client owns boards, style kits and library assets (all optional, all team-visible). The dashboard filters by client; boards are assigned from their card or the board header.
+- **Style kits** — a group's brief distilled into versioned tokens (palette roles, fonts, logos, voice, imagery rules). Save one from a brief in the sidebar ("Save as style kit"), then edit it on `/kits/:id`; every save appends an immutable version. `kitToCss` (`packages/shared/src/kitCss.ts`) compiles tokens into a `:root { --kit-* }` stylesheet — the variable names are a contract for templates; `GET /api/kits/:id/css` serves it.
+- **Asset library** — every upload/import is catalogued (kind, dimensions, dominant colours, tags, client) and searchable with Postgres full-text (`/library`, the Sources drawer, the `search_assets` tool). If `ANTHROPIC_API_KEY` is set, new images also get a short AI caption and tags (Haiku); without it captions are simply skipped. Existing assets are backfilled by the maintenance tick.
+- **Linear** — connect in the Sources drawer or Settings, then pick an issue (assigned / recent / search / paste `LIN-123`). That starts a new agent thread with the issue as the brief; the orchestrator can also read one with `get_linear_issue`. Map Linear teams/projects to clients in Settings so an issue resolves to a client automatically. Read-only: nothing is written back to Linear.
+- **Agent tools** (MCP and sidebar share them): `list_clients`, `list_kits`, `get_style_kit` (tokens + compiled CSS), `search_assets`, `get_linear_issue`.
 
 ---
 

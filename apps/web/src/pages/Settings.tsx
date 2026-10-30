@@ -1,6 +1,7 @@
 import { ArrowLeft } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { ApiKeysSection } from '@/components/settings/ApiKeysSection'
+import { LinearSection } from '@/components/settings/LinearSection'
 
 // Settings page — entered from the dashboard header (click your email
 // in the top-right). Structured as a vertical stack of sections so new
@@ -28,6 +29,7 @@ export function SettingsPage() {
         </p>
 
         <div className="mt-8 space-y-8">
+          <LinearSection />
           <ApiKeysSection />
         </div>
       </main>

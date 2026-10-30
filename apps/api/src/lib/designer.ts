@@ -255,7 +255,7 @@ Rules: text slots are plain text, never HTML. Never invent asset URLs. Keep to t
 const line = (label: string, items: string[]) =>
   items.length > 0 ? `${label}: ${items.join('; ')}` : null
 
-function kitSection(kit: DesignContext['kit']): string {
+export function kitSection(kit: DesignContext['kit']): string {
   if (!kit) {
     return '# Style kit\nNone — the output uses the neutral house style. Write plainly and confidently.'
   }
@@ -288,14 +288,14 @@ function kitSection(kit: DesignContext['kit']): string {
     .join('\n')
 }
 
-function templateLine(t: TemplateSummary): string {
+export function templateLine(t: TemplateSummary): string {
   const { width, height } = viewportSize(t.viewport)
   const size = t.viewport.kind === 'fixed' ? `${width}×${height}` : 'responsive'
   const slots = t.slots.map((s) => `${s.name} (${s.kind}: ${s.label})`).join(', ')
   return `- “${t.name}” (${size}) — slots: ${slots}`
 }
 
-function assetLine(a: DesignAsset): string {
+export function assetLine(a: DesignAsset): string {
   const size = a.width && a.height ? ` ${a.width}×${a.height}` : ''
   const colours = a.colors.length > 0 ? ` colours ${a.colors.slice(0, 4).join(' ')}` : ''
   return `- ${a.name} — ${a.url} (${a.kind}${size}${colours})${a.caption ? ` — ${a.caption}` : ''}`

@@ -15,6 +15,9 @@ import { DEEP_MODEL } from './modelTags'
 // v1 = Phase 24 designer: outline/create/edit/render/finish tool set.
 export const DESIGNER_MODEL_TAG = `designer@${DEEP_MODEL}@v1`
 
+// v1 = Phase 25 video agent: script / create / edit / key frames / finish.
+export const VIDEO_AGENT_MODEL_TAG = `video-agent@${DEEP_MODEL}@v1`
+
 export type DesignCacheInput = {
   brief: string
   clientId: string | null

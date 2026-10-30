@@ -5,13 +5,14 @@ import {
   type Client,
   type KitSummary,
   type OutputFormat,
+  type TemplateSummary,
 } from '@moodboard/shared'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../db'
 import { searchAssets } from './assetLibrary'
 import type { ToolContext, ToolOutcome } from './canvasTools'
 import { getClient, listClients } from './clients'
-import { runDesign, type DesignContext } from './designer'
+import { runDesign, type DesignAsset, type DesignContext } from './designer'
 import { DESIGNER_MODEL_TAG, designCacheKey } from './designHash'
 import {
   chooseDesignVariant,
@@ -49,18 +50,23 @@ async function boardClient(boardId: string): Promise<Client | null> {
   return row?.clientId ? getClient(row.clientId) : null
 }
 
-export async function designOutputTool(
+export type DesignTarget = {
+  client: Client
+  kit: DesignContext['kit']
+  kitId: string | null
+  templates: TemplateSummary[]
+  assets: DesignAsset[]
+  assetIds: string[]
+}
+
+// Who the work is for and what it is made from: the client (asked for, or the
+// board's), their kit (the only one, or the one named), the templates for the
+// format and a first look at the library. A failure is the question to put to
+// the person.
+export async function resolveDesignTarget(
   ctx: ToolContext,
-  input: {
-    format: OutputFormat
-    brief: string
-    client?: string
-    kit?: string
-    variants?: number
-    regenerate?: boolean
-    linearIssue?: string
-  },
-): Promise<ToolOutcome> {
+  input: { format: OutputFormat; client?: string; kit?: string },
+): Promise<({ ok: true } & DesignTarget) | Fail> {
   const clients = await listClients()
   let client: Client | null
   if (input.client) {
@@ -110,12 +116,10 @@ export async function designOutputTool(
     searchAssets({ client: client.id, kind: 'image', limit: ASSET_SHORTLIST, offset: 0 }),
     clientAssetIds(client.id),
   ])
-  const linearIssue = input.linearIssue ? (parseIssueRef(input.linearIssue) ?? null) : null
-
-  const context: DesignContext = {
-    brief: input.brief,
-    format: input.format,
-    client: { id: client.id, name: client.name },
+  return {
+    ok: true,
+    client,
+    kitId: kit?.id ?? null,
     kit:
       kit && kitDetail
         ? {
@@ -135,6 +139,38 @@ export async function designOutputTool(
       height: a.height,
       colors: a.colors,
     })),
+    assetIds,
+  }
+}
+
+export async function designOutputTool(
+  ctx: ToolContext,
+  input: {
+    format: OutputFormat
+    brief: string
+    client?: string
+    kit?: string
+    variants?: number
+    regenerate?: boolean
+    linearIssue?: string
+  },
+): Promise<ToolOutcome> {
+  if (input.format === 'video') {
+    return fail('Films are made with design_video, not design_output.')
+  }
+  const target = await resolveDesignTarget(ctx, input)
+  if (!target.ok) return target
+  const { client, templates, assetIds } = target
+  const kit = target.kit ? { id: target.kit.id } : null
+  const linearIssue = input.linearIssue ? (parseIssueRef(input.linearIssue) ?? null) : null
+
+  const context: DesignContext = {
+    brief: input.brief,
+    format: input.format,
+    client: { id: client.id, name: client.name },
+    kit: target.kit,
+    templates,
+    assets: target.assets,
     linearIssue,
   }
 

@@ -113,6 +113,24 @@ export function videoRenderProblems(args: {
 export const VIDEO_READY_MESSAGE = 'moodboard:video-ready'
 export const VIDEO_SEEK_MESSAGE = 'moodboard:video-seek'
 
+// The video agent's script: what each scene says and how long it runs. The
+// agent writes it before touching the template, then checks its key frames
+// against it.
+export const videoSceneSchema = z.object({
+  title: z.string().min(1).max(80),
+  startMs: z.number().int().min(0).max(VIDEO_MAX_DURATION_MS),
+  durationMs: z.number().int().min(300).max(VIDEO_MAX_DURATION_MS),
+  onScreen: z.string().min(1).max(300),
+  purpose: z.string().min(1).max(200),
+})
+export type VideoScene = z.infer<typeof videoSceneSchema>
+
+export const videoScriptSchema = z.object({
+  logline: z.string().min(1).max(300),
+  scenes: z.array(videoSceneSchema).min(1).max(12),
+})
+export type VideoScript = z.infer<typeof videoScriptSchema>
+
 // ---------------------------------------------------------------------------
 // Render jobs (the Postgres-backed queue, lib/jobs.ts)
 // ---------------------------------------------------------------------------

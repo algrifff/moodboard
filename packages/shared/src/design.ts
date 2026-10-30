@@ -11,6 +11,7 @@ export const DESIGN_BRIEF_MAX = 4000
 
 export const designStageSchema = z.enum([
   'queued',
+  'script',
   'outline',
   'template',
   'assets',
@@ -18,6 +19,7 @@ export const designStageSchema = z.enum([
   'rendering',
   'critique',
   'revising',
+  'render-queued',
   'done',
   'cached',
   'failed',

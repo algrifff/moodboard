@@ -1,4 +1,4 @@
-import { DOC_CSS_MAX, DOC_HTML_MAX } from '@moodboard/shared'
+import { DOC_CSS_MAX, DOC_HTML_MAX, videoDurationProblem } from '@moodboard/shared'
 
 // Plain-text edits to an output's HTML / CSS — how agents change structure
 // (duplicate a deck section, swap a layout) — and the rules every edited
@@ -64,5 +64,14 @@ export function documentProblems(html: string, css: string): string[] {
     )
   }
   if (/@import/i.test(css)) problems.push('No @import in the CSS')
+  // A video's timeline has to stay renderable: data-duration valid and
+  // inside the limits, and its motion seekable (keyframes, not transitions).
+  const duration = videoDurationProblem(html)
+  if (duration) problems.push(duration)
+  if (/data-duration\s*=/i.test(html) && /\btransition\s*:|animation-play-state/i.test(css)) {
+    problems.push(
+      'Video motion must be seekable: CSS @keyframes with explicit delays — no transitions or animation-play-state',
+    )
+  }
   return problems
 }

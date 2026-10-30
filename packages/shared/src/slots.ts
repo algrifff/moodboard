@@ -205,10 +205,10 @@ export function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;')
 }
 
-// Visible text of a fragment: <br> → newline, other tags dropped, whitespace
-// collapsed per line.
+// Visible text of a fragment, as the page renders it: source whitespace
+// (indentation, line wraps) collapses, <br> is a newline, tags drop.
 function textOf(fragment: string): string {
-  const withBreaks = fragment.replace(/<br\s*\/?>/gi, '\n')
+  const withBreaks = fragment.replace(/\s+/g, ' ').replace(/<br\s*\/?>/gi, '\n')
   let out = ''
   let i = 0
   for (const tag of scanTags(withBreaks)) {

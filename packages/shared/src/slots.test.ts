@@ -47,6 +47,14 @@ describe('findSlots', () => {
     expect(findSlots(html)[0]!.defaultValue).toBe('inner tail')
   })
 
+  it('collapses source line wraps — only <br> is a line break', () => {
+    const html = `<p data-slot="p">
+      One wrapped
+      sentence.<br>Second line
+    </p>`
+    expect(findSlots(html)[0]!.defaultValue).toBe('One wrapped sentence.\nSecond line')
+  })
+
   it('copes with > inside quoted attributes', () => {
     const html = `<p title="a > b" data-slot="t">hi</p>`
     expect(findSlots(html)).toEqual([{ name: 't', kind: 'text', label: null, defaultValue: 'hi' }])

@@ -79,6 +79,7 @@ const outputRef = (o: OutputSummary) => ({
   client: o.clientName,
   kit: o.kitName,
   version: o.latestVersion,
+  viewport: o.viewport,
   url: outputUrl(o.id),
 })
 

@@ -165,3 +165,11 @@ describe('render headers', () => {
     expect(headers['Content-Security-Policy']).not.toContain('allow-same-origin')
   })
 })
+
+describe('the inline editor script', () => {
+  it('is valid JavaScript with its regexes intact', () => {
+    expect(() => new Function(EDITOR_SCRIPT)).not.toThrow()
+    expect(EDITOR_SCRIPT).toContain('replace(/\\s+/g')
+    expect(EDITOR_SCRIPT).toContain('replace(/\\n+$/')
+  })
+})

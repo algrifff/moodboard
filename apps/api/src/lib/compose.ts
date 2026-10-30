@@ -72,6 +72,12 @@ export const EDITOR_SCRIPT = `(() => {
       continue
     }
     if (el.parentElement && el.parentElement.closest('[data-slot]')) continue
+    // Editable text keeps source whitespace visible; collapse it as the
+    // page already renders it.
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) n.textContent = n.textContent.replace(/\\s+/g, ' ')
+    if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.textContent = el.firstChild.textContent.replace(/^ /, '')
+    if (el.lastChild && el.lastChild.nodeType === 3) el.lastChild.textContent = el.lastChild.textContent.replace(/ $/, '')
     el.setAttribute('contenteditable', 'plaintext-only')
     let before = el.innerText
     const twins = () => [...document.querySelectorAll('[data-slot]')].filter((o) => o !== el && o.getAttribute('data-slot') === name)

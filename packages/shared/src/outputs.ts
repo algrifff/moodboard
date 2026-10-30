@@ -280,6 +280,9 @@ export const outputShareViewSchema = z.object({
   updatedAt: z.string(),
 })
 export type OutputShareView = z.infer<typeof outputShareViewSchema>
+export const outputShareViewResponseSchema = z.object({ share: outputShareViewSchema })
+
+export const proposedSlotsResponseSchema = z.object({ slots: z.array(templateSlotSchema) })
 
 // Paths the app serves a composed document from. Shared so the web preview,
 // board cards and agent tools build the same URLs.

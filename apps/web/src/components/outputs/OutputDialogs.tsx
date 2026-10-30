@@ -555,7 +555,7 @@ function SaveTemplateForm({
                   </span>
                 )}
               </span>
-              {r.sample && (
+              {r.sample && r.kind === 'text' && (
                 <span className="col-span-3 col-start-2 truncate text-[11px] text-[var(--text-faint)]">
                   {r.sample}
                 </span>

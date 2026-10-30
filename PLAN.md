@@ -706,14 +706,34 @@ Already on Postgres; this makes it production-grade and ready for structured des
 
 ### Phase 24 — Output agents (thumbnail first)
 
-- [ ] Intake: orchestrator asks only what's missing (client, format, message, audience) — or reads it from a Linear issue
-- [ ] Thumbnail agent loop: pick kit → pick template → fill slots from asset search → render a frame → Claude vision critique → patch HTML → repeat (bounded)
-- [ ] Returns 2–3 variants in the sidebar; user picks, tweaks
-- [ ] Then deck, landing page, one-pager agents on the same loop (multi-section planning: outline first, then per-section fill)
-- [ ] Post the result back to the Linear issue as a comment with the output link
-- [ ] AI cache discipline: hash of (brief + kit version + template version + asset IDs)
+- [x] Intake: orchestrator asks only what's missing (client, format, message, audience) — or reads it from a Linear issue
+- [x] Thumbnail agent loop: pick kit → pick template → fill slots from asset search → render a frame → Claude vision critique → patch HTML → repeat (bounded)
+- [x] Returns 2–3 variants in the sidebar; user picks, tweaks
+- [x] Then deck, landing page, one-pager agents on the same loop (multi-section planning: outline first, then per-section fill)
+- [x] Post the result back to the Linear issue as a comment with the output link
+- [x] AI cache discipline: hash of (brief + kit version + template version + asset IDs)
 
 **Deliverable:** "Thumbnail for Acme's launch video, punchy, dark" → three options, linked back on the Linear issue.
+
+**How it fits together:**
+
+- Frame renderer: `lib/browser.ts` (one shared Chromium for PDFs and frames; `CHROMIUM_PATH` or Playwright's build; closed on shutdown) and `lib/renderFrame.ts` (`withDocument` → seek every animation → screenshot the viewport or one section; bounded concurrency, timeout, every request aborted). `lib/outputRender.ts` renders an output version and caches its end-state frame as the thumbnail (`/data/outputs/<id>@v<n>.png`, `GET /api/outputs/:id/thumbnail`). CI installs Playwright's Chromium so these tests and the starter render tests run.
+- Designer: `lib/designer.ts` — per variant a bounded `DEEP_MODEL` tool loop (`plan_outline`, `search_assets`, `create_output`, `get_output_source`, `update_output_slots`, `update_output_html`, `render_output_frame` → PNG as an image block, `finish_variant`); up to 3 variants side by side with distinct angles (direct / new layout / bolder copy) and rotated template suggestions; the kit's palette, fonts, voice do/don'ts and imagery rules plus a library shortlist in its brief. `lib/designToolbox.ts` binds the tools to real outputs and the renderer; `lib/designAgentTools.ts` is the `design_output` body (resolve client/kit/templates/assets → cache → run → `design_run` row).
+- Cache: `lib/designHash.ts` keys each variant by (brief, client, kit@version, candidate templates@version, the client's asset ids, format, variant index, model tag); `design_cache` stores the result (migration `0016`, with `design_run`). Identical asks reuse the outputs; `regenerate` bypasses.
+- Tools (`CANVAS_TOOLS`): `design_output`, `pick_design_variant`, `post_linear_comment`, `update_output_html` (find/replace on HTML/CSS, `lib/docEdits.ts` rules), `add_asset_to_board`. Progress streams as `tool-progress` SSE events (`ToolContext.onProgress`).
+- Linear post-back: `lib/linearPost.ts` (gate: a run's variant must be the picked one; comment = name, share link via Phase 23 output shares, the thumbnail uploaded through Linear's `fileUpload`) + `commentCreate`/`fileUpload` in `lib/linear.ts`. OAuth scope is now `read,comments:create`. Routes: `/api/design-runs/:id` (`GET`, `POST /choose`, `POST /linear-comment`).
+- Save-as-template: `lib/slotProposer.ts` — with `ANTHROPIC_API_KEY`, one `FAST_MODEL` call renames existing markers by role and marks unmarked candidates (`slotCandidates` / `markCandidates` in `slots.ts`, referred to as `@n`), validated and merged over the existing markers; without a key, the existing markers.
+- Web: `DesignRunCard` (live per-option progress with thumbnails as they render → option cards with rendered thumbnails, critique, "Pick this one", "Open to tweak", "Post the pick to LIN-…"), cards for the new tools, proposed new slots in the save-as-template dialog.
+
+**Deferred / notes:**
+
+- No live model run (no API key here). The whole path — orchestrator → `design_output` → three designer loops → real outputs, real renders, the cache, pick, post — was driven in the browser with a scripted fake model and fixture Linear responses. The first real runs should be watched for critique quality, how often the step/render bounds bite, and token cost (each variant re-sends its renders as images; history is prompt-cached).
+- No adaptive thinking on the designer (kept consistent with the orchestrator); worth trying for critique quality once runs are observable.
+- Linear `commentCreate`/`fileUpload` shapes are from Linear's docs and untested against the live API; a failed upload still posts the link without the image. Existing Linear connections (scope `read`) must reconnect before posting.
+- One thumbnail starter template, so thumbnail variants differ by layout edits and copy rather than template; more starters (or client templates) give the designer real choice.
+- Variants run concurrently within one request; a long run holds the SSE stream open (stopping the run stops the designers). No background job yet — Phase 25's queue is the natural home.
+- Thumbnails of versions edited by people are rendered on first request (a few hundred ms), not eagerly.
+- The designer reuses a cached variant's output as-is, even if someone has since edited that output; the card shows the cached version's thumbnail.
 
 ### Phase 25 — HTML → MP4
 
@@ -721,7 +741,7 @@ Already on Postgres; this makes it production-grade and ready for structured des
 - [ ] Renderer: Playwright loads the output, pauses all animations, steps `document.getAnimations()` `currentTime` per frame at 30/60fps, screenshots each frame, pipes to ffmpeg → MP4 on `/data/outputs/`
 - [ ] Render runs as a background job (Postgres-backed queue), progress in the sidebar
 - [ ] Video agent: script → scene list → HTML composition from kit + template + assets (+ clips from the existing video importer) → render
-- [ ] Single-frame render reuses the same path for thumbnail PNGs
+- [ ] Single-frame render reuses the same path for thumbnail PNGs (Phase 24 built that path: `lib/renderFrame.ts`)
 
 **Deliverable:** A 15s kit-styled promo spot, rendered from HTML, downloadable as MP4.
 

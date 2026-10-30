@@ -12,6 +12,7 @@ import type {
   TextData,
   VideoClipData,
   VoiceNoteData,
+  FigmaFrameData,
   OutputCardData,
   WebPageData,
 } from '@moodboard/shared'
@@ -183,6 +184,17 @@ export async function buildGroupContent(objects: CanvasObject[]): Promise<Conten
         content.push(block)
         imageCount += 1
       }
+    } else if (o.type === 'figma-frame') {
+      const d = o.data as FigmaFrameData
+      const block = await loadImageBlock(d.url)
+      if (block) {
+        content.push({
+          type: 'text',
+          text: `Figma frame “${d.name}” from the file “${d.fileName}” — image URL: ${d.url}`,
+        })
+        content.push(block)
+        imageCount += 1
+      }
     } else if (o.type === 'pdf' && isPdfData(o.data)) {
       const block = await loadPdfThumbBlock(o.data.thumbnailUrl)
       if (block) {
@@ -294,6 +306,9 @@ export async function buildGroupContent(objects: CanvasObject[]): Promise<Conten
     } else if (o.type === 'output') {
       const d = o.data as OutputCardData
       textLines.push(`- Design output (${d.format}): "${d.name}"`)
+    } else if (o.type === 'figma-frame') {
+      const d = o.data as FigmaFrameData
+      textLines.push(`- Figma frame (${d.width}×${d.height}): "${d.name}" from "${d.fileName}"`)
     } else if (o.type === 'voice-note' && isVoiceNoteData(o.data)) {
       voiceNoteCount += 1
       // Voice notes get a dedicated block (below) rather than mixing

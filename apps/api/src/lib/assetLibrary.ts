@@ -25,7 +25,7 @@ export async function recordAsset(
   mimeType: string,
   size: number,
   kind: AssetStorageKind = 'upload',
-  extra: { originalName?: string | null; clientId?: string | null } = {},
+  extra: { originalName?: string | null; clientId?: string | null; tags?: string[] } = {},
 ): Promise<string> {
   const id = nanoid()
   const mediaKind = mediaKindFromMime(mimeType)
@@ -39,6 +39,7 @@ export async function recordAsset(
     mediaKind,
     originalName: extra.originalName?.trim().slice(0, 200) || null,
     clientId: extra.clientId ?? null,
+    ...(extra.tags && extra.tags.length > 0 ? { tags: extra.tags } : {}),
     // Nothing to extract from these; keep them out of the enrichment backlog.
     ...(mediaKind !== 'image' || kind === 'pdf-thumb' ? { enrichedAt: new Date() } : {}),
   })

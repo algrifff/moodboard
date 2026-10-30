@@ -385,3 +385,52 @@ describe('analysisHash', () => {
     expect(analysisHash([base], 'm1')).toBe(analysisHash([drifted], 'm1'))
   })
 })
+
+describe('analysisHash — Figma frames', () => {
+  const frame = (patch: Record<string, unknown> = {}): CanvasObject => ({
+    id: 'f',
+    type: 'figma-frame',
+    position: { x: 0, y: 0 },
+    size: { width: 420, height: 297 },
+    rotation: 0,
+    zIndex: 0,
+    data: {
+      url: '/api/files/hero-1.png',
+      fileKey: 'AbCdEfGhIjKlMnOpQrStUv',
+      nodeId: '12:34',
+      name: 'Hero',
+      fileName: 'Acme Brand',
+      figmaUrl: 'https://www.figma.com/design/AbCdEfGhIjKlMnOpQrStUv/Acme-Brand?node-id=12-34',
+      width: 1440,
+      height: 900,
+      lastModified: '2026-03-04T10:00:00Z',
+      fetchedAt: '2026-03-04T10:05:00Z',
+      structure: 'Frame “Hero”',
+      ...patch,
+    },
+  })
+
+  it('changes when a refresh re-renders (new url) or the frame is renamed', () => {
+    const base = analysisHash([frame()], 'm1')
+    expect(analysisHash([frame({ url: '/api/files/hero-2.png' })], 'm1')).not.toBe(base)
+    expect(analysisHash([frame({ name: 'Hero v2' })], 'm1')).not.toBe(base)
+    expect(analysisHash([frame({ fileName: 'Other' })], 'm1')).not.toBe(base)
+  })
+
+  it('ignores what never reaches the prompt', () => {
+    const base = analysisHash([frame()], 'm1')
+    expect(
+      analysisHash(
+        [
+          frame({
+            fetchedAt: '2027-01-01T00:00:00Z',
+            lastModified: '2027-01-01T00:00:00Z',
+            structure: 'something else',
+            width: 10,
+          }),
+        ],
+        'm1',
+      ),
+    ).toBe(base)
+  })
+})

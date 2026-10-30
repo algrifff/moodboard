@@ -129,6 +129,16 @@ Every design the agents produce is a self-contained HTML/CSS document — no PPT
 - **Renders never block the agent.** `design_video` / `render_video` enqueue and return the job; the sidebar card follows it (SSE, polling fallback). Don't wait on or poll a job from a tool.
 - **The video agent is bounded like the designer** (`lib/videoAgent.ts`: 16 steps, 3 key-frame calls × 4 frames, script before create, a look at the latest version before finish) and cached (`VIDEO_AGENT_MODEL_TAG` — bump `vN` when its prompt or tools change). Model client, toolbox and cache are injected; `videoAgent.test.ts` uses fakes. Clips from the video importer are references/posters only.
 
+### Figma (Phase 26)
+
+- **Read-only, plain `fetch`, no write-back.** `lib/figma.ts` is the only Figma client (fetch injected, tested against `lib/fixtures/figma/`); request read scopes only. HTML stays the output — never push anything to Figma. `FIGMA_API_BASE` is a test seam for a stand-in Figma; never set it in production.
+- **The connection is personal** (`connection.provider = 'figma'`, encrypted like the others), what it reads is what that person's Figma account can open. Get a client through `figmaForUser` (refreshes the token, throws `FigmaUnavailableError`); never decrypt tokens elsewhere. Unconfigured (`figmaEnv() === null`) must degrade to a notice, not an error.
+- **A frame is a library asset plus a `figma-frame` card.** Import through `lib/figmaImport.ts` (render → `saveUpload` + `recordAsset`, tagged `figma`, filed under the board's client); the card keeps file key, node id, names, `lastModified` and a layer outline (`lib/figmaStructure.ts`, bounded) so agents read it without Figma. Refresh re-renders only when `lastModified` moved. Parse links only with `parseFigmaUrl`; place rows with `layoutFigmaRow`.
+- **Styles → kit is a pure mapping** (`kitFromFigma` in `packages/shared`) over a normalised input (`lib/figmaStyles.ts`); it must always return valid `KitTokens` and say what it mapped and skipped. A kit version from Figma replaces palette and fonts and keeps logos, voice, imagery and hand-written notes (`mergeFigmaIntoKit`).
+- **Design agents get references, not specs.** `figmaFrames` on `design_output` / `design_video` → a brief section plus `get_figma_frame` (picture + outline, bounded looks); the kit's colours and type win over Figma's. Frame key + `lastModified` are part of the agent cache key; bump the agent's `…_MODEL_TAG` when its prompt or tools change.
+- **Tool pictures live for one turn.** `ToolOutcome.images` reaches the model on the turn it was asked for (and MCP clients as image content); the stored thread keeps the text only.
+- **Share snapshots keep object `data` whole** (`storedCanvasObjectSchema`); never parse `data` against the per-type union for a pass-through, it keeps only the first match's fields.
+
 ### File storage
 
 - Files on Railway volume at `/data/{uploads,thumbnails,pdfs,pdf-thumbs}/`

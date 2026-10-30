@@ -209,13 +209,14 @@ How it hangs together:
 
 ---
 
-## Clients, style kits, the asset library and Linear
+## Clients, style kits, the asset library, Linear and Figma
 
 - **Clients** — a client owns boards, style kits and library assets (all optional, all team-visible). The dashboard filters by client; boards are assigned from their card or the board header.
 - **Style kits** — a group's brief distilled into versioned tokens (palette roles, fonts, logos, voice, imagery rules). Save one from a brief in the sidebar ("Save as style kit"), then edit it on `/kits/:id`; every save appends an immutable version. `kitToCss` (`packages/shared/src/kitCss.ts`) compiles tokens into a `:root { --kit-* }` stylesheet — the variable names are a contract for templates; `GET /api/kits/:id/css` serves it.
 - **Asset library** — every upload/import is catalogued (kind, dimensions, dominant colours, tags, client) and searchable with Postgres full-text (`/library`, the Sources drawer, the `search_assets` tool). If `ANTHROPIC_API_KEY` is set, new images also get a short AI caption and tags (Haiku); without it captions are simply skipped. Existing assets are backfilled by the maintenance tick.
 - **Linear** — connect in the Sources drawer or Settings, then pick an issue (assigned / recent / search / paste `LIN-123`). That starts a new agent thread with the issue as the brief; the orchestrator can also read one with `get_linear_issue`. Map Linear teams/projects to clients in Settings so an issue resolves to a client automatically. Read-only: nothing is written back to Linear.
-- **Agent tools** (MCP and sidebar share them): `list_clients`, `list_kits`, `get_style_kit` (tokens + compiled CSS), `search_assets`, `get_linear_issue`.
+- **Figma** — connect in Settings or the Sources drawer (read-only OAuth; set the `FIGMA_*` variables). Paste a frame link on the canvas to bring it in as an image card (rendered, saved to the library, remembering its file/frame and refreshable); paste a file link to browse its pages and frames and import several. A card's "Use as reference" starts an agent thread with it attached, and `design_output` / `design_video` can take Figma frames as visual references. **Kits → From Figma** (or a kit's "Update from Figma") reads a file's colour and text styles — and variables on Enterprise plans — into palette roles and display/body/mono fonts, showing what mapped and what was left behind. Nothing is ever written to Figma; the output is HTML.
+- **Agent tools** (MCP and sidebar share them): `list_clients`, `list_kits`, `get_style_kit` (tokens + compiled CSS), `search_assets`, `get_linear_issue`, `import_figma_frame`, `get_figma_frame`, `figma_kit_from_file`.
 
 ---
 

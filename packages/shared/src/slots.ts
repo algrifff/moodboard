@@ -223,6 +223,17 @@ function textOf(fragment: string): string {
     .trim()
 }
 
+// The value of the first opening tag in the document that carries `name`
+// (lowercase), e.g. the root's `data-duration`. Null when no tag does.
+export function firstAttributeValue(html: string, name: string): string | null {
+  for (const tag of scanTags(html)) {
+    if (tag.closing) continue
+    const a = attr(tag, name)
+    if (a) return a.value ?? ''
+  }
+  return null
+}
+
 // The slots a document declares, first occurrence of each name.
 export function findSlots(html: string): SlotMarker[] {
   const seen = new Map<string, SlotMarker>()

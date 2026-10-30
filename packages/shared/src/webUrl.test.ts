@@ -35,6 +35,8 @@ describe('extractWebUrl', () => {
     expect(extractWebUrl('https://www.tiktok.com/@user/video/123')).toBe(null)
     expect(extractWebUrl('https://www.instagram.com/reel/abc')).toBe(null)
     expect(extractWebUrl('https://vimeo.com/12345')).toBe(null)
+    // Phase 26
+    expect(extractWebUrl('https://www.figma.com/design/abc123XYZabc/Brand?node-id=1-2')).toBe(null)
   })
 
   it('handles whitespace around the URL', () => {

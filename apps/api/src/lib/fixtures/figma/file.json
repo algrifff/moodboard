@@ -1,0 +1,232 @@
+{
+  "name": "Acme Brand",
+  "lastModified": "2026-03-04T10:00:00Z",
+  "version": "9001",
+  "thumbnailUrl": "https://s3-alpha.figma.com/thumbnails/acme",
+  "editorType": "figma",
+  "role": "viewer",
+  "styles": {
+    "1:100": {
+      "key": "k-fill-primary",
+      "name": "Colors/Brand/Primary",
+      "styleType": "FILL",
+      "description": ""
+    },
+    "1:101": {
+      "key": "k-fill-accent",
+      "name": "Colors/Brand/Accent",
+      "styleType": "FILL",
+      "description": ""
+    },
+    "1:102": {
+      "key": "k-fill-paper",
+      "name": "Neutral/Paper",
+      "styleType": "FILL",
+      "description": ""
+    },
+    "1:103": { "key": "k-fill-ink", "name": "Neutral/Ink", "styleType": "FILL", "description": "" },
+    "1:104": {
+      "key": "k-fill-sunset",
+      "name": "Gradients/Sunset",
+      "styleType": "FILL",
+      "description": ""
+    },
+    "1:105": {
+      "key": "k-fill-sage",
+      "name": "Colors/Support/Sage",
+      "styleType": "FILL",
+      "description": ""
+    },
+    "2:200": { "key": "k-text-h1", "name": "Display/H1", "styleType": "TEXT", "description": "" },
+    "2:201": {
+      "key": "k-text-body",
+      "name": "Body/Regular",
+      "styleType": "TEXT",
+      "description": ""
+    },
+    "2:202": {
+      "key": "k-text-code",
+      "name": "Code/Inline",
+      "styleType": "TEXT",
+      "description": ""
+    },
+    "3:300": {
+      "key": "k-effect-card",
+      "name": "Shadow/Card",
+      "styleType": "EFFECT",
+      "description": ""
+    },
+    "4:400": {
+      "key": "k-grid-12",
+      "name": "Layout/12 column",
+      "styleType": "GRID",
+      "description": ""
+    }
+  },
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "0:1",
+        "name": "Brand",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "12:34",
+            "name": "Hero",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 1440, "height": 900 },
+            "layoutMode": "VERTICAL",
+            "itemSpacing": 24,
+            "paddingLeft": 80,
+            "paddingRight": 80,
+            "paddingTop": 64,
+            "paddingBottom": 64,
+            "primaryAxisAlignItems": "CENTER",
+            "fills": [
+              {
+                "type": "SOLID",
+                "color": { "r": 0.9803922, "g": 0.9686275, "b": 0.9490196, "a": 1 }
+              }
+            ],
+            "styles": { "fill": "1:102", "effect": "3:300", "grid": "4:400" },
+            "effects": [{ "type": "DROP_SHADOW", "visible": true }],
+            "children": [
+              {
+                "id": "12:40",
+                "name": "Headline",
+                "type": "TEXT",
+                "characters": "Launch day,\nthe quiet way.",
+                "absoluteBoundingBox": { "x": 80, "y": 300, "width": 900, "height": 140 },
+                "fills": [
+                  {
+                    "type": "SOLID",
+                    "color": { "r": 0.1215686, "g": 0.1647059, "b": 0.2666667, "a": 1 }
+                  }
+                ],
+                "style": {
+                  "fontFamily": "Aktiv Grotesk",
+                  "fontWeight": 700,
+                  "fontSize": 64,
+                  "lineHeightPx": 70
+                },
+                "styles": { "text": "2:200", "fill": "1:100" }
+              },
+              {
+                "id": "12:41",
+                "name": "Subhead",
+                "type": "TEXT",
+                "characters": "Software for people who ship.",
+                "absoluteBoundingBox": { "x": 80, "y": 460, "width": 600, "height": 28 },
+                "fills": [
+                  {
+                    "type": "SOLID",
+                    "color": { "r": 0.0666667, "g": 0.0666667, "b": 0.0666667, "a": 1 }
+                  }
+                ],
+                "style": {
+                  "fontFamily": "Source Serif",
+                  "fontWeight": 400,
+                  "fontSize": 20,
+                  "lineHeightPx": 28
+                },
+                "styles": { "text": "2:201", "fill": "1:103" }
+              },
+              {
+                "id": "12:42",
+                "name": "CTA row",
+                "type": "FRAME",
+                "absoluteBoundingBox": { "x": 80, "y": 520, "width": 400, "height": 56 },
+                "layoutMode": "HORIZONTAL",
+                "itemSpacing": 12,
+                "children": [
+                  {
+                    "id": "12:43",
+                    "name": "Primary button",
+                    "type": "INSTANCE",
+                    "componentId": "9:1",
+                    "absoluteBoundingBox": { "x": 80, "y": 520, "width": 180, "height": 56 },
+                    "cornerRadius": 28,
+                    "fills": [
+                      {
+                        "type": "SOLID",
+                        "color": { "r": 0.9490196, "g": 0.7568627, "b": 0.3058824, "a": 1 }
+                      }
+                    ],
+                    "styles": { "fill": "1:101" },
+                    "children": [
+                      {
+                        "id": "12:44",
+                        "name": "Label",
+                        "type": "TEXT",
+                        "characters": "Get started",
+                        "fills": [
+                          {
+                            "type": "SOLID",
+                            "color": { "r": 0.0666667, "g": 0.0666667, "b": 0.0666667, "a": 1 }
+                          }
+                        ],
+                        "style": { "fontFamily": "Source Serif", "fontWeight": 700, "fontSize": 16 }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "12:45",
+                    "name": "Hidden helper",
+                    "type": "RECTANGLE",
+                    "visible": false
+                  }
+                ]
+              },
+              {
+                "id": "12:46",
+                "name": "Sunset band",
+                "type": "RECTANGLE",
+                "absoluteBoundingBox": { "x": 0, "y": 800, "width": 1440, "height": 100 },
+                "fills": [{ "type": "GRADIENT_LINEAR" }],
+                "styles": { "fill": "1:104" }
+              }
+            ]
+          },
+          {
+            "id": "12:99",
+            "name": "Empty",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 1600, "y": 0, "width": 375, "height": 812 },
+            "children": []
+          },
+          {
+            "id": "12:60",
+            "name": "Note",
+            "type": "TEXT",
+            "characters": "A loose text layer",
+            "absoluteBoundingBox": { "x": 0, "y": 1000, "width": 200, "height": 20 }
+          }
+        ]
+      },
+      {
+        "id": "0:2",
+        "name": "Screens",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "20:1",
+            "name": "Mobile / Home",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 375, "height": 812 },
+            "children": []
+          },
+          {
+            "id": "20:2",
+            "name": "Section A",
+            "type": "SECTION",
+            "absoluteBoundingBox": { "x": 500, "y": 0, "width": 800, "height": 900 },
+            "children": []
+          }
+        ]
+      }
+    ]
+  }
+}

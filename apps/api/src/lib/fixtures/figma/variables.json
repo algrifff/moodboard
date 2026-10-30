@@ -1,0 +1,57 @@
+{
+  "status": 200,
+  "error": false,
+  "meta": {
+    "variableCollections": {
+      "VariableCollectionId:1:1": {
+        "id": "VariableCollectionId:1:1",
+        "name": "Tokens",
+        "defaultModeId": "1:0",
+        "modes": [
+          { "modeId": "1:0", "name": "Light" },
+          { "modeId": "1:1", "name": "Dark" }
+        ]
+      }
+    },
+    "variables": {
+      "VariableID:1:10": {
+        "id": "VariableID:1:10",
+        "name": "color/brand/primary",
+        "variableCollectionId": "VariableCollectionId:1:1",
+        "resolvedType": "COLOR",
+        "valuesByMode": {
+          "1:0": { "r": 0.1215686, "g": 0.1647059, "b": 0.2666667, "a": 1 },
+          "1:1": { "r": 0.9, "g": 0.9, "b": 1, "a": 1 }
+        }
+      },
+      "VariableID:1:11": {
+        "id": "VariableID:1:11",
+        "name": "color/text/default",
+        "variableCollectionId": "VariableCollectionId:1:1",
+        "resolvedType": "COLOR",
+        "valuesByMode": { "1:0": { "type": "VARIABLE_ALIAS", "id": "VariableID:1:10" } }
+      },
+      "VariableID:1:12": {
+        "id": "VariableID:1:12",
+        "name": "color/surface/scrim",
+        "variableCollectionId": "VariableCollectionId:1:1",
+        "resolvedType": "COLOR",
+        "valuesByMode": { "1:0": { "r": 0, "g": 0, "b": 0, "a": 0.4 } }
+      },
+      "VariableID:1:13": {
+        "id": "VariableID:1:13",
+        "name": "font/display",
+        "variableCollectionId": "VariableCollectionId:1:1",
+        "resolvedType": "STRING",
+        "valuesByMode": { "1:0": "Fraunces" }
+      },
+      "VariableID:1:14": {
+        "id": "VariableID:1:14",
+        "name": "space/md",
+        "variableCollectionId": "VariableCollectionId:1:1",
+        "resolvedType": "FLOAT",
+        "valuesByMode": { "1:0": 16 }
+      }
+    }
+  }
+}

@@ -4,12 +4,14 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { deleteConnection, importDriveFile, importSpotifyRef } from '@/lib/connectionsApi'
+import { connectFigma } from '@/lib/figmaPaste'
 import { EASE_OUT_STANDARD } from '@/lib/motion'
 import { AGENT_SIDEBAR_WIDTH, useAgentSidebarStore } from '@/store/agentSidebar'
 import { useLinearStore } from '@/store/linear'
 import { isPickerConnection, useSourcePickerStore } from '@/store/sourcePicker'
 import { AddSourceSection } from './sourcePicker/ConnectSources'
 import { ConnectionSection } from './sourcePicker/ConnectionSection'
+import { FigmaSection } from './sourcePicker/FigmaSection'
 import { LibrarySection } from './sourcePicker/LibrarySection'
 import { OutputsSection } from './sourcePicker/OutputsSection'
 import { LinearSection } from './sourcePicker/LinearSection'
@@ -27,10 +29,12 @@ import { showToast } from './Toast'
 //   │ [🔍 Search across all sources           ] │
 //   │                                            │
 //   │ ┌─ + SOURCES ────────────────────────────┐│
-//   │ │ [G] Drive   [S] Spotify   [L] Linear  ││
+//   │ │ [G] Drive   [S] Spotify                ││
+//   │ │ [L] Linear  [F] Figma                  ││
 //   │ └────────────────────────────────────────┘│
 //   │                                            │
 //   │  Asset library     (click or drag to add)  │
+//   │  Figma             (paste a link → frames) │
 //   │  Outputs           (click to add)          │
 //   │  Linear            (pick an issue → thread)│
 //   │                                            │
@@ -245,8 +249,10 @@ function DrawerContent({
           onConnectDrive={onConnectDrive}
           onConnectSpotify={onConnectSpotify}
           onConnectLinear={() => void connectLinear()}
+          onConnectFigma={() => void connectFigma(boardId)}
         />
         <LibrarySection boardId={boardId} query={query} />
+        <FigmaSection boardId={boardId} query={query} />
         <OutputsSection boardId={boardId} query={query} />
         <LinearSection boardId={boardId} query={query} />
         {!query && pickerConnections.length > 0 && (

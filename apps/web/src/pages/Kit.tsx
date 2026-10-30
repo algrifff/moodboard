@@ -3,7 +3,9 @@ import { ArrowLeft, Check, Copy, Trash } from '@phosphor-icons/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ClientSelect } from '@/components/clients/ClientSelect'
+import { FigmaKitDialog } from '@/components/kits/FigmaKitDialog'
 import { KitEditor } from '@/components/kits/KitEditor'
+import { FigmaLogo } from '@/components/canvas/sourceLogos'
 import { KitPreview } from '@/components/kits/KitPreview'
 import { ghostButton, inputClass, labelClass, primaryButton, relativeTime } from '@/components/ui'
 import { ApiError } from '@/lib/http'
@@ -28,6 +30,7 @@ export function KitPage() {
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  const [fromFigma, setFromFigma] = useState(false)
 
   const load = useCallback(
     async (version?: number) => {
@@ -179,6 +182,22 @@ export function KitPage() {
                   {detail.version.note ? ` — ${detail.version.note}` : ''}
                 </p>
               </div>
+              <button
+                type="button"
+                className={ghostButton}
+                disabled={dirty || viewingOld}
+                title={
+                  dirty
+                    ? 'Save or discard your edits first'
+                    : viewingOld
+                      ? 'Go back to the latest version first'
+                      : 'Read a Figma file’s styles into a new version'
+                }
+                onClick={() => setFromFigma(true)}
+              >
+                <FigmaLogo size={12} />
+                Update from Figma
+              </button>
               <div>
                 <div className={`${labelClass} mb-1`}>Client</div>
                 <ClientSelect
@@ -191,6 +210,19 @@ export function KitPage() {
                 />
               </div>
             </div>
+
+            {fromFigma && (
+              <FigmaKitDialog
+                mode="version"
+                kit={detail.kit}
+                onClose={() => setFromFigma(false)}
+                onSaved={() => {
+                  setFromFigma(false)
+                  setParams({}, { replace: true })
+                  void load()
+                }}
+              />
+            )}
 
             {viewingOld && (
               <div

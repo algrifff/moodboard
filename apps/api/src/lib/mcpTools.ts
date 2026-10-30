@@ -102,7 +102,18 @@ export function buildMcpServer(userId: string): McpServer {
         const { boardId, ...input } = args as { boardId: string } & Record<string, unknown>
         const outcome = await tool.run({ boardId, userId }, input)
         if (!outcome.ok) return error(outcome.error)
-        return json({ ...outcome.payload, boardUrl: boardUrl(boardId) })
+        const result = json({ ...outcome.payload, boardUrl: boardUrl(boardId) })
+        if (!outcome.images?.length) return result
+        return {
+          content: [
+            ...result.content,
+            ...outcome.images.map((img) => ({
+              type: 'image' as const,
+              data: img.data.toString('base64'),
+              mimeType: img.mediaType,
+            })),
+          ],
+        }
       },
     )
   }

@@ -1,0 +1,7 @@
+{
+  "err": null,
+  "images": {
+    "12:34": "https://figma-alpha-api.s3.us-west-2.amazonaws.com/images/hero-abc",
+    "12:99": null
+  }
+}

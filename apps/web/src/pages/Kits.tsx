@@ -5,7 +5,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AppHeader } from '@/components/AppHeader'
 import { ClientSelect } from '@/components/clients/ClientSelect'
 import { ClientSwitcher } from '@/components/clients/ClientSwitcher'
-import { inputClass, primaryButton, relativeTime } from '@/components/ui'
+import { FigmaKitDialog } from '@/components/kits/FigmaKitDialog'
+import { FigmaLogo } from '@/components/canvas/sourceLogos'
+import { ghostButton, inputClass, primaryButton, relativeTime } from '@/components/ui'
 import { resolveClientFilter, useClientFilter } from '@/lib/clientFilter'
 import { createKit, listKits } from '@/lib/kitsApi'
 import { useClients } from '@/store/clients'
@@ -18,6 +20,7 @@ export function KitsPage() {
   const [kits, setKits] = useState<KitSummary[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [fromFigma, setFromFigma] = useState(false)
   const [newName, setNewName] = useState('')
   const [newClientId, setNewClientId] = useState<string | null>(null)
 
@@ -62,17 +65,39 @@ export function KitsPage() {
               Palette, fonts, logos and voice, versioned. Save one from a group’s brief on a board.
             </p>
           </div>
-          <button
-            type="button"
-            className={primaryButton}
-            onClick={startCreate}
-            disabled={loaded && clients.length === 0}
-            title={loaded && clients.length === 0 ? 'Add a client first' : undefined}
-          >
-            <Plus size={14} weight="bold" />
-            New kit
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={ghostButton}
+              onClick={() => setFromFigma(true)}
+              disabled={loaded && clients.length === 0}
+              title={loaded && clients.length === 0 ? 'Add a client first' : undefined}
+            >
+              <FigmaLogo size={12} />
+              From Figma
+            </button>
+            <button
+              type="button"
+              className={primaryButton}
+              onClick={startCreate}
+              disabled={loaded && clients.length === 0}
+              title={loaded && clients.length === 0 ? 'Add a client first' : undefined}
+            >
+              <Plus size={14} weight="bold" />
+              New kit
+            </button>
+          </div>
         </div>
+
+        {fromFigma && (
+          <FigmaKitDialog
+            mode="new"
+            clients={clients}
+            defaultClientId={activeClient?.id ?? clients[0]?.id ?? null}
+            onClose={() => setFromFigma(false)}
+            onSaved={(kit) => navigate(`/kits/${kit.id}`)}
+          />
+        )}
 
         {loaded && (
           <div className="mb-6">

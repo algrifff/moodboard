@@ -4,6 +4,7 @@ import type {
   DriveFolderData,
   FontData,
   ImageData,
+  FigmaFrameData,
   OutputCardData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
@@ -103,6 +104,13 @@ export function analysisHash(objects: CanvasObject[], modelTag: string): string 
       // excluded for the same reason as everywhere else.
       const d = o.data as VoiceNoteData
       parts.push(`${o.id}|voice-note|${d.url}|${d.durationSec}|${d.transcript}`)
+    } else if (o.type === 'figma-frame') {
+      // The AD reads the render (identified by its url, which changes when a
+      // refresh re-renders) and the frame and file names. lastModified,
+      // fetchedAt and the stored outline don't reach the prompt, so they
+      // mustn't bust the cache.
+      const d = o.data as FigmaFrameData
+      parts.push(`${o.id}|figma-frame|${d.url}|${d.fileKey}|${d.nodeId}|${d.fileName}|${d.name}`)
     } else if (o.type === 'output') {
       // The AD reads an output card as its name + format. Card geometry
       // (width/height) is presentation; the output's own edits don't reach

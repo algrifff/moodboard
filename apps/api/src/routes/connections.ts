@@ -21,6 +21,7 @@ import {
   linearApi,
   linearEnv,
 } from '../lib/linear'
+import { exchangeFigmaCode, FIGMA_AUTHORIZE_URL, figmaApi, figmaEnv } from '../lib/figma'
 import { rateLimit } from '../lib/rateLimit'
 import {
   exchangeCode as spotifyExchangeCode,
@@ -111,7 +112,7 @@ connections.use('*', async (c, next) => {
 // Returns the connection id (whether existing or freshly inserted).
 async function upsertConnection(args: {
   userId: string
-  provider: 'drive' | 'spotify' | 'linear'
+  provider: 'drive' | 'spotify' | 'linear' | 'figma'
   accountEmail: string
   accessTokenEnc: string
   refreshTokenEnc: string | null
@@ -420,6 +421,76 @@ connections.get('/linear/callback', async (c) => {
       scopes: token.scope ?? LINEAR_SCOPES,
       workspaceId: viewer.workspace.id,
       workspaceName: viewer.workspace.name,
+    })
+    return callbackHtml(c, { kind: 'done', id })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return callbackHtml(c, { kind: 'error', message })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// GET /api/connections/figma/start
+//
+// Same state-cookie CSRF pattern as the others, and like Linear an
+// unconfigured server answers with the popup's error page. Scopes are
+// read-only (see FIGMA_DEFAULT_SCOPES); nothing is ever written to Figma.
+// ---------------------------------------------------------------------------
+connections.get('/figma/start', async (c) => {
+  const env = figmaEnv()
+  if (!env) {
+    return callbackHtml(c, {
+      kind: 'error',
+      message:
+        'Figma isn’t configured on this server (FIGMA_CLIENT_ID / FIGMA_CLIENT_SECRET / FIGMA_REDIRECT_URI).',
+    })
+  }
+  const state = randomBytes(24).toString('hex')
+  setCookie(c, STATE_COOKIE('figma'), state, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: OAUTH_STATE_TTL_SECONDS,
+  })
+  const url = new URL(FIGMA_AUTHORIZE_URL)
+  url.searchParams.set('client_id', env.clientId)
+  url.searchParams.set('redirect_uri', env.redirectUri)
+  url.searchParams.set('scope', env.scopes)
+  url.searchParams.set('state', state)
+  url.searchParams.set('response_type', 'code')
+  return c.redirect(url.toString())
+})
+
+connections.get('/figma/callback', async (c) => {
+  const user = c.get('user')!
+  const code = c.req.query('code')
+  const stateParam = c.req.query('state')
+  const stateCookie = getCookie(c, STATE_COOKIE('figma'))
+  deleteCookie(c, STATE_COOKIE('figma'), { path: '/' })
+
+  if (!code) {
+    return callbackHtml(c, { kind: 'error', message: c.req.query('error') ?? 'Missing code' })
+  }
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    return callbackHtml(c, { kind: 'error', message: 'Invalid state' })
+  }
+
+  try {
+    const env = figmaEnv()
+    if (!env) throw new Error('Figma OAuth env vars are not configured')
+    const token = await exchangeFigmaCode({ code, ...env })
+    const me = await figmaApi(token.accessToken).me()
+    const id = await upsertConnection({
+      userId: user.id,
+      provider: 'figma',
+      accountEmail: me.email ?? me.handle ?? 'Figma account',
+      accessTokenEnc: encryptToken(token.accessToken),
+      refreshTokenEnc: token.refreshToken ? encryptToken(token.refreshToken) : null,
+      expiresAt: token.expiresIn ? new Date(Date.now() + token.expiresIn * 1000) : null,
+      scopes: env.scopes,
+      workspaceId: me.id,
+      workspaceName: me.handle ?? null,
     })
     return callbackHtml(c, { kind: 'done', id })
   } catch (e) {

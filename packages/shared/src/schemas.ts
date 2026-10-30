@@ -205,6 +205,21 @@ export const outputCardDataSchema = z.object({
   height: z.number().positive(),
 })
 
+export const figmaFrameDataSchema = z.object({
+  url: z.string(),
+  fileKey: z.string().min(1),
+  nodeId: z.string().min(1),
+  name: z.string(),
+  fileName: z.string(),
+  pageName: z.string().optional(),
+  figmaUrl: z.string(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  lastModified: z.string(),
+  fetchedAt: z.string(),
+  structure: z.string().optional(),
+})
+
 export const canvasObjectSchema = z.object({
   id: z.string(),
   type: z.enum([
@@ -222,6 +237,7 @@ export const canvasObjectSchema = z.object({
     'video-clip',
     'voice-note',
     'output',
+    'figma-frame',
   ]),
   position: z.object({ x: z.number(), y: z.number() }),
   size: z.object({ width: z.number(), height: z.number() }),
@@ -242,6 +258,7 @@ export const canvasObjectSchema = z.object({
     videoClipDataSchema,
     voiceNoteDataSchema,
     outputCardDataSchema,
+    figmaFrameDataSchema,
   ]),
 })
 
@@ -490,6 +507,7 @@ export const boardPreviewObjectSchema = z.object({
     'video-clip',
     'voice-note',
     'output',
+    'figma-frame',
   ]),
   color: z.string().optional(),
   thumbnailUrl: z.string().optional(),
@@ -573,7 +591,7 @@ export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 // client only sees what's needed to label the connection in the picker.
 export const connectionSummarySchema = z.object({
   id: z.string(),
-  provider: z.enum(['drive', 'spotify', 'linear']),
+  provider: z.enum(['drive', 'spotify', 'linear', 'figma']),
   accountEmail: z.string(),
   workspaceName: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -777,9 +795,13 @@ export const sharedBoardSnapshotSchema = z.object({
   version: z.literal(1),
   boardName: z.string().min(1).max(200),
   capturedAt: z.string(),
-  // Reuse the existing canvas-object schema so the snapshot stays
-  // structurally identical to what the editor stores.
-  objects: z.array(canvasObjectSchema),
+  // The same loose per-object shape the board stores (type-checked, data
+  // passed through whole): parsing `data` against the per-type union would
+  // keep only the first matching schema's fields — a font or Figma card would
+  // arrive as a bare { url }.
+  objects: z
+    .array(storedCanvasObjectSchema)
+    .transform((objects) => objects as unknown as CanvasObject[]),
   groups: z.array(sharedGroupSnapshotSchema),
 })
 export type SharedBoardSnapshotInput = z.infer<typeof sharedBoardSnapshotSchema>

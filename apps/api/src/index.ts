@@ -25,6 +25,7 @@ import { clients } from './routes/clients'
 import { connections } from './routes/connections'
 import { designRuns } from './routes/designRuns'
 import { external } from './routes/external'
+import { figma } from './routes/figma'
 import { files } from './routes/files'
 import { kits } from './routes/kits'
 import { library } from './routes/library'
@@ -151,6 +152,7 @@ api.route('/output-shares', outputShares)
 api.route('/design-runs', designRuns)
 api.route('/render-jobs', renderJobs)
 api.route('/linear', linear)
+api.route('/figma', figma)
 api.route('/external', external)
 api.route('/voice', voice)
 api.route('/', analyze)

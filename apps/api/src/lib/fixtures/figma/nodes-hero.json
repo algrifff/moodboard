@@ -1,0 +1,106 @@
+{
+  "name": "Acme Brand",
+  "lastModified": "2026-03-04T10:00:00Z",
+  "version": "9001",
+  "nodes": {
+    "12:34": {
+      "document": {
+        "id": "12:34",
+        "name": "Hero",
+        "type": "FRAME",
+        "absoluteBoundingBox": { "x": 0, "y": 0, "width": 1440, "height": 900 },
+        "layoutMode": "VERTICAL",
+        "itemSpacing": 24,
+        "paddingLeft": 80,
+        "paddingRight": 80,
+        "paddingTop": 64,
+        "paddingBottom": 64,
+        "primaryAxisAlignItems": "CENTER",
+        "fills": [
+          { "type": "SOLID", "color": { "r": 0.9803922, "g": 0.9686275, "b": 0.9490196, "a": 1 } }
+        ],
+        "effects": [{ "type": "DROP_SHADOW", "visible": true }],
+        "children": [
+          {
+            "id": "12:40",
+            "name": "Headline",
+            "type": "TEXT",
+            "characters": "Launch day,\nthe quiet way.",
+            "absoluteBoundingBox": { "x": 80, "y": 300, "width": 900, "height": 140 },
+            "fills": [
+              {
+                "type": "SOLID",
+                "color": { "r": 0.1215686, "g": 0.1647059, "b": 0.2666667, "a": 1 }
+              }
+            ],
+            "style": {
+              "fontFamily": "Aktiv Grotesk",
+              "fontWeight": 700,
+              "fontSize": 64,
+              "lineHeightPx": 70
+            }
+          },
+          {
+            "id": "12:41",
+            "name": "Subhead",
+            "type": "TEXT",
+            "characters": "Software for people who ship.",
+            "absoluteBoundingBox": { "x": 80, "y": 460, "width": 600, "height": 28 },
+            "fills": [
+              {
+                "type": "SOLID",
+                "color": { "r": 0.0666667, "g": 0.0666667, "b": 0.0666667, "a": 1 }
+              }
+            ],
+            "style": {
+              "fontFamily": "Source Serif",
+              "fontWeight": 400,
+              "fontSize": 20,
+              "lineHeightPx": 28
+            }
+          },
+          {
+            "id": "12:42",
+            "name": "CTA row",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 80, "y": 520, "width": 400, "height": 56 },
+            "layoutMode": "HORIZONTAL",
+            "itemSpacing": 12,
+            "children": [
+              {
+                "id": "12:43",
+                "name": "Primary button",
+                "type": "INSTANCE",
+                "absoluteBoundingBox": { "x": 80, "y": 520, "width": 180, "height": 56 },
+                "cornerRadius": 28,
+                "fills": [
+                  {
+                    "type": "SOLID",
+                    "color": { "r": 0.9490196, "g": 0.7568627, "b": 0.3058824, "a": 1 }
+                  }
+                ],
+                "children": [
+                  {
+                    "id": "12:44",
+                    "name": "Label",
+                    "type": "TEXT",
+                    "characters": "Get started",
+                    "fills": [
+                      {
+                        "type": "SOLID",
+                        "color": { "r": 0.0666667, "g": 0.0666667, "b": 0.0666667, "a": 1 }
+                      }
+                    ],
+                    "style": { "fontFamily": "Source Serif", "fontWeight": 700, "fontSize": 16 }
+                  }
+                ]
+              },
+              { "id": "12:45", "name": "Hidden helper", "type": "RECTANGLE", "visible": false }
+            ]
+          }
+        ]
+      },
+      "styles": {}
+    }
+  }
+}

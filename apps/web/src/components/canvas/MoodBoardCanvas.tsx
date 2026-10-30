@@ -7,6 +7,7 @@ import { cubicBezier } from 'framer-motion'
 import { groupBoundingBox, objectsInMarquee } from '@moodboard/shared'
 import { proxyUrl, uploadFile } from '@/lib/api'
 import { captureClipboard, extractImgSrc, urlToImageHit } from '@/lib/clipboardImage'
+import { pasteFigmaUrl } from '@/lib/figmaPaste'
 import {
   importDriveFile,
   importSpotifyRef,
@@ -18,6 +19,7 @@ import {
   extractSpotifyRef,
   extractVideoRef,
   extractWebUrl,
+  parseFigmaUrl,
   type SpotifyRef,
 } from '@moodboard/shared'
 import { fitToDefaultSize, loadImageDimensions, PDF_LONGEST_SIDE } from '@/lib/imageLoad'
@@ -645,6 +647,13 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
           return
         }
         if (trimmed.length > 0 && /https?:\/\//i.test(trimmed)) {
+          // Figma frame or file link: a frame imports as an image card, a
+          // file opens the picker to choose frames.
+          if (parseFigmaUrl(trimmed) && boardId) {
+            e.preventDefault()
+            await pasteFigmaUrl(boardId, trimmed, viewportCenterWorld())
+            return
+          }
           const driveFileId = extractDriveFileId(trimmed)
           if (driveFileId) {
             e.preventDefault()
@@ -719,6 +728,7 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
     handleSpotifyPasteUrl,
     handleVideoPasteUrl,
     handleWebPasteUrl,
+    boardId,
     viewportCenterWorld,
   ])
 
@@ -905,7 +915,8 @@ export function MoodBoardCanvas({ boardId }: { boardId?: string } = {}) {
             o.type === 'spotify-album' ||
             o.type === 'video-clip' ||
             o.type === 'voice-note' ||
-            o.type === 'output',
+            o.type === 'output' ||
+            o.type === 'figma-frame',
         )}
         scale={scale}
         offset={offset}

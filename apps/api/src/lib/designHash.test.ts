@@ -40,7 +40,19 @@ describe('designCacheKey', () => {
     ['format', { format: 'social' }],
     ['variant', { variantIndex: 2 }],
     ['model tag', { modelTag: 'designer@other@v1' }],
+    ['attached Figma frame', { figmaFrames: ['K:12:34@2026-03-04T10:00:00Z'] }],
   ])('changes with the %s', (_label, patch) => {
     expect(designCacheKey({ ...base, ...patch })).not.toBe(designCacheKey(base))
+  })
+
+  it('keys a Figma reference by file, frame and version, regardless of order', () => {
+    const frames = ['K:12:34@2026-03-04T10:00:00Z', 'K:12:40@2026-03-04T10:00:00Z']
+    const key = designCacheKey({ ...base, figmaFrames: frames })
+    expect(designCacheKey({ ...base, figmaFrames: [...frames].reverse() })).toBe(key)
+    expect(
+      designCacheKey({ ...base, figmaFrames: [frames[0]!.replace('03-04', '05-01'), frames[1]!] }),
+    ).not.toBe(key)
+    // No frames is the key it always was.
+    expect(designCacheKey({ ...base, figmaFrames: [] })).toBe(designCacheKey(base))
   })
 })

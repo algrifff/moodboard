@@ -29,6 +29,10 @@ describe.skipIf(!hasDb)('job queue', () => {
   }
 
   beforeAll(async () => {
+    // The queue cap counts every waiting job in the database, and these tests
+    // leave claimed jobs running until the end; without room they would trip
+    // the cap whenever another test file has a few jobs queued at the same time.
+    process.env.JOB_QUEUE_MAX = '1000'
     dbMod = await import('../db')
     jobs = await import('./jobs')
     runner = await import('./jobRunner')

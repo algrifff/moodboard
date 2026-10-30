@@ -28,6 +28,7 @@ import { designToolbox } from './designToolbox'
 import { getKitDetail, listKits } from './kits'
 import { LinearApiError, parseIssueRef } from './linear'
 import { LinearUnavailableError } from './linearConnection'
+import { figmaReferenceKey, resolveFigmaReferences, type FigmaReference } from './figmaTools'
 import { defaultModelClient } from './orchestrator'
 import { getOutputSummary } from './outputs'
 import { outputRef, outputUrl, resolveOutput } from './outputTools'
@@ -153,6 +154,7 @@ export async function designOutputTool(
     variants?: number
     regenerate?: boolean
     linearIssue?: string
+    figmaFrames?: string[]
   },
 ): Promise<ToolOutcome> {
   if (input.format === 'video') {
@@ -160,6 +162,12 @@ export async function designOutputTool(
   }
   const target = await resolveDesignTarget(ctx, input)
   if (!target.ok) return target
+  let figmaFrames: FigmaReference[] = []
+  if (input.figmaFrames && input.figmaFrames.length > 0) {
+    const resolved = await resolveFigmaReferences(ctx.boardId, input.figmaFrames)
+    if (!resolved.ok) return resolved
+    figmaFrames = resolved.frames
+  }
   const { client, templates, assetIds } = target
   const kit = target.kit ? { id: target.kit.id } : null
   const linearIssue = input.linearIssue ? (parseIssueRef(input.linearIssue) ?? null) : null
@@ -172,6 +180,12 @@ export async function designOutputTool(
     templates,
     assets: target.assets,
     linearIssue,
+    figmaFrames: figmaFrames.map((f) => ({
+      name: f.name,
+      fileName: f.fileName,
+      width: f.width,
+      height: f.height,
+    })),
   }
 
   const runId = await createDesignRun({
@@ -196,6 +210,7 @@ export async function designOutputTool(
         clientId: client.id,
         kitId: kit?.id ?? null,
         templates,
+        figmaFrames,
       }),
     cache: dbDesignCache(DESIGNER_MODEL_TAG),
     keyFor: (plan) =>
@@ -209,6 +224,7 @@ export async function designOutputTool(
         format: input.format,
         variantIndex: plan.index,
         modelTag: DESIGNER_MODEL_TAG,
+        figmaFrames: figmaFrames.map(figmaReferenceKey),
       }),
     regenerate: input.regenerate,
     onProgress: ctx.onProgress ?? (() => undefined),
@@ -232,6 +248,7 @@ export async function designOutputTool(
       client: client.name,
       kit: context.kit ? `${context.kit.name} v${context.kit.version}` : null,
       linearIssue,
+      figmaFrames: figmaFrames.map((f) => f.name),
       cached: allCached,
       variants: variants.map((v) => ({
         ...v,

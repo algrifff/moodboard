@@ -25,7 +25,16 @@ const PREVIEW_OBJECT_CAP = 12
 // objects may have minor shape drift, and the dashboard preview shouldn't
 // fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'drive-file' | 'drive-folder' | 'output'
+  type:
+    | 'image'
+    | 'sticky'
+    | 'text'
+    | 'pdf'
+    | 'font'
+    | 'drive-file'
+    | 'drive-folder'
+    | 'output'
+    | 'figma-frame'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
@@ -39,6 +48,7 @@ const STORED_TYPES = [
   'drive-file',
   'drive-folder',
   'output',
+  'figma-frame',
 ] as const
 function isStoredObject(o: unknown): o is StoredObject {
   if (!o || typeof o !== 'object') return false
@@ -86,7 +96,7 @@ function buildPreview(objs: unknown[]): BoardPreview {
     }
     const d = o.data
     if (o.type === 'sticky' && d && typeof d.color === 'string') base.color = d.color
-    if ((o.type === 'image' || o.type === 'pdf') && d) {
+    if ((o.type === 'image' || o.type === 'pdf' || o.type === 'figma-frame') && d) {
       const url =
         typeof d.thumbnailUrl === 'string' ? d.thumbnailUrl : (d.url as string | undefined)
       if (typeof url === 'string') base.thumbnailUrl = url

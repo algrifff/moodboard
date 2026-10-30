@@ -1,5 +1,6 @@
 import type {
   CanvasObject,
+  FigmaFrameData,
   GroupState,
   SharedBoardSnapshotInput,
   SharedGroupSnapshot,
@@ -23,6 +24,14 @@ import { showToast } from './Toast'
 // edits made via BriefReadout. Groups without a completed read simply omit
 // the field.
 // ---------------------------------------------------------------------------
+
+// A Figma card is shared as its picture and names; the layer outline is for the
+// team's agents and says more than the picture does.
+function forSharing(o: CanvasObject): CanvasObject {
+  if (o.type !== 'figma-frame') return o
+  const { structure: _outline, ...data } = o.data as FigmaFrameData
+  return { ...o, data }
+}
 
 export function buildSnapshot({
   boardName,
@@ -53,7 +62,7 @@ export function buildSnapshot({
     version: 1,
     boardName,
     capturedAt: new Date().toISOString(),
-    objects,
+    objects: objects.map(forSharing),
     groups,
   }
 }

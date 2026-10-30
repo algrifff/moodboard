@@ -53,6 +53,7 @@ const context = (patch: Partial<VideoContext> = {}): VideoContext => ({
     },
   ],
   fps: 30,
+  figmaFrames: [],
   ...patch,
 })
 
@@ -82,6 +83,11 @@ function recordingToolbox(overrides: Partial<VideoToolbox> = {}) {
       text: '{"durationMs":15000}',
       durationMs: 15000,
       frames: times.map((timeMs) => ({ timeMs, png: PNG })),
+    })),
+    getFigmaFrame: rec('getFigmaFrame', async () => ({
+      ok: true,
+      text: '{"frame":"Hero","structure":"Frame “Hero”"}',
+      png: PNG,
     })),
     enqueueRender: rec('enqueueRender', async () => ({
       ok: true,
@@ -409,6 +415,57 @@ describe('runVideoAgent', () => {
   })
 })
 
+describe('Figma references', () => {
+  const withFrames = context({
+    figmaFrames: [{ name: 'Hero', fileName: 'Acme Brand', width: 1920, height: 1080 }],
+  })
+
+  it('lists the attached frames in the brief; the tool is always in the stable set', () => {
+    expect(videoPrompt(withFrames)).toContain('“Hero” (Acme Brand) 1920×1080')
+    expect(videoPrompt(context())).not.toContain('Figma reference')
+    expect(VIDEO_AGENT_TOOLS.map((t) => t.name)).toContain('get_figma_frame')
+  })
+
+  it('shows the model the frame before it writes the script', async () => {
+    const { toolbox, calls } = recordingToolbox()
+    const { client, requests } = scriptedModel([
+      { tools: [{ name: 'get_figma_frame', input: { frame: 'Hero' } }] },
+      { text: 'Looking good.' },
+    ])
+    await runVideoAgent({
+      model: client,
+      toolbox,
+      context: withFrames,
+      onProgress: () => undefined,
+      maxSteps: 2,
+    })
+    expect(calls[0]).toEqual({ name: 'getFigmaFrame', args: ['Hero'] })
+    const blocks = toolResults(requests[1]!)[0]!.content as Anthropic.ContentBlockParam[]
+    expect(blocks[0]).toMatchObject({ type: 'image' })
+    expect(blocks[1]).toMatchObject({ type: 'text' })
+  })
+
+  it('refuses when nothing was attached', async () => {
+    const { toolbox, calls } = recordingToolbox()
+    const { client, requests } = scriptedModel([
+      { tools: [{ name: 'get_figma_frame', input: { frame: 'Hero' } }] },
+      { text: 'ok' },
+    ])
+    await runVideoAgent({
+      model: client,
+      toolbox,
+      context: context(),
+      onProgress: () => undefined,
+      maxSteps: 2,
+    })
+    expect(calls).toEqual([])
+    expect(toolResults(requests[1]!)[0]).toMatchObject({
+      is_error: true,
+      content: 'No Figma frames were attached to this brief.',
+    })
+  })
+})
+
 describe('runVideo (cache)', () => {
   const memoryCache = () => {
     const rows = new Map<string, DesignVariant>()
@@ -506,6 +563,7 @@ describe('prompts and tools', () => {
       'get_output_source',
       'update_output_slots',
       'update_output_html',
+      'get_figma_frame',
       'render_key_frames',
       'finish_video',
     ])

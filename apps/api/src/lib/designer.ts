@@ -32,6 +32,9 @@ import { describeModelError, type ModelClient } from './orchestrator'
 
 export const DESIGNER_MAX_STEPS = 12
 export const DESIGNER_MAX_RENDERS = 4
+// Looks at attached Figma frames: each is a picture in the context for the
+// rest of the loop, so this is bounded like renders are.
+export const DESIGNER_MAX_FIGMA_LOOKS = 6
 const MAX_TOKENS = 8000
 
 export const MULTI_SECTION_FORMATS: ReadonlySet<OutputFormat> = new Set([
@@ -54,6 +57,15 @@ export type DesignAsset = {
   colors: string[]
 }
 
+// A Figma frame the person attached as a visual reference (the picture and
+// layer outline are read with get_figma_frame).
+export type DesignFigmaFrame = {
+  name: string
+  fileName: string
+  width: number
+  height: number
+}
+
 export type DesignContext = {
   brief: string
   format: OutputFormat
@@ -63,6 +75,7 @@ export type DesignContext = {
   // A first look at the client's library; search_assets finds more.
   assets: DesignAsset[]
   linearIssue: string | null
+  figmaFrames: DesignFigmaFrame[]
 }
 
 export type VariantPlan = {
@@ -139,6 +152,9 @@ export interface DesignToolbox {
     version: number,
     opts: { section?: number },
   ): Promise<ToolResult<{ png: Buffer; sections: number; width: number; height: number }>>
+  // An attached Figma frame: its picture (a PNG sized for a vision call) and
+  // the text outline of its layers.
+  getFigmaFrame(frame: string): Promise<ToolResult<{ png: Buffer | null }>>
 }
 
 const textEdit = z.object({
@@ -146,6 +162,49 @@ const textEdit = z.object({
   replace: z.string().max(60_000),
   all: z.boolean().optional().describe('Replace every occurrence (default: must match once).'),
 })
+
+// Shared with the video agent: both can be given Figma frames to match.
+export const GET_FIGMA_FRAME_SHAPE = {
+  description:
+    'Look at a Figma frame attached to the brief: its picture and an outline of its layers — names, text, auto-layout direction and spacing, sizes, colours and fonts. Use it as the layout and hierarchy reference: match its composition and proportions in the template, but wear the kit’s colours, fonts and voice, not Figma’s.',
+  input: { frame: z.string().min(1).max(300).describe('The frame’s name from your brief.') },
+}
+
+// The result of get_figma_frame: the picture (when the render is still there)
+// and the layer outline. Shared with the video agent.
+export function figmaLookResult(
+  toolUseId: string,
+  look: { png: Buffer | null; text: string },
+): Anthropic.ToolResultBlockParam {
+  return {
+    type: 'tool_result',
+    tool_use_id: toolUseId,
+    content: [
+      ...(look.png
+        ? [
+            {
+              type: 'image' as const,
+              source: {
+                type: 'base64' as const,
+                media_type: 'image/png' as const,
+                data: look.png.toString('base64'),
+              },
+            },
+          ]
+        : []),
+      { type: 'text' as const, text: look.text },
+    ],
+  }
+}
+
+export function figmaSection(frames: DesignFigmaFrame[]): string | null {
+  if (frames.length === 0) return null
+  return [
+    '# Figma reference frames',
+    'The person attached these frames from Figma as visual references. Look at each with get_figma_frame before you build, and match its layout, hierarchy and proportions — in the kit’s colours, fonts and voice. They are references, not a spec to copy pixel for pixel; the output is HTML from the templates.',
+    ...frames.map((f) => `- “${f.name}” (${f.fileName}) ${f.width}×${f.height}`),
+  ].join('\n')
+}
 
 const TOOL_SHAPES = {
   plan_outline: {
@@ -198,6 +257,7 @@ const TOOL_SHAPES = {
       css: z.array(textEdit).max(20).optional(),
     },
   },
+  get_figma_frame: GET_FIGMA_FRAME_SHAPE,
   render_output_frame: {
     description:
       'Render the current version to a PNG at its real size (animations at their end state) and look at it. For multi-section documents pass section (0-based) to see one section; the result says how many there are.',
@@ -236,6 +296,7 @@ export const DESIGNER_TOOLS: Anthropic.Tool[] = Object.entries(TOOL_SHAPES).map(
 export const DESIGNER_SYSTEM = `You are a senior designer at a small studio. You produce one finished design option as a self-contained HTML output, built from the studio's templates, skinned by the client's style kit, filled with the client's library assets and your copy. You work with tools and you look at your own renders.
 
 How to work:
+0. If the brief lists Figma reference frames, look at each with get_figma_frame first and note its layout, hierarchy, spacing and proportions; build to match that in the kit's colours and fonts.
 1. Multi-section formats (deck, landing page, one-pager): plan_outline first — the sections the brief needs, in order.
 2. create_output from the suggested template (or another template for this format if it clearly fits better). Fill every text slot with real copy for this brief in the kit's voice. Image slots take only a url from the library list or search_assets; if nothing fits, leave the slot at its default rather than forcing an unrelated image.
 3. For multi-section documents, make the structure match your outline with update_output_html (read get_output_source first; duplicate a section to add one, delete one you don't need), then fill the copy.
@@ -312,6 +373,7 @@ export function variantPrompt(context: DesignContext, plan: VariantPlan): string
       .filter(Boolean)
       .join('\n'),
     kitSection(context.kit),
+    figmaSection(context.figmaFrames),
     `# Templates for this format\n${context.templates.map(templateLine).join('\n')}`,
     `# Library assets${context.client ? ` for ${context.client.name}` : ''}\n${
       context.assets.length > 0
@@ -330,7 +392,9 @@ export function variantPrompt(context: DesignContext, plan: VariantPlan): string
     ]
       .filter(Boolean)
       .join('\n'),
-  ].join('\n\n')
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 // ---------------------------------------------------------------------------
@@ -345,6 +409,7 @@ type VariantState = {
   outline: { title: string; purpose: string }[] | null
   renders: number
   renderedVersion: number | null
+  figmaLooks: number
   finished: { name: string; critique: string } | null
   lastText: string
   steps: number
@@ -382,6 +447,7 @@ export async function runDesignVariant({
     outline: null,
     renders: 0,
     renderedVersion: null,
+    figmaLooks: 0,
     finished: null,
     lastText: '',
     steps: 0,
@@ -502,6 +568,21 @@ export async function runDesignVariant({
         if (!r.ok) return err(use.id, r.error)
         state.version = r.version
         return ok(use.id, r.text)
+      }
+      case 'get_figma_frame': {
+        if (context.figmaFrames.length === 0) {
+          return err(use.id, 'No Figma frames were attached to this brief.')
+        }
+        if (state.figmaLooks >= DESIGNER_MAX_FIGMA_LOOKS) {
+          return err(
+            use.id,
+            'You have looked at the Figma references enough — build from what you saw.',
+          )
+        }
+        state.figmaLooks++
+        progress('reference', typeof input.frame === 'string' ? input.frame : undefined)
+        const r = await toolbox.getFigmaFrame(input.frame as string)
+        return r.ok ? figmaLookResult(use.id, r) : err(use.id, r.error)
       }
       case 'render_output_frame': {
         const missing = needsOutput()

@@ -5,7 +5,11 @@ import {
   fillSlots,
   outputFormatSchema,
   placeOutputRequestSchema,
+  renderVideoRequestSchema,
   updateOutputRequestSchema,
+  videoFpsSchema,
+  type VideoFps,
+  RENDER_VIDEO_KIND,
   updateTemplateRequestSchema,
 } from '@moodboard/shared'
 import { eq } from 'drizzle-orm'
@@ -24,6 +28,7 @@ import {
   downloadName,
   getOutputDetail,
   getOutputShare,
+  getOutputSummary,
   getSharedOutput,
   listOutputs,
   outputRenderDoc,
@@ -34,7 +39,16 @@ import {
   updateOutput,
   type RenderDoc,
 } from '../lib/outputs'
+import { listOutputJobs } from '../lib/jobs'
+import {
+  enqueueVideoRender,
+  listVideoRenders,
+  videoDownloadName,
+  videoFilePath,
+  videoInfoFor,
+} from '../lib/outputVideo'
 import { rateLimit } from '../lib/rateLimit'
+import { serveFile } from '../lib/serveFile'
 import { slotProposer } from '../lib/designRuns'
 import { removeOutputFrames, outputThumbnail } from '../lib/outputRender'
 import { applySlotEdits } from '../lib/slotProposer'
@@ -94,6 +108,34 @@ async function serveDoc(
     headers['X-Missing-Assets'] = composed.missingAssets.join(',')
   }
   return c.body(composed.html, 200, headers)
+}
+
+// An output version's MP4 (range-capable, so <video> can seek). fps defaults
+// to the best render the version has.
+async function serveVideo(c: Context, args: { outputId: string; version: number; name: string }) {
+  const fpsParam = c.req.query('fps')
+  let fps: VideoFps
+  if (fpsParam === undefined) {
+    const best = (await listVideoRenders(args.outputId, args.version))[0]
+    if (!best) return c.json({ error: 'No rendered video for this version yet' }, 404)
+    fps = best.fps
+  } else {
+    const parsed = videoFpsSchema.safeParse(Number(fpsParam))
+    if (!parsed.success) return c.json({ error: 'fps must be 30 or 60' }, 400)
+    fps = parsed.data
+  }
+  const file = videoFilePath(args.outputId, args.version, fps)
+  const res = file
+    ? await serveFile(file, {
+        contentType: 'video/mp4',
+        rangeHeader: c.req.header('range'),
+        headers: {
+          'Cache-Control': 'private, max-age=60',
+          'Content-Disposition': `${c.req.query('download') === '1' ? 'attachment' : 'inline'}; filename="${videoDownloadName(args.name, args.version, fps)}"`,
+        },
+      })
+    : null
+  return res ?? c.json({ error: 'No rendered video for this version yet' }, 404)
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +362,52 @@ outputs.get('/:id/render', async (c) => {
   })
 })
 
+// ---- Video (Phase 25) ------------------------------------------------------
+
+const renderEnqueueLimit = rateLimit({ scope: 'render-video', limit: 12, windowMs: 60_000 })
+
+// Queue an MP4 render of a version; 200 with the existing render and no job
+// when it is already rendered (unless force).
+outputs.post('/:id/render-video', renderEnqueueLimit, async (c) => {
+  const parsed = renderVideoRequestSchema.safeParse(await c.req.json().catch(() => ({})))
+  if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
+  const result = await enqueueVideoRender({
+    outputId: c.req.param('id') as string,
+    version: parsed.data.version,
+    fps: parsed.data.fps,
+    force: parsed.data.force,
+    userId: c.get('user')!.id,
+  })
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ job: result.job, render: result.render })
+})
+
+// The version's finished MP4s and the output's recent render jobs.
+outputs.get('/:id/renders', async (c) => {
+  const version = versionParam(c.req.query('version'))
+  if (version === null) return c.json({ error: 'Bad version' }, 400)
+  const id = c.req.param('id') as string
+  const summary = await getOutputSummary(id)
+  if (!summary) return c.json({ error: 'Not found' }, 404)
+  return c.json({
+    jobs: await listOutputJobs(id, { kind: RENDER_VIDEO_KIND, limit: 20 }),
+    renders: await listVideoRenders(id, version ?? summary.latestVersion),
+  })
+})
+
+outputs.get('/:id/video', async (c) => {
+  const version = versionParam(c.req.query('version'))
+  if (version === null) return c.json({ error: 'Bad version' }, 400)
+  const id = c.req.param('id') as string
+  const summary = await getOutputSummary(id)
+  if (!summary) return c.json({ error: 'Not found' }, 404)
+  return serveVideo(c, {
+    outputId: id,
+    version: version ?? summary.latestVersion,
+    name: summary.name,
+  })
+})
+
 outputs.post('/:id/place', async (c) => {
   const parsed = placeOutputRequestSchema.safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
@@ -362,7 +450,18 @@ const shareViewRateLimit = rateLimit({ scope: 'output-share-view', limit: 240, w
 outputShares.get('/:token', shareViewRateLimit, async (c) => {
   const shared = await getSharedOutput(c.req.param('token') as string)
   if (!shared) return c.json({ error: 'Not found' }, 404)
-  return c.json({ share: shared.view })
+  const video = await videoInfoFor(shared.outputId, shared.view.version)
+  return c.json({ share: { ...shared.view, video } })
+})
+
+outputShares.get('/:token/video', shareViewRateLimit, async (c) => {
+  const shared = await getSharedOutput(c.req.param('token') as string)
+  if (!shared) return c.json({ error: 'Not found' }, 404)
+  return serveVideo(c, {
+    outputId: shared.outputId,
+    version: shared.view.version,
+    name: shared.view.name,
+  })
 })
 
 outputShares.get('/:token/render', shareViewRateLimit, async (c) => {

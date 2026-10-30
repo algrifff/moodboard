@@ -1,0 +1,5 @@
+{
+  "name": "Promo spot 16:9",
+  "format": "video",
+  "viewport": { "kind": "fixed", "width": 1920, "height": 1080 }
+}

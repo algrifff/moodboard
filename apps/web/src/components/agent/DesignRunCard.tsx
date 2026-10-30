@@ -49,6 +49,7 @@ const ASPECT: Record<OutputFormat, string> = {
   deck: '16 / 9',
   landing: '16 / 10',
   'one-pager': '4 / 3',
+  video: '16 / 9',
   other: '16 / 10',
 }
 

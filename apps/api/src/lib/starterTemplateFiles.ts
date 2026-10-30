@@ -13,6 +13,8 @@ export const STARTER_KEYS = [
   'deck',
   'landing-page',
   'one-pager',
+  'promo-spot',
+  'promo-spot-vertical',
 ] as const
 
 const metaSchema = z.object({

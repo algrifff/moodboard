@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server'
-import type { HealthResponse } from '@moodboard/shared'
+import { RENDER_VIDEO_KIND, type HealthResponse } from '@moodboard/shared'
 import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -9,7 +9,9 @@ import { auth, type AuthSession, type AuthUser } from './auth'
 import { db } from './db'
 import { runMigrations } from './db/migrate'
 import { closeBrowser } from './lib/browser'
+import { startJobWorker } from './lib/jobRunner'
 import { startMaintenance } from './lib/maintenance'
+import { renderVideoHandler } from './lib/outputVideo'
 import { rateLimit } from './lib/rateLimit'
 import { syncStarterTemplates } from './lib/starterTemplates'
 import { ensureDataDirs } from './lib/storage'
@@ -29,6 +31,7 @@ import { library } from './routes/library'
 import { linear } from './routes/linear'
 import { mcp } from './routes/mcp'
 import { outputShares, outputs, templates } from './routes/outputs'
+import { renderJobs } from './routes/renderJobs'
 import { boardShare, shares } from './routes/shares'
 import { voice } from './routes/voice'
 
@@ -146,6 +149,7 @@ api.route('/templates', templates)
 api.route('/outputs', outputs)
 api.route('/output-shares', outputShares)
 api.route('/design-runs', designRuns)
+api.route('/render-jobs', renderJobs)
 api.route('/linear', linear)
 api.route('/external', external)
 api.route('/voice', voice)
@@ -160,6 +164,14 @@ await runMigrations(process.env.DATABASE_URL!)
 await ensureDataDirs()
 await syncStarterTemplates()
 startMaintenance()
+// Background jobs (MP4 renders). JOB_WORKER=0 makes an instance API-only.
+const jobWorker =
+  process.env.JOB_WORKER === '0'
+    ? null
+    : startJobWorker({
+        handlers: { [RENDER_VIDEO_KIND]: renderVideoHandler },
+        concurrency: Math.max(1, Number(process.env.JOB_CONCURRENCY) || 1),
+      })
 
 const server = serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`)
@@ -170,6 +182,9 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     server.close()
-    void closeBrowser().finally(() => process.exit(0))
+    // Running jobs go back on the queue for another instance to take.
+    void (jobWorker?.stop() ?? Promise.resolve())
+      .then(() => closeBrowser())
+      .finally(() => process.exit(0))
   })
 }

@@ -5,6 +5,7 @@ import {
   invalidSlotValues,
   isSafeKitUrl,
   kitToCss,
+  parseVideoDoc,
   HOUSE_KIT_TOKENS,
   slotValuesSchema,
   viewportSize,
@@ -196,6 +197,7 @@ export async function getOutputDetail(id: string, version?: number): Promise<Out
       css: row.css,
       slots: outputSlots(row.html, values),
       kitLatestVersion: kit?.latestVersion ?? null,
+      video: parseVideoDoc(row.html),
     },
     versions,
     share,
@@ -539,6 +541,7 @@ export async function getSharedOutput(token: string) {
       viewport: parseViewport(row.viewport),
       version: row.share.version,
       updatedAt: row.share.updatedAt.toISOString(),
+      video: null,
     },
   }
 }

@@ -1,13 +1,11 @@
 import {
   extractDriveFileId,
-  extractNotionPageId,
   extractSpotifyRef,
   extractVideoRef,
   extractWebUrl,
   type DriveFileData,
   type DriveFolderData,
   type ImageData,
-  type NotionPageData,
   type PDFData,
   type SpotifyAlbumData,
   type SpotifyPlaylistData,
@@ -17,12 +15,9 @@ import {
 } from '@moodboard/shared'
 import { and, desc, eq } from 'drizzle-orm'
 import { db, schema } from '../db'
-import {
-  importDriveFile,
-  importNotionPage,
-  importSpotifyRef,
-  TokenDecryptError,
-} from '../routes/external'
+import { importDriveFile } from './importers/drive'
+import { TokenDecryptError } from './importers/errors'
+import { importSpotifyRef } from './importers/spotify'
 import { saveImageFromUrl } from './saveImageFromUrl'
 import { extractVideoClip } from './video'
 import { extractWebPage } from './web'
@@ -37,7 +32,6 @@ export type DispatchOk =
   | { kind: 'web'; page: WebPageData; logoImages: ImageData[] }
   | { kind: 'video'; data: VideoClipData }
   | { kind: 'image'; data: ImageData }
-  | { kind: 'notion'; data: NotionPageData }
   | { kind: 'drive-file'; data: DriveFileData }
   | { kind: 'drive-folder'; data: DriveFolderData }
   | { kind: 'drive-pdf'; data: PDFData }
@@ -50,7 +44,7 @@ export type DispatchError = {
   code: 'UNRECOGNISED' | 'CONNECTION_REQUIRED' | 'CONNECTION_DOWN' | 'EXTRACT_FAILED'
   message: string
   // For CONNECTION_REQUIRED — which provider the user needs to connect.
-  provider?: 'notion' | 'drive' | 'spotify'
+  provider?: 'drive' | 'spotify'
 }
 
 export type DispatchResult = { ok: true; result: DispatchOk } | { ok: false; error: DispatchError }
@@ -58,7 +52,7 @@ export type DispatchResult = { ok: true; result: DispatchOk } | { ok: false; err
 // Look up the user's first available connection for a provider. The
 // MCP doesn't take a connection ID — we pick the most-recently-used
 // one. Returns null when none exists.
-async function findConnection(userId: string, provider: 'notion' | 'drive' | 'spotify') {
+async function findConnection(userId: string, provider: 'drive' | 'spotify') {
   const [row] = await db
     .select()
     .from(schema.connection)
@@ -128,47 +122,10 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
     }
   }
 
-  // 2. Notion
-  // Only http(s) URLs are valid for Notion — the recogniser doesn't
-  // assert a scheme so we filter here.
+  // Drive only accepts http(s) URLs — the recogniser doesn't assert a
+  // scheme so we filter here.
   if (/^https?:\/\//i.test(trimmed)) {
-    const notionPageId = extractNotionPageId(trimmed)
-    if (notionPageId) {
-      const conn = await findConnection(userId, 'notion')
-      if (!conn) {
-        return {
-          ok: false,
-          error: {
-            code: 'CONNECTION_REQUIRED',
-            provider: 'notion',
-            message:
-              'Notion is not connected. Visit moodboard.ai and connect Notion in the dashboard.',
-          },
-        }
-      }
-      try {
-        const data = await importNotionPage({ userId, connectionRow: conn, pageId: notionPageId })
-        return { ok: true, result: { kind: 'notion', data } }
-      } catch (e) {
-        if (e instanceof TokenDecryptError) {
-          return {
-            ok: false,
-            error: {
-              code: 'CONNECTION_DOWN',
-              provider: 'notion',
-              message: 'Notion connection unavailable — reconnect from the dashboard.',
-            },
-          }
-        }
-        const msg = e instanceof Error ? e.message : String(e)
-        return {
-          ok: false,
-          error: { code: 'EXTRACT_FAILED', message: `Notion import failed: ${msg}` },
-        }
-      }
-    }
-
-    // 3. Drive
+    // 2. Drive
     const driveFileId = extractDriveFileId(trimmed)
     if (driveFileId) {
       const conn = await findConnection(userId, 'drive')
@@ -211,7 +168,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 4. Video (YouTube / TikTok / Instagram / X / Vimeo)
+    // 3. Video (YouTube / TikTok / Instagram / X / Vimeo)
     const videoRef = extractVideoRef(trimmed)
     if (videoRef) {
       try {
@@ -226,7 +183,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 5. Image-by-extension — path ends in a recognised image suffix.
+    // 4. Image-by-extension — path ends in a recognised image suffix.
     if (hasImageExtension(trimmed)) {
       try {
         const data = await saveImageFromUrl(trimmed, userId)
@@ -240,7 +197,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
       }
     }
 
-    // 6. Generic web page (catch-all for http(s)).
+    // 5. Generic web page (catch-all for http(s)).
     const webUrl = extractWebUrl(trimmed)
     if (webUrl) {
       try {
@@ -263,8 +220,7 @@ export async function routeUrlToImporter(url: string, userId: string): Promise<D
     ok: false,
     error: {
       code: 'UNRECOGNISED',
-      message:
-        'URL was not recognised as a Spotify, Notion, Drive, video, image, or web page link.',
+      message: 'URL was not recognised as a Spotify, Drive, video, image, or web page link.',
     },
   }
 }

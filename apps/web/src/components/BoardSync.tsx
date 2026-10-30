@@ -1,12 +1,46 @@
-import type { CanvasSnapshot } from '@/store/canvas'
-import { snapshotFromStore, useCanvasStore } from '@/store/canvas'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getBoard, updateBoard } from '@/lib/boardsApi'
+import { showToast } from '@/components/canvas/Toast'
+import { getBoard, saveBoardObjects } from '@/lib/boardsApi'
+import {
+  applySaveResult,
+  diffObjects,
+  isEmptyDiff,
+  syncedStateFrom,
+  type SyncedState,
+} from '@/lib/boardSync'
+import { useCanvasStore } from '@/store/canvas'
 
 type Status = 'loading' | 'ready' | 'error' | 'not-found'
 
-const AUTOSAVE_DEBOUNCE_MS = 2000
+const AUTOSAVE_DEBOUNCE_MS = 1000
+const VIEWPORT_SAVE_DEBOUNCE_MS = 500
+
+// Pan/zoom is per viewer, not shared board state — two teammates on the
+// same board shouldn't fight over each other's camera.
+type Viewport = { scale: number; offset: { x: number; y: number } }
+const viewportKey = (boardId: string) => `moodboard:viewport:${boardId}`
+
+function readViewport(boardId: string): Viewport | null {
+  try {
+    const raw = localStorage.getItem(viewportKey(boardId))
+    if (!raw) return null
+    const v = JSON.parse(raw) as Partial<Viewport>
+    if (typeof v.scale !== 'number' || typeof v.offset?.x !== 'number') return null
+    if (typeof v.offset.y !== 'number') return null
+    return { scale: v.scale, offset: v.offset }
+  } catch {
+    return null
+  }
+}
+
+function writeViewport(boardId: string, viewport: Viewport): void {
+  try {
+    localStorage.setItem(viewportKey(boardId), JSON.stringify(viewport))
+  } catch {
+    // Storage unavailable (private mode, quota) — the camera just resets.
+  }
+}
 
 export function BoardSync({
   boardId,
@@ -20,43 +54,31 @@ export function BoardSync({
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // Tagged with its board so a stale state can't be diffed against the
+  // next board's objects during a board-to-board navigation.
+  const [synced, setSynced] = useState<{ boardId: string; state: SyncedState } | null>(null)
 
   const hydrate = useCanvasStore((s) => s.hydrate)
   const reset = useCanvasStore((s) => s.reset)
-
-  // Capture the latest snapshot we've fetched / sent so we don't autosave the
-  // same value back to the server in a loop, and so we can ignore changes that
-  // happen during the initial hydration.
-  const lastSavedRef = useRef<string | null>(null)
-  const ignoreNextChangesRef = useRef(true)
 
   useEffect(() => {
     let cancelled = false
     setStatus('loading')
     setError(null)
-    ignoreNextChangesRef.current = true
+    setSynced(null)
 
     getBoard(boardId)
       .then((board) => {
         if (cancelled) return
-        const data = (board.data ?? {}) as Partial<CanvasSnapshot>
+        const viewport = readViewport(boardId)
         hydrate({
-          objects: data.objects ?? [],
-          scale: data.scale ?? 1,
-          offset: data.offset ?? { x: 0, y: 0 },
+          objects: board.objects,
+          scale: viewport?.scale ?? 1,
+          offset: viewport?.offset ?? { x: 0, y: 0 },
         })
         onTitle?.(board.name)
-        lastSavedRef.current = JSON.stringify({
-          objects: data.objects ?? [],
-          scale: data.scale ?? 1,
-          offset: data.offset ?? { x: 0, y: 0 },
-        })
+        setSynced({ boardId, state: syncedStateFrom(board.objects, board.versions) })
         setStatus('ready')
-        // Allow autosave on the next tick so React doesn't pick up the hydrate
-        // as a user change.
-        queueMicrotask(() => {
-          ignoreNextChangesRef.current = false
-        })
       })
       .catch((e: Error) => {
         if (cancelled) return
@@ -70,41 +92,81 @@ export function BoardSync({
 
     return () => {
       cancelled = true
-      reset()
     }
-  }, [boardId, hydrate, reset, onTitle])
+  }, [boardId, hydrate, onTitle])
 
-  // Autosave: subscribe to relevant slices, debounce 2s, send PATCH.
+  // Autosave: diff the store against what the server last confirmed and
+  // send only the changed objects. Saves run one at a time; edits made
+  // while a save is in flight go out in the next one.
+  useEffect(() => {
+    if (status !== 'ready' || !synced || synced.boardId !== boardId) return
+    const state = synced.state
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let inFlight = false
+    let again = false
+    let latest = useCanvasStore.getState().objects
+
+    const save = async (keepalive = false) => {
+      if (inFlight) {
+        again = true
+        return
+      }
+      const diff = diffObjects(state, latest)
+      if (isEmptyDiff(diff)) return
+      inFlight = true
+      if (!keepalive) setSaving(true)
+      try {
+        const result = await saveBoardObjects(boardId, diff, { keepalive })
+        const { adopt, remove } = applySaveResult(state, diff, result)
+        if (adopt.length > 0 || remove.length > 0) {
+          useCanvasStore.getState().applyRemote(adopt, remove)
+          const n = adopt.length + remove.length
+          showToast(`A teammate changed ${n === 1 ? 'an item' : `${n} items`} — kept their version`)
+        }
+      } catch (e) {
+        console.error('autosave failed', e)
+      } finally {
+        inFlight = false
+        if (!keepalive) setSaving(false)
+      }
+      if (again) {
+        again = false
+        void save()
+      }
+    }
+
+    const unsub = useCanvasStore.subscribe((next, prev) => {
+      if (next.objects === prev.objects) return
+      latest = next.objects
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => void save(), AUTOSAVE_DEBOUNCE_MS)
+    })
+
+    return () => {
+      unsub()
+      if (timer) {
+        clearTimeout(timer)
+        void save(true)
+      }
+    }
+  }, [boardId, status, synced])
+
+  // Declared after autosave so its cleanup runs after autosave's final
+  // flush — otherwise the flush would see the emptied store and delete
+  // every object.
+  useEffect(() => () => reset(), [boardId, reset])
+
   useEffect(() => {
     if (status !== 'ready') return
     let timer: ReturnType<typeof setTimeout> | undefined
-
     const unsub = useCanvasStore.subscribe((state, prev) => {
-      if (ignoreNextChangesRef.current) return
-      if (
-        state.objects === prev.objects &&
-        state.scale === prev.scale &&
-        state.offset === prev.offset
-      ) {
-        return
-      }
+      if (state.scale === prev.scale && state.offset === prev.offset) return
       if (timer) clearTimeout(timer)
-      timer = setTimeout(async () => {
-        const snapshot = snapshotFromStore(useCanvasStore.getState())
-        const serialized = JSON.stringify(snapshot)
-        if (serialized === lastSavedRef.current) return
-        try {
-          setSaving(true)
-          await updateBoard(boardId, { data: snapshot })
-          lastSavedRef.current = serialized
-        } catch (e) {
-          console.error('autosave failed', e)
-        } finally {
-          setSaving(false)
-        }
-      }, AUTOSAVE_DEBOUNCE_MS)
+      timer = setTimeout(
+        () => writeViewport(boardId, { scale: state.scale, offset: state.offset }),
+        VIEWPORT_SAVE_DEBOUNCE_MS,
+      )
     })
-
     return () => {
       if (timer) clearTimeout(timer)
       unsub()

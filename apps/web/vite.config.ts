@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 // Optional local HTTPS via mkcert. Several OAuth providers require HTTPS
-// for redirect URIs (Notion always, Google for production-ish apps,
+// for redirect URIs (Google for production-ish apps,
 // Spotify accepts https://127.0.0.1). When the cert files exist we
 // default to HTTPS so the OAuth flows just work; set MOODBOARD_HTTPS=0
 // to force plain HTTP if you need it for some reason. Anyone without

@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable } from 'node:stream'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
@@ -11,7 +11,6 @@ import { db, schema } from '../db'
 import { processPdf } from '../lib/pdfProcessing'
 import { rateLimit } from '../lib/rateLimit'
 import {
-  externalPath,
   isSafeFilename,
   pdfPath,
   pdfThumbPath,
@@ -50,7 +49,7 @@ files.use('*', async (c, next) => {
 const uploadRateLimit = rateLimit({ scope: 'upload', limit: 30, windowMs: 60_000 })
 const proxyRateLimit = rateLimit({ scope: 'proxy', limit: 30, windowMs: 60_000 })
 
-type AssetKind = 'upload' | 'pdf' | 'pdf-thumb' | 'external-notion' | 'external-drive'
+type AssetKind = 'upload' | 'pdf' | 'pdf-thumb'
 
 async function recordAsset(
   userId: string,
@@ -61,7 +60,7 @@ async function recordAsset(
 ): Promise<void> {
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename,
     mimeType,
     size,
@@ -340,31 +339,26 @@ files.get('/proxy', proxyRateLimit, async (c) => {
 })
 
 files.get('/files/:filename', async (c) => {
-  const user = c.get('user')!
   const filename = c.req.param('filename')
   if (!isSafeFilename(filename)) {
     return c.json({ error: 'Bad filename' }, 400)
   }
-  // Enforce ownership: only the user who uploaded the asset can serve it.
+  // Any signed-in team member can read any asset; the row lookup still
+  // gates access to files we actually recorded.
   const [row] = await db
     .select()
     .from(schema.asset)
-    .where(and(eq(schema.asset.filename, filename), eq(schema.asset.userId, user.id)))
+    .where(eq(schema.asset.filename, filename))
     .limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
 
-  // kind drives the on-disk root. external-notion / external-drive land
-  // under EXTERNAL_DIR/{provider}; everything else uses the legacy roots.
+  // kind drives the on-disk root.
   const fullPath =
     row.kind === 'pdf'
       ? pdfPath(filename)
       : row.kind === 'pdf-thumb'
         ? pdfThumbPath(filename)
-        : row.kind === 'external-notion'
-          ? externalPath('notion', filename)
-          : row.kind === 'external-drive'
-            ? externalPath('drive', filename)
-            : uploadPath(filename)
+        : uploadPath(filename)
   let s
   try {
     s = await stat(fullPath)

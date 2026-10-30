@@ -69,6 +69,20 @@ Konva.Text is read-only-grade. Real `contentEditable` gives IME, spellcheck, pas
 - Naive O(n²) pairwise check on `dragend` is fine for < 100 objects
 - Don't add `rbush` or spatial indexing until profiling shows it's needed
 
+### Team + board storage (Phase 20)
+
+- **One internal team.** Every signed-in user sees and edits every board, asset, share, and group's panel state. `created_by` is attribution, never access control. Personal: OAuth connections, API keys, source recents. Sign-up gated by `ALLOWED_EMAIL_DOMAINS`.
+- **Canvas objects are rows** in `board_object` (full `CanvasObject` in `object` jsonb, `type` lifted out, `version` per row). Never reintroduce a whole-board blob write.
+- **Writes are versioned.** Clients send the version they last saw; a mismatch is a conflict and the server copy wins (`lib/boardObjects.ts`, `apps/web/src/lib/boardSync.ts`). Server-side appends insert a single row.
+- **Pan/zoom is per viewer** (localStorage), not board state.
+- **Group panel state** (displayed read, agent row, palette lock) lives in `board_group_display`, keyed by `groupId()`. No browser storage for anything a teammate should see.
+- **Migrations:** edit `schema.ts`, `db:generate --name=…`, commit the SQL. The API applies them on start. Never `db:push` a shared database.
+- **Rate limits** are Postgres-backed (`lib/rateLimit.ts`) so they hold across instances.
+
+### Design output = HTML (Phase 23+)
+
+Every design the agents produce is a self-contained HTML/CSS document — no PPTX, no PDF export, no image generation, no new rendering libraries. Video is the same HTML on a seekable CSS/WAAPI timeline, captured by Playwright + ffmpeg. See the roadmap in PLAN.md.
+
 ### File storage
 
 - Files on Railway volume at `/data/{uploads,thumbnails,pdfs,pdf-thumbs}/`

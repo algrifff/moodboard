@@ -142,7 +142,7 @@ export async function saveImageFromUrl(url: string, userId: string): Promise<Ima
   const saved = await saveUpload(buffer, id, ext, contentType)
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename: saved.filename,
     mimeType: saved.mimeType,
     size: saved.size,

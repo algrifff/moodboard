@@ -3,7 +3,6 @@ import { emitDotRipple, setDragHalo } from '@/components/canvas/DotGridLayer'
 import { useCanvasStore } from '@/store/canvas'
 
 type Zone = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
-type Mode = 'drag' | Zone
 
 type DragOrigin = {
   mode: 'drag'

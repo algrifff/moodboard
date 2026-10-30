@@ -573,6 +573,117 @@ const snapWithAnticipation = (t: number, b: number, c: number, d: number) => {
 
 ---
 
+## Roadmap — Agent-Driven Design System (Phase 20+)
+
+**Direction:** moodboard.ai grows from "analyse a mood board" into an internal Canva-light driven by agents. Someone says _"I need X for client Y, they're asking Z"_ (in the sidebar or on a Linear issue); agents pick the client's style kit, the right template, the right assets, and return a finished **HTML output** — thumbnail, deck, landing page, one-pager, or an MP4 rendered from that HTML. Mood boards stay the input — they're where kits and templates get built.
+
+### Principles (load-bearing)
+
+- **HTML is the output format.** Every design is a self-contained HTML document with CSS (and CSS/WAAPI animation). No PPTX, no PDF export, no Figma-native output. Users who want a PDF print the page themselves — we don't offer it.
+- **Agent-friendly always.** Agents read and write HTML/CSS directly; templates and kits are plain text an agent can diff, patch, and reason about.
+- **Video = HTML on a timeline.** An MP4 is the same HTML with animations, captured frame by frame. Thumbnails are a single frame of the same pipeline.
+- **No new libraries.** Rendering uses Playwright (already a dep) + ffmpeg (already in `nixpacks.toml`). Search uses Postgres full-text. No image generation — imagery comes from the asset library and connected sources.
+- **One internal team.** Everyone who logs in sees and edits every client, kit, template, board, and output. `createdBy` is attribution, not access control.
+
+### Core model
+
+```
+Client ── owns ──▶ Mood boards ── distil ──▶ Style Kit (versioned, emits CSS custom properties)
+   │                                            │
+   └── owns ──▶ Asset Library ◀── sources (uploads, Drive, web, Figma import)
+                                                │
+Template (HTML + data-slot markers + CSS reading --kit-* vars) ◀── skinned by kit
+   │
+   └── instantiated as ──▶ Output (HTML, versioned) ── optional render ──▶ PNG frame / MP4
+```
+
+- **Client** — container for boards, kits, assets, outputs. "For this client" resolves here.
+- **Style Kit** — a group's SynthesisBrief distilled into rigid, versioned tokens: palette, fonts, logo variants, voice, imagery rules, do/don't. Compiles to a `:root { --kit-* }` stylesheet so any template picks it up.
+- **Template** — HTML + CSS for a format (1280×720 thumbnail, 16:9 deck, responsive landing page, video composition), with `data-slot="headline|hero|logo|cta|…"` markers. Style-agnostic: only reads `--kit-*` vars.
+- **Output** — template + kit + filled slots. HTML stored as text in Postgres per version (it's text, not binary); renders (PNG/MP4) on the volume at `/data/outputs/`.
+- **Preview + serving** — sandboxed `<iframe>` (no `allow-same-origin`), served from `GET /api/outputs/:id` with a strict CSP. Agent-written HTML is untrusted by default.
+
+### Phase 20 — Cleanup + Postgres hardening
+
+Already on Postgres; this makes it production-grade and ready for structured design data.
+
+- [x] Remove the Notion integration (node, picker section, OAuth, `lib/notion.ts`, URL parsing, hash/analyse branches); migration to drop Notion connections/objects
+- [x] Single-team access: drop per-user filters on boards/assets/shares; add `createdBy`; sign-up gated by an email-domain allowlist env var
+- [x] `board_object` table (one row per item) replacing the `board.data` blob; object-level save (`POST /api/boards/:id/objects`); `version` column for optimistic concurrency (no silent last-write-wins — matters more now everyone shares boards)
+- [x] `board_group_display` becomes source of truth for the analysis panel; delete `groupAnalysisStorage.ts` localStorage cache
+- [x] Postgres-backed rate limiter (in-memory `Map` breaks with >1 instance)
+- [x] Migrations run on API start (advisory-locked); drop `db:push` from docs
+- [x] Indexes on FK columns; cleanup job for orphaned `board_group_display` rows
+- [x] Split oversized files: `AIAnalysisPanel.tsx`, `SourcePickerDrawer.tsx`, `routes/external.ts`, `lib/analyze.ts`
+
+**Deliverable:** Same app minus Notion, everyone sees everything, two people editing one board can't clobber each other.
+
+### Phase 21 — Left agent sidebar (T3-chat style)
+
+- [ ] Docked left sidebar: thread list, streaming chat, collapsible; threads scoped to a board or a client
+- [ ] `agent_thread` / `agent_message` tables; threads persist and resume, visible to the whole team
+- [ ] Orchestrator agent (Claude tool-use) with canvas tools reused from `mcpTools.ts` (add/move items, read groups, run analysts)
+- [ ] Specialist analysts (art director, copywriter, …) become tools the orchestrator calls, not a manual agent row
+- [ ] Tool calls render as inline cards (brief, palette, placed items) with "jump to on canvas"
+- [ ] Floating per-group panel slims to a glance; full brief opens in the sidebar
+
+**Deliverable:** Chat with the board. "Pull these into a group and give me a brief" works end to end.
+
+### Phase 22 — Clients, Style Kits, Asset Library, Linear
+
+- [ ] `client` table; boards/assets/kits/outputs belong to a client; client switcher
+- [ ] "Save as Style Kit" from a group brief; kits versioned, editable, compile to `--kit-*` CSS
+- [ ] Asset library: every asset tagged (AI captions, colours, kind), searchable via Postgres full-text
+- [ ] Agent tools: `search_assets`, `get_style_kit`, `list_kits`, `list_clients`
+- [ ] Linear connection (OAuth, reuses `connection` table): pick an issue → it becomes the brief (title, description, comments, attachments); Linear team/project ↔ client mapping
+
+**Deliverable:** "Use the Acme kit for LIN-123" means something concrete and repeatable.
+
+### Phase 23 — Templates + Outputs (HTML)
+
+- [ ] Template + output tables; HTML/CSS stored as versioned text
+- [ ] Output view: sandboxed iframe preview, slot list in the sidebar, inline text edits write back to the slot
+- [ ] Starter templates: YouTube thumbnail, social post, 16:9 deck (scroll-snap sections, keyboard nav), landing page, one-pager
+- [ ] Apply kit → template swaps the `--kit-*` stylesheet; switching kits is instant
+- [ ] Save any output as a new template (agent proposes slot markers)
+- [ ] Share link for outputs (reuse Phase 18 share tokens); "Download HTML" as a single self-contained file (assets inlined)
+- [ ] Outputs can be dropped onto a board as a live card
+
+**Deliverable:** Hand-build a deck from a template + kit, share the link.
+
+### Phase 24 — Output agents (thumbnail first)
+
+- [ ] Intake: orchestrator asks only what's missing (client, format, message, audience) — or reads it from a Linear issue
+- [ ] Thumbnail agent loop: pick kit → pick template → fill slots from asset search → render a frame → Claude vision critique → patch HTML → repeat (bounded)
+- [ ] Returns 2–3 variants in the sidebar; user picks, tweaks
+- [ ] Then deck, landing page, one-pager agents on the same loop (multi-section planning: outline first, then per-section fill)
+- [ ] Post the result back to the Linear issue as a comment with the output link
+- [ ] AI cache discipline: hash of (brief + kit version + template version + asset IDs)
+
+**Deliverable:** "Thumbnail for Acme's launch video, punchy, dark" → three options, linked back on the Linear issue.
+
+### Phase 25 — HTML → MP4
+
+- [ ] Video template convention: fixed viewport, `data-duration`, animations as CSS keyframes / WAAPI only (no `setTimeout`/rAF-driven motion — must be seekable)
+- [ ] Renderer: Playwright loads the output, pauses all animations, steps `document.getAnimations()` `currentTime` per frame at 30/60fps, screenshots each frame, pipes to ffmpeg → MP4 on `/data/outputs/`
+- [ ] Render runs as a background job (Postgres-backed queue), progress in the sidebar
+- [ ] Video agent: script → scene list → HTML composition from kit + template + assets (+ clips from the existing video importer) → render
+- [ ] Single-frame render reuses the same path for thumbnail PNGs
+
+**Deliverable:** A 15s kit-styled promo spot, rendered from HTML, downloadable as MP4.
+
+### Phase 26 — Figma import
+
+- [ ] Import Figma frames as kit sources / template references via the REST API (plain `fetch`, read-only)
+- [ ] No push-back to Figma — HTML is the output
+
+### Decisions
+
+- **Video audio** — silent for v1.
+- **Linear trigger** — manual: agents start only when someone picks an issue.
+
+---
+
 ## Implementation Notes
 
 ### Canvas transform tracking

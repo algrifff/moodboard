@@ -1,7 +1,6 @@
 import {
   connectionsListResponseSchema,
   importDriveResponseSchema,
-  importNotionResponseSchema,
   importSpotifyResponseSchema,
   importVideoResponseSchema,
   importWebResponseSchema,
@@ -12,7 +11,6 @@ import {
   type DriveFileData,
   type DriveFolderData,
   type ImageData,
-  type NotionPageData,
   type PDFData,
   type PickerTile,
   type SpotifyAlbumData,
@@ -85,20 +83,6 @@ export async function listChildPages(
   })
   const body = pickerChildrenResponseSchema.parse(await jsonOrThrow(res))
   return body.tiles
-}
-
-export async function importNotionPage(
-  connectionId: string,
-  pageId: string,
-): Promise<NotionPageData> {
-  const res = await fetch('/api/external/notion/import', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ connectionId, pageId }),
-  })
-  const body = importNotionResponseSchema.parse(await jsonOrThrow(res))
-  return body.data
 }
 
 export type DriveImportResult =
@@ -182,11 +166,9 @@ export async function importVideoUrl(url: string): Promise<VideoClipData> {
 
 /**
  * Refresh an existing canvas object's snapshot from its source. Returns a
- * discriminated union — Notion pages stay as 'notion-page' kind for
- * type-narrowing on the caller side.
+ * discriminated union for type-narrowing on the caller side.
  */
 export type RefreshResult =
-  | { kind: 'notion-page'; data: NotionPageData }
   | { kind: 'file'; data: DriveFileData }
   | { kind: 'folder'; data: DriveFolderData }
   | { kind: 'pdf'; data: PDFData }
@@ -205,8 +187,7 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
     body: JSON.stringify({ boardId, objectId }),
   })
   const body = (await jsonOrThrow(res)) as { kind?: string; data?: unknown }
-  // The server returns either { data } (notion), { kind, data } (drive), or
-  // { kind: 'web-page', data, logoImages } for web pages.
+  // The server returns { kind, data }, plus logoImages for web pages.
   if (body.kind === 'file' || body.kind === 'folder') {
     const parsed = importDriveResponseSchema.parse(body) as DriveImportResult
     return parsed as RefreshResult
@@ -228,10 +209,6 @@ export async function refreshExternal(boardId: string, objectId: string): Promis
     const data = importVideoResponseSchema.shape.data.parse(b.data)
     return { kind: 'video-clip', data }
   }
-  if (body.kind === 'playlist' || body.kind === 'track' || body.kind === 'album') {
-    const parsed = importSpotifyResponseSchema.parse(body) as SpotifyImportResult
-    return parsed as RefreshResult
-  }
-  const notion = importNotionResponseSchema.parse(body)
-  return { kind: 'notion-page', data: notion.data }
+  const parsed = importSpotifyResponseSchema.parse(body) as SpotifyImportResult
+  return parsed as RefreshResult
 }

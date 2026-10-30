@@ -37,7 +37,7 @@ export function SnapshotCanvas({
   objects,
   groups,
   // Synthetic boardId so node components that require one (DriveNode,
-  // NotionPageNode, etc.) still mount. Refresh actions are gated by
+  // WebPageNode, etc.) still mount. Refresh actions are gated by
   // panMode={true}, so the dummy never reaches the API.
   pseudoBoardId,
 }: {
@@ -99,7 +99,6 @@ export function SnapshotCanvas({
       o.type === 'sticky' ||
       o.type === 'text' ||
       o.type === 'font' ||
-      o.type === 'notion-page' ||
       o.type === 'drive-file' ||
       o.type === 'drive-folder' ||
       o.type === 'web-page' ||

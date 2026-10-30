@@ -8,10 +8,9 @@ import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
 import { SpawnRing } from './SpawnRing'
 
-// DOM overlay node for a web page imported via paste. Mirrors NotionPageNode
-// in shell + interaction; the body is bespoke because a brand homepage has
-// different signal than a Notion page (favicon + sampled palette swatches +
-// host strapline rather than a refreshable markdown body).
+// DOM overlay node for a web page imported via paste. Mirrors DriveNode in
+// shell + interaction; the body is bespoke because a brand homepage carries
+// different signal (favicon + sampled palette swatches + host strapline).
 //
 // Card anatomy:
 //   ┌────────────────────────────────────────┐

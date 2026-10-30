@@ -24,7 +24,7 @@ import { SpawnRing } from './SpawnRing'
 // Why DOM and not Konva: cover art needs to be a real <img> with native
 // loading + Spotify-CDN cache headers, and the audio-feature bars want
 // CSS transitions when an aiPalette later overrides them. Same hybrid-
-// render reasoning as NotionPageNode / DriveNode / WebPageNode.
+// render reasoning as DriveNode / WebPageNode.
 
 type AnySpotifyData = SpotifyPlaylistData | SpotifyTrackData | SpotifyAlbumData
 
@@ -47,11 +47,6 @@ export function SpotifyNode({
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
-
-  // All three kinds expand: playlists/albums into a per-track table, a
-  // single track into its full audio-feature breakdown. Every detail view
-  // carries a Spotify embed player so the user can hear it.
-  const canExpand = true
 
   const HALO = 14
   const interaction = useBoxInteraction(object.id, scale, {

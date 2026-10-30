@@ -7,8 +7,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Any base branch, so stacked phase PRs get CI too.
   pull_request:
-    branches: [main]
 
 # Cancel an in-flight run when a new commit lands on the same ref. Keeps
 # Actions usage down on PRs that get force-pushed.
@@ -20,6 +20,24 @@ jobs:
   check:
     name: format / typecheck / test
     runs-on: ubuntu-latest
+    # Real Postgres so the board-object versioning tests run against the
+    # actual migrations (they skip when DATABASE_URL is unset).
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: moodboard
+          POSTGRES_PASSWORD: moodboard
+          POSTGRES_DB: moodboard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U moodboard -d moodboard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://moodboard:moodboard@localhost:5432/moodboard
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +61,9 @@ jobs:
 
       - name: Typecheck
         run: pnpm -r typecheck
+
+      - name: Migrate
+        run: pnpm --filter @moodboard/api db:migrate
 
       - name: Test
         run: pnpm test

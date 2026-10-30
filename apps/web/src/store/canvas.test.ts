@@ -120,3 +120,23 @@ describe('canvas store — history', () => {
     expect(s.selectedIds).toEqual([])
   })
 })
+
+describe('canvas store — applyRemote', () => {
+  beforeEach(() => {
+    useCanvasStore.getState().reset()
+  })
+
+  it('replaces in place, appends unknown ids, removes, and skips history', () => {
+    const { addObject, applyRemote, setSelection } = useCanvasStore.getState()
+    addObject(obj('a'))
+    addObject(obj('b'))
+    setSelection(['a', 'b'])
+    const a2 = { ...obj('a'), zIndex: 9 }
+    applyRemote([a2, obj('c')], ['b'])
+    const s = useCanvasStore.getState()
+    expect(s.objects.map((o) => o.id)).toEqual(['a', 'c'])
+    expect(s.objects[0]).toBe(a2)
+    expect(s.selectedIds).toEqual(['a'])
+    expect(s.canUndo()).toBe(false)
+  })
+})

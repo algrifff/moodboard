@@ -17,8 +17,7 @@ import { OBJECT_SPAWN_DURATION, SNAP_CURVE } from '@/lib/motion'
 import { useCanvasStore } from '@/store/canvas'
 import { SpawnRing } from './SpawnRing'
 
-// DOM overlay node for a Google Drive file or folder. Same shell as
-// NotionPageNode — title link + provider line + Open in Drive pill +
+// DOM overlay node for a Google Drive file or folder. Title link + provider line + Open in Drive pill +
 // refresh dot + spawn ring. Whole card is the drag surface; link
 // elements stop pointer-capture on themselves so native clicks fire.
 //

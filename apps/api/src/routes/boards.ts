@@ -1,10 +1,15 @@
-import type { BoardPreview, BoardPreviewObject } from '@moodboard/shared'
-import { createBoardRequestSchema, updateBoardRequestSchema } from '@moodboard/shared'
-import { and, desc, eq } from 'drizzle-orm'
+import type { BoardPreview, BoardPreviewObject, FullBoard } from '@moodboard/shared'
+import {
+  createBoardRequestSchema,
+  saveBoardObjectsRequestSchema,
+  updateBoardRequestSchema,
+} from '@moodboard/shared'
+import { desc, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import type { AuthSession, AuthUser } from '../auth'
 import { db, schema } from '../db'
+import { loadBoardObjects, loadObjectsByBoard, saveBoardObjects } from '../lib/boardObjects'
 
 type Variables = { user: AuthUser | null; session: AuthSession | null }
 
@@ -15,11 +20,11 @@ export const boards = new Hono<{ Variables: Variables }>()
 // so the framing is correct even if some are dropped from the render list.
 const PREVIEW_OBJECT_CAP = 12
 
-// Type guard for a canvas object in stored board data. Loose on purpose —
-// historical board snapshots may have minor shape drift, and the dashboard
-// preview shouldn't fall over on a missing field.
+// Type guard for a stored canvas object. Loose on purpose — historical
+// objects may have minor shape drift, and the dashboard preview shouldn't
+// fall over on a missing field.
 type StoredObject = {
-  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'notion-page' | 'drive-file' | 'drive-folder'
+  type: 'image' | 'sticky' | 'text' | 'pdf' | 'font' | 'drive-file' | 'drive-folder'
   position: { x: number; y: number }
   size: { width: number; height: number }
   data?: Record<string, unknown>
@@ -30,7 +35,6 @@ const STORED_TYPES = [
   'text',
   'pdf',
   'font',
-  'notion-page',
   'drive-file',
   'drive-folder',
 ] as const
@@ -46,11 +50,8 @@ function isStoredObject(o: unknown): o is StoredObject {
   return true
 }
 
-/** Project a stored board's `data` blob into a small render hint for the dashboard. */
-function buildPreview(data: unknown): BoardPreview {
-  if (!data || typeof data !== 'object') return { bounds: null, objects: [] }
-  const objs = (data as { objects?: unknown[] }).objects
-  if (!Array.isArray(objs)) return { bounds: null, objects: [] }
+/** Project a board's objects into a small render hint for the dashboard. */
+function buildPreview(objs: unknown[]): BoardPreview {
   const stored = objs.filter(isStoredObject)
   if (stored.length === 0) return { bounds: null, objects: [] }
 
@@ -92,10 +93,6 @@ function buildPreview(data: unknown): BoardPreview {
       if (typeof d.family === 'string') base.family = d.family
       if (typeof d.url === 'string') base.url = d.url
     }
-    if (o.type === 'notion-page' && d) {
-      if (typeof d.title === 'string') base.title = d.title
-      if (typeof d.iconEmoji === 'string') base.iconEmoji = d.iconEmoji
-    }
     if ((o.type === 'drive-file' || o.type === 'drive-folder') && d) {
       if (typeof d.name === 'string') base.title = d.name
       if (typeof d.mimeType === 'string') base.mimeType = d.mimeType
@@ -115,26 +112,28 @@ boards.use('*', async (c, next) => {
   await next()
 })
 
+async function fullBoard(row: typeof schema.board.$inferSelect): Promise<FullBoard> {
+  const objects = await loadBoardObjects(row.id)
+  return {
+    id: row.id,
+    name: row.name,
+    objects: objects.map((o) => o.object),
+    versions: Object.fromEntries(objects.map((o) => [o.object.id, o.version])),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }
+}
+
 boards.get('/', async (c) => {
-  const user = c.get('user')!
-  const rows = await db
-    .select({
-      id: schema.board.id,
-      name: schema.board.name,
-      createdAt: schema.board.createdAt,
-      updatedAt: schema.board.updatedAt,
-      data: schema.board.data,
-    })
-    .from(schema.board)
-    .where(eq(schema.board.userId, user.id))
-    .orderBy(desc(schema.board.updatedAt))
+  const rows = await db.select().from(schema.board).orderBy(desc(schema.board.updatedAt))
+  const objectsByBoard = await loadObjectsByBoard(rows.map((r) => r.id))
   return c.json({
     boards: rows.map((r) => ({
       id: r.id,
       name: r.name,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
-      preview: buildPreview(r.data),
+      preview: buildPreview(objectsByBoard.get(r.id) ?? []),
     })),
   })
 })
@@ -150,82 +149,61 @@ boards.post('/', async (c) => {
     .insert(schema.board)
     .values({
       id: nanoid(),
-      userId: user.id,
+      createdBy: user.id,
       name: parsed.data.name ?? 'Untitled board',
-      data: {},
     })
     .returning()
   if (!row) return c.json({ error: 'Insert failed' }, 500)
-  return c.json({
-    board: {
-      id: row.id,
-      name: row.name,
-      data: row.data,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    },
-  })
+  return c.json({ board: await fullBoard(row) })
 })
 
 boards.get('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
-  const [row] = await db
-    .select()
-    .from(schema.board)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
-    .limit(1)
+  const [row] = await db.select().from(schema.board).where(eq(schema.board.id, id)).limit(1)
   if (!row) return c.json({ error: 'Not found' }, 404)
-  return c.json({
-    board: {
-      id: row.id,
-      name: row.name,
-      data: row.data,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    },
-  })
+  return c.json({ board: await fullBoard(row) })
 })
 
 boards.patch('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
   const body = await c.req.json().catch(() => null)
   const parsed = updateBoardRequestSchema.safeParse(body)
   if (!parsed.success) {
     return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
   }
-  if (parsed.data.name === undefined && parsed.data.data === undefined) {
-    return c.json({ error: 'Nothing to update' }, 400)
-  }
-
-  const updates: Record<string, unknown> = { updatedAt: new Date() }
-  if (parsed.data.name !== undefined) updates.name = parsed.data.name
-  if (parsed.data.data !== undefined) updates.data = parsed.data.data
-
   const [row] = await db
     .update(schema.board)
-    .set(updates)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
+    .set({ name: parsed.data.name, updatedAt: new Date() })
+    .where(eq(schema.board.id, id))
     .returning()
   if (!row) return c.json({ error: 'Not found' }, 404)
-  return c.json({
-    board: {
-      id: row.id,
-      name: row.name,
-      data: row.data,
-      createdAt: row.createdAt.toISOString(),
-      updatedAt: row.updatedAt.toISOString(),
-    },
-  })
+  return c.json({ board: await fullBoard(row) })
+})
+
+// Object-level autosave. Writes that lost a race with a teammate come back
+// in `conflicts` with the server's copy; the client adopts it.
+boards.post('/:id/objects', async (c) => {
+  const user = c.get('user')!
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => null)
+  const parsed = saveBoardObjectsRequestSchema.safeParse(body)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid body', issues: parsed.error.issues }, 400)
+  }
+  const [row] = await db
+    .select({ id: schema.board.id })
+    .from(schema.board)
+    .where(eq(schema.board.id, id))
+    .limit(1)
+  if (!row) return c.json({ error: 'Not found' }, 404)
+  return c.json(await saveBoardObjects(id, parsed.data, user.id))
 })
 
 boards.delete('/:id', async (c) => {
-  const user = c.get('user')!
   const id = c.req.param('id')
   const [row] = await db
     .delete(schema.board)
-    .where(and(eq(schema.board.id, id), eq(schema.board.userId, user.id)))
+    .where(eq(schema.board.id, id))
     .returning({ id: schema.board.id })
   if (!row) return c.json({ error: 'Not found' }, 404)
   return c.json({ ok: true })

@@ -1,6 +1,6 @@
 import type { CanvasObject, VideoClipBreakdown } from '@moodboard/shared'
 import { describe, expect, it } from 'vitest'
-import { assembleVideoEditorBreakdown, mapWithConcurrency, videoClipCacheTag } from './analyze'
+import { assembleVideoEditorBreakdown, mapWithConcurrency, videoClipCacheTag } from './videoClips'
 import { analysisHash } from './analysisHash'
 
 const videoClip = (id: string, videoId = 'vid1', title = 'How we built it'): CanvasObject => ({

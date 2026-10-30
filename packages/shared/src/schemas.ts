@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { CanvasObject } from './types'
 
 // URLs on canvas objects are typically server-relative `/api/files/<id>`
 // paths, not absolute URLs. The boards endpoint accepts state via
@@ -35,24 +36,6 @@ export const fontDataSchema = z.object({
   url: z.string().min(1),
   family: z.string(),
   sampleText: z.string().optional(),
-})
-
-// External-source nodes. See types.ts for the rationale; this is the wire
-// shape the API + frontend agree on. Icon/cover URLs are optional because not
-// every Notion page sets them; `markdown` is required so the renderer never
-// has to deal with a partially-imported page.
-export const notionPageDataSchema = z.object({
-  connectionId: z.string(),
-  pageId: z.string(),
-  workspaceId: z.string(),
-  title: z.string(),
-  iconEmoji: z.string().optional(),
-  iconUrl: z.string().optional(),
-  coverUrl: z.string().optional(),
-  url: z.string(),
-  markdown: z.string(),
-  fetchedAt: z.string(),
-  lastEditedAt: z.string().optional(),
 })
 
 export const driveFileDataSchema = z.object({
@@ -222,7 +205,6 @@ export const canvasObjectSchema = z.object({
     'text',
     'pdf',
     'font',
-    'notion-page',
     'drive-file',
     'drive-folder',
     'web-page',
@@ -242,7 +224,6 @@ export const canvasObjectSchema = z.object({
     textDataSchema,
     pdfDataSchema,
     fontDataSchema,
-    notionPageDataSchema,
     driveFileDataSchema,
     driveFolderDataSchema,
     webPageDataSchema,
@@ -449,29 +430,6 @@ export const synthesizeResponseSchema = z.object({
 })
 export type SynthesizeResponse = z.infer<typeof synthesizeResponseSchema>
 
-export const groupSchema = z.object({
-  id: z.string(),
-  objectIds: z.array(z.string()),
-  boundingBox: z.object({
-    x: z.number(),
-    y: z.number(),
-    w: z.number(),
-    h: z.number(),
-  }),
-  analysis: aiAnalysisSchema.optional(),
-  analysisHash: z.string().optional(),
-})
-
-export const boardSchema = z.object({
-  id: z.string(),
-  userId: z.string().nullable(),
-  name: z.string(),
-  objects: z.array(canvasObjectSchema),
-  groups: z.array(groupSchema),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-})
-
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   service: z.string(),
@@ -513,7 +471,6 @@ export const boardPreviewObjectSchema = z.object({
     'text',
     'pdf',
     'font',
-    'notion-page',
     'drive-file',
     'drive-folder',
     'web-page',
@@ -530,9 +487,8 @@ export const boardPreviewObjectSchema = z.object({
   family: z.string().optional(),
   url: z.string().optional(),
   // For external nodes — used by the dashboard to render a small provider
-  // chip + title without shipping the full markdown body.
+  // chip + title without shipping the full body.
   title: z.string().optional(),
-  iconEmoji: z.string().optional(),
   // For drive files — mime type so the dashboard can render the right glyph.
   mimeType: z.string().optional(),
   // For web pages — favicon + host string for the dashboard chip.
@@ -565,15 +521,27 @@ export const boardSummariesResponseSchema = z.object({
 })
 export type BoardSummariesResponse = z.infer<typeof boardSummariesResponseSchema>
 
-// `data` is the canvas state blob; opaque to the API, parsed by the frontend.
+// Wire shape for a stored canvas object. The envelope is validated; `data`
+// passes through untouched — parsing it against the per-type union would
+// strip fields the union doesn't know about yet.
+export const storedCanvasObjectSchema = canvasObjectSchema.extend({
+  data: z.record(z.string(), z.unknown()),
+})
+
+// `versions` maps object id → server version. The client echoes the version
+// back as `baseVersion` on its next write so the server can detect a
+// teammate's concurrent edit instead of silently overwriting it.
 export const fullBoardSchema = z.object({
   id: z.string(),
   name: z.string(),
-  data: z.unknown(),
+  objects: z.array(storedCanvasObjectSchema),
+  versions: z.record(z.string(), z.number().int()),
   createdAt: z.string(),
   updatedAt: z.string(),
 })
-export type FullBoard = z.infer<typeof fullBoardSchema>
+export type FullBoard = Omit<z.infer<typeof fullBoardSchema>, 'objects'> & {
+  objects: CanvasObject[]
+}
 
 export const boardResponseSchema = z.object({ board: fullBoardSchema })
 export type BoardResponse = z.infer<typeof boardResponseSchema>
@@ -591,7 +559,7 @@ export type CreateBoardRequest = z.infer<typeof createBoardRequestSchema>
 // client only sees what's needed to label the connection in the picker.
 export const connectionSummarySchema = z.object({
   id: z.string(),
-  provider: z.enum(['notion', 'drive', 'spotify']),
+  provider: z.enum(['drive', 'spotify']),
   accountEmail: z.string(),
   workspaceName: z.string().nullable().optional(),
   createdAt: z.string(),
@@ -604,8 +572,8 @@ export const connectionsListResponseSchema = z.object({
 })
 
 // Uniform tile shape across providers — what the picker drawer renders.
-// Optional fields populate per provider: Notion fills `iconEmoji` or
-// `iconUrl`; Drive fills `mimeType` + `thumbnailUrl`.
+// Optional fields populate per provider: Drive fills `mimeType` +
+// `thumbnailUrl`.
 // Widened to include 'spotify' so the picker can render the user's own
 // playlists. Spotify tiles use `kind: 'page'` since the union is page|
 // file|folder and the picker treats kind generically for layout — only
@@ -613,11 +581,10 @@ export const connectionsListResponseSchema = z.object({
 export const pickerTileSchema = z.object({
   id: z.string(),
   connectionId: z.string(),
-  provider: z.enum(['notion', 'drive', 'spotify']),
+  provider: z.enum(['drive', 'spotify']),
   kind: z.enum(['page', 'file', 'folder']),
   title: z.string(),
   iconUrl: z.string().optional(),
-  iconEmoji: z.string().optional(),
   mimeType: z.string().optional(),
   thumbnailUrl: z.string().optional(),
   lastEditedAt: z.string().optional(),
@@ -643,13 +610,6 @@ export const pickerRecentsResponseSchema = z.object({
 
 export const pickerChildrenResponseSchema = z.object({
   tiles: z.array(pickerTileSchema),
-})
-
-// Import / refresh return the on-canvas data wrapped under `data`. The
-// client takes this verbatim and stores it on a new (import) or existing
-// (refresh) CanvasObject.
-export const importNotionResponseSchema = z.object({
-  data: notionPageDataSchema,
 })
 
 // Drive import is a discriminated response — files come back as DriveFileData,
@@ -698,10 +658,43 @@ export const importVideoResponseSchema = z.object({
 })
 
 export const updateBoardRequestSchema = z.object({
-  name: z.string().min(1).max(120).optional(),
-  data: z.unknown().optional(),
+  name: z.string().min(1).max(120),
 })
 export type UpdateBoardRequest = z.infer<typeof updateBoardRequestSchema>
+
+// Object-level save. `baseVersion` is the version the client last saw
+// (null = the client believes it's creating the object). A write whose
+// baseVersion doesn't match the stored version is rejected as a conflict
+// and the server's current copy comes back instead.
+export const MAX_OBJECT_WRITES = 500
+export const saveBoardObjectsRequestSchema = z.object({
+  upserts: z
+    .array(z.object({ object: storedCanvasObjectSchema, baseVersion: z.number().int().nullable() }))
+    .max(MAX_OBJECT_WRITES),
+  deletes: z
+    .array(z.object({ id: z.string().min(1), baseVersion: z.number().int() }))
+    .max(MAX_OBJECT_WRITES),
+})
+export type SaveBoardObjectsRequest = z.infer<typeof saveBoardObjectsRequestSchema>
+
+export const boardObjectConflictSchema = z.object({
+  id: z.string(),
+  // null when the object no longer exists on the server.
+  object: storedCanvasObjectSchema.nullable(),
+  version: z.number().int().nullable(),
+})
+
+export const saveBoardObjectsResponseSchema = z.object({
+  // New version for every write that applied (deletes are omitted).
+  versions: z.record(z.string(), z.number().int()),
+  conflicts: z.array(boardObjectConflictSchema),
+})
+export type SaveBoardObjectsResponse = Omit<
+  z.infer<typeof saveBoardObjectsResponseSchema>,
+  'conflicts'
+> & {
+  conflicts: { id: string; object: CanvasObject | null; version: number | null }[]
+}
 
 // ---------------------------------------------------------------------------
 // Phase 18 — shareable moodboards
@@ -714,6 +707,38 @@ export const sharedAnalysisDisplaySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('video'), data: videoEditorBreakdownSchema }),
   z.object({ kind: z.literal('brief'), data: synthesisBriefSchema }),
 ])
+
+// Per-group panel state, shared by the team. `display` is the analysis
+// the panel shows (with any inline brief edits); `agentIds` produced it;
+// `selectedAgentIds` is the agent row; `aiPalette` locks the palette
+// widget. Display data is passed through loosely on read — rows written
+// by older agent versions shouldn't fail the whole board.
+export const groupStateSchema = z.object({
+  groupKey: z.string(),
+  display: z
+    .object({ kind: z.enum(['ad', 'sectioned', 'video', 'brief']), data: z.unknown() })
+    .nullable(),
+  agentIds: z.array(agentIdSchema),
+  selectedAgentIds: z.array(agentIdSchema),
+  aiPalette: z.array(z.string()),
+  updatedAt: z.string(),
+})
+export type GroupState = z.infer<typeof groupStateSchema>
+
+export const groupStatesResponseSchema = z.object({ groups: z.array(groupStateSchema) })
+
+// Every field optional: omitted = leave as is. A display write must carry
+// the agents that produced it.
+export const putGroupStateRequestSchema = z.object({
+  display: sharedAnalysisDisplaySchema.optional(),
+  agentIds: z.array(agentIdSchema).optional(),
+  selectedAgentIds: z.array(agentIdSchema).optional(),
+  aiPalette: z
+    .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
+    .max(12)
+    .optional(),
+})
+export type PutGroupStateRequest = z.infer<typeof putGroupStateRequestSchema>
 
 export const sharedGroupSnapshotSchema = z.object({
   key: z.string(),
@@ -762,7 +787,7 @@ export type ShareResponse = z.infer<typeof shareResponseSchema>
 // Asset walker — pulls every /api/files/<filename> reference out of a
 // SharedBoardSnapshot. Used by the share creator to populate the
 // assetFilenames allowlist that gates the public share-file route.
-// External URLs (Spotify CDN, Notion icons, etc.) pass through unchanged
+// External URLs (Spotify CDN, etc.) pass through unchanged
 // — the viewer requests them directly.
 // ---------------------------------------------------------------------------
 

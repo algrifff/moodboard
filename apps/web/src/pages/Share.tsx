@@ -2,7 +2,6 @@ import type {
   CanvasObject,
   DriveFileData,
   DriveFolderData,
-  NotionPageData,
   PDFData,
   SpotifyAlbumData,
   SpotifyPlaylistData,
@@ -21,12 +20,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { ReadOnlyProvider } from '@/lib/readOnlyContext'
 import { getShareByToken, rewriteAssetUrl } from '@/lib/sharesApi'
-import {
-  ArtDirectorReadout,
-  BriefReadout,
-  SectionedReadout,
-  VideoEditorReadout,
-} from '@/components/canvas/AIAnalysisPanel'
+import { ArtDirectorReadout } from '@/components/canvas/readouts/ArtDirectorReadout'
+import { BriefReadout } from '@/components/canvas/readouts/BriefReadout'
+import { SectionedReadout } from '@/components/canvas/readouts/SectionedReadout'
+import { VideoEditorReadout } from '@/components/canvas/readouts/VideoEditorReadout'
 import { SnapshotCanvas } from '@/components/canvas/SnapshotCanvas'
 
 // ---------------------------------------------------------------------------
@@ -749,34 +746,6 @@ function SourceCard({ object }: { object: CanvasObject }) {
               {d.description}
             </p>
           )}
-        </a>
-      )
-    }
-    case 'notion-page': {
-      const d = object.data as NotionPageData
-      return (
-        <a
-          href={d.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ ...wrap, display: 'block', textDecoration: 'none', color: 'inherit' }}
-        >
-          <div className="flex items-center gap-1.5">
-            {d.iconEmoji ? (
-              <span style={{ fontSize: 16 }}>{d.iconEmoji}</span>
-            ) : d.iconUrl ? (
-              <img src={d.iconUrl} alt="" style={{ width: 16, height: 16 }} />
-            ) : null}
-            <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-faint)] font-semibold">
-              Notion
-            </span>
-          </div>
-          <p
-            className="mt-2 text-foreground font-medium"
-            style={{ fontSize: 13, lineHeight: 1.3, margin: 0 }}
-          >
-            {d.title}
-          </p>
         </a>
       )
     }

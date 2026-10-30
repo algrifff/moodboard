@@ -4,7 +4,6 @@ export * from './schemas'
 // URL recognisers — pure functions, used by both the editor's paste
 // handler and the MCP server's add_url dispatcher.
 export * from './driveUrl'
-export * from './notionUrl'
 export * from './spotifyUrl'
 export * from './videoUrl'
 export * from './webUrl'

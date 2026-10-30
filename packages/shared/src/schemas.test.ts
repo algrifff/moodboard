@@ -1,22 +1,38 @@
 import { describe, expect, it } from 'vitest'
-import { boardSchema, healthResponseSchema } from './schemas'
+import { healthResponseSchema, saveBoardObjectsRequestSchema } from './schemas'
 
-describe('boardSchema', () => {
-  it('validates a minimal empty board', () => {
-    const result = boardSchema.safeParse({
-      id: 'b1',
-      userId: null,
-      name: 'Test Board',
-      objects: [],
-      groups: [],
-      createdAt: '2026-05-27T12:00:00Z',
-      updatedAt: '2026-05-27T12:00:00Z',
+describe('saveBoardObjectsRequestSchema', () => {
+  const object = {
+    id: 'o1',
+    type: 'sticky',
+    position: { x: 0, y: 0 },
+    size: { width: 200, height: 200 },
+    rotation: 0,
+    zIndex: 0,
+    data: { text: 'hi', color: '#FEF3C7', futureField: 1 },
+  }
+
+  it('keeps data fields the per-type schema does not know about', () => {
+    const result = saveBoardObjectsRequestSchema.parse({
+      upserts: [{ object, baseVersion: null }],
+      deletes: [],
     })
-    expect(result.success).toBe(true)
+    expect(result.upserts[0]!.object.data).toEqual(object.data)
   })
 
-  it('rejects a board missing required fields', () => {
-    const result = boardSchema.safeParse({ id: 'b1' })
+  it('rejects an unknown object type', () => {
+    const result = saveBoardObjectsRequestSchema.safeParse({
+      upserts: [{ object: { ...object, type: 'notion-page' }, baseVersion: 1 }],
+      deletes: [],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('requires a baseVersion on deletes', () => {
+    const result = saveBoardObjectsRequestSchema.safeParse({
+      upserts: [],
+      deletes: [{ id: 'o1' }],
+    })
     expect(result.success).toBe(false)
   })
 })

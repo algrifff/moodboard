@@ -23,7 +23,7 @@ import { saveUpload } from './storage'
 import type { ImageData } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
-// Match Notion / Drive caps from analyze.ts:185.
+// Match the Drive excerpt cap.
 const WEB_EXCERPT_MAX = 4000
 
 // Browser-shaped UA — many sites serve a minimal placeholder to default
@@ -502,14 +502,14 @@ async function downloadAndSaveImage(
   // Asset row is what makes GET /api/files/{filename} reachable for this
   // user — the route enforces ownership via the asset table, so a file
   // on disk without a row is effectively 404'd. Mirrors the same pattern
-  // as the Drive image-import branch in routes/external.ts:recordAsset.
+  // as the Drive image-import branch in lib/importers/assets.ts:recordAsset.
   // db is imported lazily so unit tests (which exercise the pure
   // helpers below without env vars) don't try to dial Postgres at
   // module load.
   const { db, schema } = await import('../db')
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename: saved.filename,
     mimeType: sniffedMime,
     size: saved.size,

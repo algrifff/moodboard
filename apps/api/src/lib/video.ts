@@ -160,7 +160,7 @@ async function saveThumbnail(thumbUrl: string | undefined, userId: string): Prom
   const { db, schema } = await import('../db')
   await db.insert(schema.asset).values({
     id: nanoid(),
-    userId,
+    createdBy: userId,
     filename: saved.filename,
     mimeType: mime,
     size: saved.size,

@@ -3,7 +3,7 @@ import { EASE_OUT_STANDARD } from '@/lib/motion'
 
 // One-shot expanding ring drawn behind a node when it first arrives on the
 // canvas. The visual signal is "this came from elsewhere" — used for
-// imported external nodes (Notion / Drive) to distinguish them from
+// imported external nodes (Drive, Spotify, web) to distinguish them from
 // locally-spawned items.
 //
 // Lives on top of the node's transform so it scales with the card. Fires

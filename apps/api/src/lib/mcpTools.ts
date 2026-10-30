@@ -12,16 +12,18 @@ import {
   type VideoEditorBreakdown,
 } from '@moodboard/shared'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import { db, schema } from '../db'
 import { getAgent } from './agents'
-import { DEFAULT_DEPTH, modelTag, synthesisModelTag, synthesizeGroup } from './analyze'
+import { synthesizeGroup } from './analyze'
+import { DEFAULT_DEPTH, modelTag, synthesisModelTag } from './modelTags'
 import { analysisHash } from './analysisHash'
+import { insertBoardObject, loadBoardObjects, loadObjectsByBoard } from './boardObjects'
 import { nextSpot } from './canvasPlacement'
 import { routeUrlToImporter } from './mcpUrlDispatch'
-import { listGroupDisplays } from './recordGroupDisplay'
+import { listGroupStates } from './groupState'
 import { saveImageFromUrl } from './saveImageFromUrl'
 import { getAgentResult } from '../routes/analyze'
 
@@ -33,37 +35,30 @@ import { getAgentResult } from '../routes/analyze'
 // Helpers — board state mutation
 // ---------------------------------------------------------------------------
 
-type BoardData = { objects?: CanvasObject[]; scale?: number; offset?: { x: number; y: number } }
+type BoardRow = typeof schema.board.$inferSelect
 
-async function loadBoard(userId: string, boardId: string) {
-  const [row] = await db
-    .select()
-    .from(schema.board)
-    .where(and(eq(schema.board.id, boardId), eq(schema.board.userId, userId)))
-    .limit(1)
-  return row ?? null
+async function loadBoard(
+  boardId: string,
+): Promise<{ row: BoardRow; objects: CanvasObject[] } | null> {
+  const [row] = await db.select().from(schema.board).where(eq(schema.board.id, boardId)).limit(1)
+  if (!row) return null
+  const objects = (await loadBoardObjects(boardId)).map((o) => o.object)
+  return { row, objects }
 }
 
+// `build` sees the current objects so it can pick a free spot. The insert
+// is a single new row, so a teammate editing the board concurrently keeps
+// their changes.
 async function appendObject(
-  userId: string,
   boardId: string,
+  userId: string,
   build: (objects: CanvasObject[]) => CanvasObject,
 ): Promise<{ object: CanvasObject; boardName: string } | null> {
-  const row = await loadBoard(userId, boardId)
-  if (!row) return null
-  const data = (row.data ?? {}) as BoardData
-  const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
-  const newObject = build(objects)
-  const nextData: BoardData = {
-    objects: [...objects, newObject],
-    scale: data.scale,
-    offset: data.offset,
-  }
-  await db
-    .update(schema.board)
-    .set({ data: nextData, updatedAt: new Date() })
-    .where(eq(schema.board.id, boardId))
-  return { object: newObject, boardName: row.name }
+  const board = await loadBoard(boardId)
+  if (!board) return null
+  const newObject = build(board.objects)
+  await insertBoardObject(boardId, newObject, userId)
+  return { object: newObject, boardName: board.row.name }
 }
 
 // Pull the canonical viewer URL for a board. Used in tool outputs so
@@ -85,7 +80,6 @@ const WEB_DEFAULT_SIZE = { width: 320, height: 240 }
 const VIDEO_DEFAULT_SIZE = { width: 320, height: 290 }
 const SPOTIFY_PLAYLIST_SIZE = { width: 320, height: 150 }
 const SPOTIFY_TRACK_SIZE = { width: 320, height: 248 }
-const NOTION_DEFAULT_SIZE = { width: 280, height: 140 }
 const DRIVE_DEFAULT_SIZE = { width: 280, height: 140 }
 const PDF_DEFAULT_SIZE = { width: 180, height: 240 }
 
@@ -113,9 +107,7 @@ type BoardSummary = {
   updatedAt: string
 }
 
-function summariseBoardRow(row: typeof schema.board.$inferSelect): BoardSummary {
-  const data = (row.data ?? {}) as BoardData
-  const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
+function summariseBoard(row: BoardRow, objects: CanvasObject[]): BoardSummary {
   const byType: Record<string, number> = {}
   for (const o of objects) {
     byType[o.type] = (byType[o.type] ?? 0) + 1
@@ -160,17 +152,17 @@ export function buildMcpServer(userId: string): McpServer {
     {
       title: 'List boards',
       description:
-        "Return the user's most recent moodboards (up to 20). Each board has its id, name, object count, type breakdown, viewer URL, and timestamps. Use this to find an existing board to add to or to read.",
+        "Return the team's most recent moodboards (up to 20). Each board has its id, name, object count, type breakdown, viewer URL, and timestamps. Use this to find an existing board to add to or to read.",
       inputSchema: {},
     },
     async () => {
       const rows = await db
         .select()
         .from(schema.board)
-        .where(eq(schema.board.userId, userId))
         .orderBy(desc(schema.board.updatedAt))
         .limit(20)
-      const boards = rows.map(summariseBoardRow)
+      const objectsByBoard = await loadObjectsByBoard(rows.map((r) => r.id))
+      const boards = rows.map((r) => summariseBoard(r, objectsByBoard.get(r.id) ?? []))
       return {
         content: [{ type: 'text', text: JSON.stringify({ boards }, null, 2) }],
       }
@@ -195,16 +187,15 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, verbose }) => {
-      const row = await loadBoard(userId, boardId)
-      if (!row) {
+      const board = await loadBoard(boardId)
+      if (!board) {
         return {
           isError: true,
           content: [{ type: 'text', text: 'Board not found.' }],
         }
       }
-      const summary = summariseBoardRow(row)
-      const data = (row.data ?? {}) as BoardData
-      const objects: CanvasObject[] = Array.isArray(data.objects) ? data.objects : []
+      const { objects } = board
+      const summary = summariseBoard(board.row, objects)
 
       // Map current groups by their stable key so we can join against
       // the persisted display table.
@@ -212,20 +203,20 @@ export function buildMcpServer(userId: string): McpServer {
       const groupKeyToIds = new Map<string, string[]>()
       for (const ids of idGroups) groupKeyToIds.set(groupId(ids), ids)
 
-      const displays = await listGroupDisplays(boardId)
-      // Filter to displays whose groupKey still corresponds to a live
-      // group on the canvas. Orphans (membership changed → new key)
-      // get hidden here; the table still keeps them for when a group
-      // re-forms with the old composition.
-      const analyses = displays
-        .filter((d) => groupKeyToIds.has(d.groupKey))
-        .map((d) => {
-          const objectIds = groupKeyToIds.get(d.groupKey) ?? []
+      const states = await listGroupStates(boardId)
+      // Only groups that still exist on the canvas and have a completed
+      // analysis. Orphans (membership changed → new key) are hidden.
+      const analyses = states
+        .filter((g) => groupKeyToIds.has(g.groupKey))
+        .flatMap((g) => (g.display ? [{ ...g, display: g.display }] : []))
+        .map((g) => {
+          const objectIds = groupKeyToIds.get(g.groupKey) ?? []
+          const d = g.display
           const base = {
-            groupKey: d.groupKey,
+            groupKey: g.groupKey,
             objectIds,
-            agentIds: d.agentIds,
-            updatedAt: d.updatedAt.toISOString(),
+            agentIds: g.agentIds,
+            updatedAt: g.updatedAt,
           }
           switch (d.kind) {
             case 'brief': {
@@ -317,9 +308,8 @@ export function buildMcpServer(userId: string): McpServer {
         .insert(schema.board)
         .values({
           id,
-          userId,
+          createdBy: userId,
           name: name ?? 'Untitled board',
-          data: {},
         })
         .returning()
       if (!row) {
@@ -348,7 +338,7 @@ export function buildMcpServer(userId: string): McpServer {
     {
       title: 'Add a URL to the board',
       description:
-        'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Notion page, a Google Drive file, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Notion/Drive require the user to have connected those providers in the dashboard first; the tool returns a clear instruction when missing.',
+        'Smart importer. Detects whether the URL is a Spotify track/album/playlist, a Google Drive file, a video (YouTube/TikTok/Instagram/X/Vimeo), a direct image, or a generic web page, and drops the appropriate card on the board. Spotify/Drive require the user to have connected those providers in the dashboard first; the tool returns a clear instruction when missing.',
       inputSchema: {
         boardId: boardIdSchema,
         url: z
@@ -357,7 +347,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, url }) => {
-      const board = await loadBoard(userId, boardId)
+      const board = await loadBoard(boardId)
       if (!board) {
         return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
       }
@@ -370,7 +360,7 @@ export function buildMcpServer(userId: string): McpServer {
       }
       const result = dispatch.result
 
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const zIndex = objects.length
         switch (result.kind) {
           case 'web': {
@@ -405,18 +395,6 @@ export function buildMcpServer(userId: string): McpServer {
               type: 'image',
               position: spot,
               size: IMAGE_DEFAULT_SIZE,
-              rotation: 0,
-              zIndex,
-              data: result.data,
-            }
-          }
-          case 'notion': {
-            const spot = nextSpot(objects, NOTION_DEFAULT_SIZE)
-            return {
-              id: nanoid(),
-              type: 'notion-page',
-              position: spot,
-              size: NOTION_DEFAULT_SIZE,
               rotation: 0,
               zIndex,
               data: result.data,
@@ -538,7 +516,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, color }) => {
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const spot = nextSpot(objects, STICKY_SIZE)
         const data: StickyData = { text, color: color ?? STICKY_DEFAULT_COLOR }
         return {
@@ -581,7 +559,7 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, text, fontSize }) => {
-      const appended = await appendObject(userId, boardId, (objects) => {
+      const appended = await appendObject(boardId, userId, (objects) => {
         const size = sizeForText(text)
         const spot = nextSpot(objects, size)
         const data: TextData = {
@@ -623,13 +601,13 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, url }) => {
-      const board = await loadBoard(userId, boardId)
+      const board = await loadBoard(boardId)
       if (!board) {
         return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
       }
       try {
         const data = await saveImageFromUrl(url, userId)
-        const appended = await appendObject(userId, boardId, (objects) => {
+        const appended = await appendObject(boardId, userId, (objects) => {
           const spot = nextSpot(objects, IMAGE_DEFAULT_SIZE)
           return {
             id: nanoid(),
@@ -678,10 +656,9 @@ export function buildMcpServer(userId: string): McpServer {
       },
     },
     async ({ boardId, agents }) => {
-      const row = await loadBoard(userId, boardId)
-      if (!row) return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
-      const data = (row.data ?? {}) as BoardData
-      const objects = Array.isArray(data.objects) ? data.objects : []
+      const board = await loadBoard(boardId)
+      if (!board) return { isError: true, content: [{ type: 'text', text: 'Board not found.' }] }
+      const { objects } = board
       const idGroups = proximityGroups(objects)
       const byId = new Map(objects.map((o) => [o.id, o]))
       const groups = idGroups.map((ids) => ({

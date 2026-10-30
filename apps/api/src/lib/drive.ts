@@ -1,7 +1,6 @@
 // Google Drive REST API wrapper + per-mime extraction.
 //
-// Same shape as apps/api/src/lib/notion.ts — no SDK, just fetch with the
-// surface narrowed to what the picker + import flow actually needs:
+// No SDK, just fetch with the surface narrowed to what the picker + import flow actually needs:
 //
 //   GET  /drive/v3/files?q=...            — picker tile search
 //   GET  /drive/v3/files/{id}             — file metadata
@@ -30,8 +29,8 @@ export const MIME_SLIDES = 'application/vnd.google-apps.presentation'
 export const MIME_FOLDER = 'application/vnd.google-apps.folder'
 export const MIME_PDF = 'application/pdf'
 
-// Excerpt caps — keep prompts bounded. Same magnitude as the Notion + PDF
-// caps already in analyze.ts.
+// Excerpt caps — keep prompts bounded. Same magnitude as the PDF cap in
+// analyze.ts.
 const EXCERPT_MAX = 4000
 
 // Number of children fetched + previewed in folder data. The full live tree

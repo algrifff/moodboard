@@ -7,10 +7,13 @@ import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import { auth, type AuthSession, type AuthUser } from './auth'
 import { db } from './db'
+import { runMigrations } from './db/migrate'
+import { startMaintenance } from './lib/maintenance'
 import { rateLimit } from './lib/rateLimit'
 import { ensureDataDirs } from './lib/storage'
 import { analyze } from './routes/analyze'
 import { apiKeys } from './routes/apiKeys'
+import { boardGroups } from './routes/boardGroups'
 import { boards } from './routes/boards'
 import { connections } from './routes/connections'
 import { external } from './routes/external'
@@ -60,9 +63,11 @@ app.use(
 )
 
 // Tighten the auth handler against credential stuffing. The bucket size lets a
-// legitimate user retype once or twice without hitting the wall.
+// legitimate user retype once or twice without hitting the wall. Only POSTs
+// (sign-in, sign-up, …) count — session reads happen on every page load.
 const authRateLimit = rateLimit({ scope: 'auth', limit: 10, windowMs: 60_000 })
-app.all('/api/auth/*', authRateLimit, (c) => auth.handler(c.req.raw))
+app.post('/api/auth/*', authRateLimit)
+app.all('/api/auth/*', (c) => auth.handler(c.req.raw))
 
 // Session middleware — populate c.var.user / c.var.session for downstream routes.
 app.use('*', async (c, next) => {
@@ -114,6 +119,7 @@ api.use('/boards/*', jsonBodyLimit)
 // so the more specific path matches first. Public viewer + PDF endpoints
 // mount separately under /shares (no global auth).
 api.route('/boards/:boardId/share', boardShare)
+api.route('/boards/:boardId/groups', boardGroups)
 api.route('/shares', shares)
 api.route('/boards', boards)
 // Phase 19 — MCP server. Bearer-auth via its own middleware (not the
@@ -131,7 +137,9 @@ app.route('/api', api)
 
 const port = Number(process.env.PORT ?? 3001)
 
+await runMigrations(process.env.DATABASE_URL!)
 await ensureDataDirs()
+startMaintenance()
 
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`api listening on http://localhost:${info.port}`)

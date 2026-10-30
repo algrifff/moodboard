@@ -107,7 +107,8 @@ export function SnapshotCanvas({
       o.type === 'spotify-album' ||
       o.type === 'video-clip' ||
       o.type === 'voice-note' ||
-      o.type === 'output',
+      o.type === 'output' ||
+      o.type === 'figma-frame',
   )
 
   return (

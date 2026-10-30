@@ -245,7 +245,19 @@ function Composer({ boardId, running }: { boardId: string; running: boolean }) {
   const stop = useAgentSidebarStore((s) => s.stop)
   const busy = useAgentSidebarStore((s) => s.run !== null)
   const selectedCount = useCanvasStore((s) => s.selectedIds.length)
+  const draft = useAgentSidebarStore((s) => s.draft)
+  const clearDraft = useAgentSidebarStore((s) => s.clearDraft)
   const ref = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (!draft) return
+    setText(draft.text)
+    clearDraft()
+    const el = ref.current
+    el?.focus()
+    // The caret goes after the text, ready for the rest of the sentence.
+    requestAnimationFrame(() => el?.setSelectionRange(draft.text.length, draft.text.length))
+  }, [draft, clearDraft])
 
   useLayoutEffect(() => {
     const el = ref.current

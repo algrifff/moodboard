@@ -67,3 +67,17 @@ export function LinearLogo({ size = 14 }: { size?: number }) {
     </svg>
   )
 }
+
+// Figma's mark is five rounded shapes in a fixed brand colourway; drawn here
+// from simple shapes rather than a copy of the asset.
+export function FigmaLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 36" style={{ flexShrink: 0 }} aria-hidden>
+      <path fill="#F24E1E" d="M12 0H6a6 6 0 0 0 0 12h6z" />
+      <path fill="#FF7262" d="M12 0h6a6 6 0 0 1 0 12h-6z" />
+      <path fill="#A259FF" d="M12 12H6a6 6 0 0 0 0 12h6z" />
+      <circle fill="#1ABCFE" cx="18" cy="18" r="6" />
+      <path fill="#0ACF83" d="M12 24H6a6 6 0 1 0 6 6z" />
+    </svg>
+  )
+}

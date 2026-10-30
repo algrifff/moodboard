@@ -1,16 +1,18 @@
-import type {
-  CanvasObject,
-  DriveFileData,
-  DriveFolderData,
-  FontData,
-  SpotifyAlbumData,
-  SpotifyPlaylistData,
-  SpotifyTrackData,
-  StickyData,
-  TextData,
-  VideoClipData,
-  VoiceNoteData,
-  WebPageData,
+import {
+  figmaCardSize,
+  type CanvasObject,
+  type DriveFileData,
+  type DriveFolderData,
+  type FigmaFrameData,
+  type FontData,
+  type SpotifyAlbumData,
+  type SpotifyPlaylistData,
+  type SpotifyTrackData,
+  type StickyData,
+  type TextData,
+  type VideoClipData,
+  type VoiceNoteData,
+  type WebPageData,
 } from '@moodboard/shared'
 import { nanoid } from 'nanoid'
 
@@ -269,6 +271,24 @@ export function createVoiceNote(
       y: worldCenter.y - VOICE_NOTE_DEFAULT_SIZE.height / 2,
     },
     size: VOICE_NOTE_DEFAULT_SIZE,
+    rotation: 0,
+    zIndex,
+    data,
+  }
+}
+
+// A Figma frame card: the picture keeps the frame's proportions.
+export function createFigmaFrame(
+  worldCenter: { x: number; y: number },
+  zIndex: number,
+  data: FigmaFrameData,
+): CanvasObject {
+  const size = figmaCardSize(data.width, data.height)
+  return {
+    id: nanoid(),
+    type: 'figma-frame',
+    position: { x: worldCenter.x - size.width / 2, y: worldCenter.y - size.height / 2 },
+    size,
     rotation: 0,
     zIndex,
     data,

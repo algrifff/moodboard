@@ -183,6 +183,8 @@ export const figmaImportRequestSchema = z.object({
   // Frames to import from a file link (the picker's selection). A frame link
   // imports its own node.
   nodeIds: z.array(z.string().min(1).max(120)).max(FIGMA_IMPORT_MAX_FRAMES).optional(),
+  // The board the frames are for: its client files the renders in the library.
+  boardId: z.string().min(1).optional(),
   clientId: z.string().min(1).optional(),
 })
 export type FigmaImportRequest = z.infer<typeof figmaImportRequestSchema>

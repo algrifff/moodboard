@@ -13,6 +13,7 @@ import type {
   WebPageData,
   FontData,
   ImageData,
+  FigmaFrameData,
   OutputCardData,
   SharedGroupSnapshot,
   ShareViewParsed,
@@ -668,6 +669,34 @@ function SourceCard({ object }: { object: CanvasObject }) {
               {d.transcript}
             </p>
           )}
+        </div>
+      )
+    }
+    case 'figma-frame': {
+      const d = object.data as FigmaFrameData
+      return (
+        <div style={wrap}>
+          <img
+            src={d.url}
+            alt={`${d.name} — ${d.fileName}`}
+            loading="lazy"
+            style={{
+              width: '100%',
+              maxHeight: 220,
+              objectFit: 'contain',
+              borderRadius: 'var(--radius)',
+              backgroundColor: 'var(--bg-elevated)',
+            }}
+          />
+          <div className="mt-2 text-[10px] uppercase tracking-[0.1em] font-semibold text-[var(--text-faint)]">
+            Figma
+          </div>
+          <p className="mt-1 text-foreground font-medium" style={{ fontSize: 13, margin: 0 }}>
+            {d.name}
+          </p>
+          <p className="text-[var(--text-mute)]" style={{ margin: 0 }}>
+            {d.fileName}
+          </p>
         </div>
       )
     }

@@ -17,6 +17,7 @@ import {
   FilmSlate,
   Crosshair,
   Eye,
+  FrameCorners,
   Images,
   Palette,
   Swatches,
@@ -36,7 +37,13 @@ import {
 import { AGENT_META } from '@/components/canvas/AgentRow'
 import { DesignRunCard } from './DesignRunCard'
 import { RenderJobCard, VideoRunCard } from './VideoCards'
-import { AssetsToolCard, KitToolCard, OutputToolCard } from './DesignToolCards'
+import {
+  AssetsToolCard,
+  FigmaFrameToolCard,
+  FigmaKitToolCard,
+  KitToolCard,
+  OutputToolCard,
+} from './DesignToolCards'
 import { ArtDirectorGlance } from '@/components/canvas/readouts/ArtDirectorReadout'
 import { BriefGlance } from '@/components/canvas/readouts/BriefReadout'
 import { SectionedGlance } from '@/components/canvas/readouts/SectionedReadout'
@@ -58,6 +65,9 @@ const TOOL_META: Record<string, { icon: Icon; running: string }> = {
   get_style_kit: { icon: Palette, running: 'Reading the style kit' },
   search_assets: { icon: Images, running: 'Searching the asset library' },
   get_linear_issue: { icon: LinkSimple, running: 'Reading the Linear issue' },
+  import_figma_frame: { icon: FrameCorners, running: 'Importing from Figma' },
+  get_figma_frame: { icon: FrameCorners, running: 'Looking at the Figma frame' },
+  figma_kit_from_file: { icon: Swatches, running: 'Reading the Figma file’s styles' },
   list_templates: { icon: Layout, running: 'Looking up templates' },
   create_output: { icon: Layout, running: 'Creating an output' },
   get_output: { icon: Layout, running: 'Reading the output' },
@@ -181,6 +191,12 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
   }
   if (first.use.name === 'search_assets') {
     return <AssetsToolCard payload={payload} title={title} />
+  }
+  if (first.use.name === 'import_figma_frame' || first.use.name === 'get_figma_frame') {
+    return <FigmaFrameToolCard payload={payload} title={title} />
+  }
+  if (first.use.name === 'figma_kit_from_file') {
+    return <FigmaKitToolCard payload={payload} title={title} />
   }
 
   if (first.use.name === 'post_linear_comment' && typeof payload.commentUrl === 'string') {

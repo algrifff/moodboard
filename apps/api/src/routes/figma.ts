@@ -7,9 +7,11 @@ import {
   type FigmaRef,
   type FigmaStatus,
 } from '@moodboard/shared'
+import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { AuthSession, AuthUser } from '../auth'
+import { db, schema } from '../db'
 import { loadBoardObject } from '../lib/boardObjects'
 import { clientExists } from '../lib/clients'
 import { FigmaApiError, figmaEnv } from '../lib/figma'
@@ -66,6 +68,16 @@ function refFrom(c: Context, url: string): FigmaRef | Response {
   return ref
 }
 
+async function boardClientId(boardId: string | undefined): Promise<string | null> {
+  if (!boardId) return null
+  const [row] = await db
+    .select({ clientId: schema.board.clientId })
+    .from(schema.board)
+    .where(eq(schema.board.id, boardId))
+    .limit(1)
+  return row?.clientId ?? null
+}
+
 figma.get('/status', async (c) => {
   const row = await getFigmaConnection(c.get('user')!.id)
   const status: FigmaStatus = {
@@ -108,11 +120,12 @@ figma.post('/import', figmaLimit, async (c) => {
     return c.json({ error: 'Client not found' }, 404)
   }
   const user = c.get('user')!
+  const clientId = parsed.data.clientId ?? (await boardClientId(parsed.data.boardId))
   try {
     const api = await figmaForUser(user.id)
     const frames = await importFigmaFrames(api, {
       userId: user.id,
-      clientId: parsed.data.clientId ?? null,
+      clientId,
       fileKey: ref.fileKey,
       nodeIds,
     })

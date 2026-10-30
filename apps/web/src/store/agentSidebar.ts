@@ -66,6 +66,8 @@ type AgentSidebarState = {
   // Live progress of long tools (design_output), by tool_use id, then by
   // variant. Streamed only; the finished result is the tool's own card.
   toolProgress: Record<string, Record<number, DesignProgress>>
+  // Text for the composer to take up (a nonce so the same text can be set twice).
+  draft: { nonce: number; text: string } | null
 
   setOpen: (open: boolean) => void
   openGroup: (groupKey: string) => void
@@ -85,6 +87,10 @@ type AgentSidebarState = {
   // Picking a Linear issue is the manual trigger: a fresh thread whose
   // first message carries the issue as the brief.
   startFromLinearIssue: (boardId: string, issue: LinearIssueSummary) => Promise<void>
+  // "Use as reference" on a Figma card: a fresh thread with the card selected
+  // and the composer started for the person to finish.
+  startFromFigmaFrame: (object: CanvasObject) => void
+  clearDraft: () => void
   stop: () => void
 }
 
@@ -195,6 +201,7 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
     run: null,
     sendError: null,
     toolProgress: {},
+    draft: null,
 
     setOpen: (open) => {
       writeOpen(open)
@@ -346,6 +353,22 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
         { linearIssue: issue.identifier },
       )
     },
+
+    startFromFigmaFrame: (object) => {
+      if (get().run) return
+      const name = (object.data as { name?: string }).name ?? 'this frame'
+      useCanvasStore.getState().setSelection([object.id])
+      writeOpen(true)
+      set({
+        open: true,
+        activeThreadId: null,
+        messages: [],
+        sendError: null,
+        view: { kind: 'chat' },
+        draft: { nonce: Date.now(), text: `Use “${name}” as the visual reference for ` },
+      })
+    },
+    clearDraft: () => set({ draft: null }),
 
     stop: () => get().run?.controller.abort(),
   }

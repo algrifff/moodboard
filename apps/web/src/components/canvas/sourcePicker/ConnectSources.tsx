@@ -1,7 +1,7 @@
 import type { ConnectionSummary } from '@moodboard/shared'
 import { CheckCircle, Plus } from '@phosphor-icons/react'
 import { motion } from 'framer-motion'
-import { DriveLogo, LinearLogo, SpotifyLogo } from '../sourceLogos'
+import { DriveLogo, FigmaLogo, LinearLogo, SpotifyLogo } from '../sourceLogos'
 
 // ---------------------------------------------------------------------------
 // Add another source — always-visible. New providers slot in by appending
@@ -14,16 +14,19 @@ export function AddSourceSection({
   onConnectDrive,
   onConnectSpotify,
   onConnectLinear,
+  onConnectFigma,
 }: {
   connections: ConnectionSummary[]
   loading: boolean
   onConnectDrive: () => void
   onConnectSpotify: () => void
   onConnectLinear: () => void
+  onConnectFigma: () => void
 }) {
   const driveCount = connections.filter((c) => c.provider === 'drive').length
   const spotifyCount = connections.filter((c) => c.provider === 'spotify').length
   const linearCount = connections.filter((c) => c.provider === 'linear').length
+  const figmaCount = connections.filter((c) => c.provider === 'figma').length
 
   return (
     <div
@@ -41,7 +44,7 @@ export function AddSourceSection({
           Sources
         </span>
       </div>
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
         <ConnectProviderButton
           provider="drive"
           connectedCount={driveCount}
@@ -60,6 +63,12 @@ export function AddSourceSection({
           onClick={onConnectLinear}
           disabled={loading}
         />
+        <ConnectProviderButton
+          provider="figma"
+          connectedCount={figmaCount}
+          onClick={onConnectFigma}
+          disabled={loading}
+        />
       </div>
     </div>
   )
@@ -75,12 +84,12 @@ function ConnectProviderButton({
   onClick,
   disabled,
 }: {
-  provider: 'drive' | 'spotify' | 'linear'
+  provider: 'drive' | 'spotify' | 'linear' | 'figma'
   connectedCount: number
   onClick: () => void
   disabled?: boolean
 }) {
-  const label = provider === 'drive' ? 'Google Drive' : provider === 'linear' ? 'Linear' : 'Spotify'
+  const label = PROVIDER_LABEL[provider]
   const isConnected = connectedCount > 0
   return (
     <motion.button
@@ -123,14 +132,22 @@ function ConnectProviderButton({
   )
 }
 
+const PROVIDER_LABEL = {
+  drive: 'Google Drive',
+  spotify: 'Spotify',
+  linear: 'Linear',
+  figma: 'Figma',
+} as const
+
 export function ProviderGlyph({
   provider,
   size = 14,
 }: {
-  provider: 'drive' | 'spotify' | 'linear'
+  provider: 'drive' | 'spotify' | 'linear' | 'figma'
   size?: number
 }) {
   if (provider === 'drive') return <DriveLogo size={size} />
   if (provider === 'linear') return <LinearLogo size={size} />
+  if (provider === 'figma') return <FigmaLogo size={size} />
   return <SpotifyLogo size={size} />
 }

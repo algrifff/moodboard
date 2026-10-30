@@ -96,7 +96,7 @@ export function DesignRunCard({
           }
           shimmer={running}
         />
-        {brief && <Brief text={brief} />}
+        {brief && <Brief text={brief} figma={figmaNames(input.figmaFrames)} />}
         <LiveProgress toolUseId={toolUseId} running={running} format={format} />
       </div>
     )
@@ -121,12 +121,23 @@ function Header({ title, shimmer, extra }: { title: string; shimmer?: boolean; e
   )
 }
 
-function Brief({ text }: { text: string }) {
+function Brief({ text, figma }: { text: string; figma?: string[] }) {
   return (
-    <p className="line-clamp-2 px-3 pt-1 text-[11.5px] leading-snug text-[var(--text-mute)]">
-      {text}
-    </p>
+    <>
+      <p className="line-clamp-2 px-3 pt-1 text-[11.5px] leading-snug text-[var(--text-mute)]">
+        {text}
+      </p>
+      {figma && figma.length > 0 && (
+        <p className="truncate px-3 pt-0.5 text-[11px] text-[var(--text-faint)]">
+          Reference from Figma: {figma.join(', ')}
+        </p>
+      )}
+    </>
   )
+}
+
+export function figmaNames(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
 }
 
 function LiveProgress({
@@ -259,7 +270,7 @@ function Finished({
   return (
     <div className="overflow-hidden text-[13px]" style={cardStyle}>
       <Header title={payload.summary} extra={payload.cached === true ? 'reused' : undefined} />
-      {brief && <Brief text={brief} />}
+      {brief && <Brief text={brief} figma={figmaNames(payload.figmaFrames)} />}
       <ul className="flex flex-col gap-2.5 px-3 pb-3 pt-2.5">
         {variants.map((v, i) => (
           <motion.li

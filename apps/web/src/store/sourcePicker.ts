@@ -21,6 +21,7 @@ export function isPickerConnection(c: ConnectionSummary): c is PickerConnection 
 }
 
 export type PendingPaste =
+  | { provider: 'figma'; url: string }
   | { provider: 'drive'; fileId: string }
   | { provider: 'spotify'; ref: { kind: 'playlist' | 'track' | 'album'; id: string } }
 
@@ -33,9 +34,13 @@ type SourcePickerState = {
   // A library asset is being dragged out of the drawer; the drawer and its
   // scrim let the drop through to the canvas underneath.
   draggingAsset: boolean
+  // A Figma link to browse in the drawer's Figma section (a pasted file link,
+  // or one stashed until Figma is connected).
+  figmaUrl: string
 
   setDraggingAsset: (dragging: boolean) => void
   openPicker: () => void
+  openFigma: (url: string) => void
   closePicker: () => void
   togglePicker: () => void
 
@@ -51,6 +56,7 @@ export const useSourcePickerStore = create<SourcePickerState>()((set, get) => ({
   loadingConnections: false,
   pendingPaste: null,
   draggingAsset: false,
+  figmaUrl: '',
 
   setDraggingAsset: (dragging) => set({ draggingAsset: dragging }),
   openPicker: () => {
@@ -62,6 +68,10 @@ export const useSourcePickerStore = create<SourcePickerState>()((set, get) => ({
     if (!connectionsLoaded && !loadingConnections) {
       void get().refreshConnections()
     }
+  },
+  openFigma: (url) => {
+    set({ figmaUrl: url })
+    get().openPicker()
   },
   closePicker: () => set({ open: false, draggingAsset: false }),
   togglePicker: () => {

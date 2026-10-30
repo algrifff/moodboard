@@ -268,7 +268,7 @@ function BoardPreviewCard({ preview }: { preview?: BoardPreview }) {
 }
 
 function PreviewObject({ o }: { o: BoardPreview['objects'][number] }) {
-  if (o.type === 'image' || o.type === 'pdf') {
+  if (o.type === 'image' || o.type === 'pdf' || o.type === 'figma-frame') {
     if (!o.thumbnailUrl) {
       // Image/PDF that hasn't finished uploading yet — fall back to a
       // neutral filled rect so the layout still reads.

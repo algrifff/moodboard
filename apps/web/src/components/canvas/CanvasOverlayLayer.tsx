@@ -1,6 +1,7 @@
 import type { CanvasObject } from '@moodboard/shared'
 import { DriveNode } from './DriveNode'
 import { FontNode } from './FontNode'
+import { FigmaNode } from './FigmaNode'
 import { OutputNode } from './OutputNode'
 import { SpotifyNode } from './SpotifyNode'
 import { StickyNote } from './StickyNote'
@@ -118,6 +119,18 @@ export function CanvasOverlayLayer({
           if (o.type === 'video-clip' && boardId) {
             return (
               <VideoClipNode
+                key={o.id}
+                object={o}
+                scale={scale}
+                panMode={panMode}
+                selected={selectedSet.has(o.id)}
+                boardId={boardId}
+              />
+            )
+          }
+          if (o.type === 'figma-frame' && boardId) {
+            return (
+              <FigmaNode
                 key={o.id}
                 object={o}
                 scale={scale}

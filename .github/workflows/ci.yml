@@ -56,6 +56,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # The frame renderer and starter-template tests drive a real headless
+      # Chromium; without one they skip. Install the build this Playwright
+      # version expects (plus its system libraries).
+      - name: Install Chromium
+        run: pnpm --filter @moodboard/api exec playwright install --with-deps chromium
+
       - name: Format check
         run: pnpm format:check
 

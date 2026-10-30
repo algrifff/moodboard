@@ -334,6 +334,19 @@ export type CanvasObjectType =
   | 'spotify-album'
   | 'video-clip'
   | 'voice-note'
+  | 'output'
+
+// Phase 23 — a design output placed on a board as a live card. The card
+// renders the output's latest composed document, scaled; everything else
+// about the output lives on the output itself. `width`/`height` are the
+// document's design viewport, so the card keeps its aspect ratio.
+export type OutputCardData = {
+  outputId: string
+  name: string
+  format: string
+  width: number
+  height: number
+}
 
 export type CanvasObject = {
   id: string
@@ -356,6 +369,7 @@ export type CanvasObject = {
     | SpotifyAlbumData
     | VideoClipData
     | VoiceNoteData
+    | OutputCardData
 }
 
 export type AIAnalysis = {

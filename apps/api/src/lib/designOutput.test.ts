@@ -121,6 +121,7 @@ describe.skipIf(!runnable)('design_output (real tools, scripted model)', () => {
     const { db, schema } = dbMod
     await db.delete(schema.designRun).where(eq(schema.designRun.clientId, clientId))
     await db.delete(schema.output).where(eq(schema.output.clientId, clientId))
+    await db.delete(schema.template).where(eq(schema.template.clientId, clientId))
     await db.delete(schema.asset).where(eq(schema.asset.clientId, clientId))
     await db.delete(schema.board).where(eq(schema.board.id, boardId))
     await db.delete(schema.client).where(eq(schema.client.id, clientId))
@@ -192,24 +193,44 @@ describe.skipIf(!runnable)('design_output (real tools, scripted model)', () => {
     firstRun = payload
   })
 
+  // On a client-only template of its own, so other test files syncing the
+  // shared starters (a new template version = a new cache key) can't race it.
   it('reuses the options for an identical brief without calling the model', async () => {
-    const model = designerModel()
-    const outcome = await tool('design_output').run(
-      { boardId, userId, model: model.client },
-      { format: 'thumbnail', brief: `  ${brief} `, linearIssue: 'LIN-123' },
-    )
-    expect(model.requests).toHaveLength(0)
-    expect(outcome.ok && outcome.payload.cached).toBe(true)
-    const ids = outcome.ok
-      ? (outcome.payload.variants as { outputId: string }[]).map((v) => v.outputId)
+    const templates = await import('./templates')
+    const { loadStarterTemplates } = await import('./starterTemplateFiles')
+    const thumb = (await loadStarterTemplates()).find((t) => t.key === 'youtube-thumbnail')!
+    await templates.createTemplate({
+      name: 'Promo card',
+      format: 'other',
+      viewport: thumb.viewport,
+      clientId,
+      html: thumb.html,
+      css: thumb.css,
+      js: '',
+      userId,
+    })
+    const design = (model: ModelClient, extra: Record<string, unknown> = {}) =>
+      tool('design_output').run(
+        { boardId, userId, model },
+        { format: 'other', brief, variants: 2, ...extra },
+      )
+    const first = designerModel()
+    const made = await design(first.client)
+    expect(first.requests.length).toBeGreaterThan(0)
+    const madeIds = made.ok
+      ? (made.payload.variants as { outputId: string }[]).map((v) => v.outputId)
       : []
-    expect(ids).toEqual(firstRun.variants.map((v) => v.outputId))
+
+    const second = designerModel()
+    const reused = await design(second.client, { brief: `  ${brief}\n` })
+    expect(second.requests).toHaveLength(0)
+    expect(reused.ok && reused.payload.cached).toBe(true)
+    expect(
+      reused.ok ? (reused.payload.variants as { outputId: string }[]).map((v) => v.outputId) : [],
+    ).toEqual(madeIds)
 
     const fresh = designerModel()
-    const again = await tool('design_output').run(
-      { boardId, userId, model: fresh.client },
-      { format: 'thumbnail', brief, variants: 1, regenerate: true },
-    )
+    const again = await design(fresh.client, { variants: 1, regenerate: true })
     expect(again.ok).toBe(true)
     expect(fresh.requests.length).toBeGreaterThan(0)
   })
@@ -235,6 +256,81 @@ describe.skipIf(!runnable)('design_output (real tools, scripted model)', () => {
     const linear = await post(second!.outputId)
     expect(linear.ok).toBe(false)
     expect(!linear.ok && linear.error).toMatch(/Linear/)
+  })
+
+  it('plans, restructures and renders a deck section by section', async () => {
+    const requests: Params[] = []
+    const numbersSlide = /<section class="slide numbers">[\s\S]*?<\/section>\n*/
+    const client: ModelClient = {
+      async streamTurn(params) {
+        requests.push(structuredClone(params))
+        const turn = params.messages.filter((m) => m.role === 'assistant').length
+        const last = params.messages.at(-1)!
+        const lastText =
+          Array.isArray(last.content) && last.content[0]?.type === 'tool_result'
+            ? String(last.content[0].content)
+            : ''
+        const steps: { name: string; input: Record<string, unknown> }[] = [
+          {
+            name: 'plan_outline',
+            input: {
+              sections: [
+                { title: 'Cover', purpose: 'Name the launch' },
+                { title: 'Statement', purpose: 'Why it matters' },
+                { title: 'Close', purpose: 'Where to watch' },
+              ],
+            },
+          },
+          {
+            name: 'create_output',
+            input: { template: '16:9 deck', name: 'Launch deck', slots: { title: 'Liftoff' } },
+          },
+          { name: 'get_output_source', input: {} },
+          {
+            name: 'update_output_html',
+            input: {
+              html: [
+                {
+                  find: turn === 3 ? JSON.parse(lastText).html.match(numbersSlide)[0] : '',
+                  replace: '',
+                },
+              ],
+            },
+          },
+          { name: 'render_output_frame', input: { section: 1 } },
+          { name: 'finish_variant', input: { name: 'Launch deck', critique: 'Four slides.' } },
+        ]
+        const step = steps[Math.min(turn, steps.length - 1)]!
+        return {
+          content: [{ type: 'tool_use', id: `tu_${nanoid()}`, name: step.name, input: step.input }],
+          stop_reason: 'tool_use',
+        } as unknown as Anthropic.Message
+      },
+    }
+    const outcome = await tool('design_output').run(
+      { boardId, userId, model: client },
+      { format: 'deck', brief: 'Launch deck for the board.', variants: 1 },
+    )
+    expect(outcome.ok ? 'ok' : outcome.error).toBe('ok')
+    if (!outcome.ok) return
+    const [variant] = outcome.payload.variants as {
+      status: string
+      outputId: string
+      version: number
+    }[]
+    expect(variant).toMatchObject({ status: 'done', version: 2 })
+    const results = requests.flatMap(
+      (r) =>
+        (r.messages.at(-1)!.content as Anthropic.ToolResultBlockParam[]).filter?.(
+          (b) => b.type === 'tool_result',
+        ) ?? [],
+    )
+    expect(results.every((r) => !r.is_error)).toBe(true)
+    const renderResult = results.find((r) => Array.isArray(r.content))!
+    const info = (renderResult.content as Anthropic.TextBlockParam[]).find(
+      (b) => b.type === 'text',
+    )!
+    expect(JSON.parse(info.text.split('\n')[0]!)).toMatchObject({ section: 1, sections: 4 })
   })
 
   it('says what is missing instead of guessing', async () => {

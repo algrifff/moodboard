@@ -18,6 +18,7 @@ import {
   clientAssetIds,
   createDesignRun,
   dbDesignCache,
+  getDesignRun,
   postToLinear,
   runForOutput,
   setRunVariants,
@@ -27,6 +28,7 @@ import { getKitDetail, listKits } from './kits'
 import { LinearApiError, parseIssueRef } from './linear'
 import { LinearUnavailableError } from './linearConnection'
 import { defaultModelClient } from './orchestrator'
+import { getOutputSummary } from './outputs'
 import { outputRef, outputUrl, resolveOutput } from './outputTools'
 import { listTemplates } from './templates'
 
@@ -232,22 +234,36 @@ export async function pickDesignVariantTool(
 
 export async function postLinearCommentTool(
   ctx: ToolContext,
-  input: { output: string; issue?: string },
+  input: { run?: string; output?: string; issue?: string },
 ): Promise<ToolOutcome> {
-  const found = await resolveOutput(input.output)
-  if ('ok' in found) return found
+  let outputId: string
+  let runId: string | undefined
+  if (input.output) {
+    const found = await resolveOutput(input.output)
+    if ('ok' in found) return found
+    outputId = found.item.id
+  } else if (input.run) {
+    const run = await getDesignRun(input.run)
+    if (!run) return fail(`No design run “${input.run}”.`)
+    if (!run.chosenOutputId) {
+      return fail(
+        'Nothing has been picked yet. Pick an option first — only the picked one goes to Linear.',
+      )
+    }
+    outputId = run.chosenOutputId
+    runId = run.id
+  } else {
+    return fail('Say which: run (from design_output) or output.')
+  }
   try {
-    const posted = await postToLinear({
-      userId: ctx.userId,
-      outputId: found.item.id,
-      issue: input.issue,
-    })
+    const posted = await postToLinear({ userId: ctx.userId, outputId, issue: input.issue, runId })
     if (!posted.ok) return fail(posted.error)
+    const output = (await getOutputSummary(outputId))!
     return {
       ok: true,
       payload: {
-        summary: `Posted “${found.item.name}” to ${posted.issueIdentifier}`,
-        output: outputRef(found.item),
+        summary: `Posted “${output.name}” to ${posted.issueIdentifier}`,
+        output: outputRef(output),
         issue: posted.issueIdentifier,
         commentUrl: posted.commentUrl,
         shareUrl: posted.shareUrl,

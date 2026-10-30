@@ -6,6 +6,7 @@ import {
   type AgentStreamEvent,
   type AgentThread,
   type CanvasObject,
+  type DesignProgress,
   type LinearIssueSummary,
 } from '@moodboard/shared'
 import { create } from 'zustand'
@@ -62,6 +63,9 @@ type AgentSidebarState = {
   run: Run | null
   // A send that never reached the server (network, 409, rate limit).
   sendError: string | null
+  // Live progress of long tools (design_output), by tool_use id, then by
+  // variant. Streamed only; the finished result is the tool's own card.
+  toolProgress: Record<string, Record<number, DesignProgress>>
 
   setOpen: (open: boolean) => void
   openGroup: (groupKey: string) => void
@@ -163,6 +167,17 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
       case 'groups':
         useGroupPanelStore.getState().applyServerGroups(event.groups)
         break
+      case 'tool-progress':
+        set((s) => ({
+          toolProgress: {
+            ...s.toolProgress,
+            [event.toolUseId]: {
+              ...s.toolProgress[event.toolUseId],
+              [event.progress.variant]: event.progress,
+            },
+          },
+        }))
+        break
       case 'done':
         break
     }
@@ -179,6 +194,7 @@ export const useAgentSidebarStore = create<AgentSidebarState>()((set, get) => {
     loadingThread: false,
     run: null,
     sendError: null,
+    toolProgress: {},
 
     setOpen: (open) => {
       writeOpen(open)

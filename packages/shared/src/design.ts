@@ -85,6 +85,13 @@ export const postDesignToLinearRequestSchema = z.object({
   outputId: z.string().min(1).optional(),
 })
 
+export const postDesignToLinearResponseSchema = z.object({
+  run: designRunSchema.nullable(),
+  commentUrl: z.string(),
+  shareUrl: z.string(),
+  imageAttached: z.boolean(),
+})
+
 export function outputThumbnailPath(outputId: string, version?: number): string {
   return `/api/outputs/${outputId}/thumbnail${version ? `?version=${version}` : ''}`
 }

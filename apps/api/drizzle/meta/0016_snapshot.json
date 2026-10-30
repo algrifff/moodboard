@@ -111,12 +111,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -215,12 +211,8 @@
           "name": "agent_message_thread_id_agent_thread_id_fk",
           "tableFrom": "agent_message",
           "tableTo": "agent_thread",
-          "columnsFrom": [
-            "thread_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["thread_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -317,12 +309,8 @@
           "name": "agent_thread_board_id_board_id_fk",
           "tableFrom": "agent_thread",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -330,12 +318,8 @@
           "name": "agent_thread_created_by_user_id_fk",
           "tableFrom": "agent_thread",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -416,12 +400,8 @@
           "name": "api_key_user_id_user_id_fk",
           "tableFrom": "api_key",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -431,9 +411,7 @@
         "api_key_hashed_key_unique": {
           "name": "api_key_hashed_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "hashed_key"
-          ]
+          "columns": ["hashed_key"]
         }
       },
       "policies": {},
@@ -623,12 +601,8 @@
           "name": "asset_created_by_user_id_fk",
           "tableFrom": "asset",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -636,12 +610,8 @@
           "name": "asset_client_id_client_id_fk",
           "tableFrom": "asset",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -732,12 +702,8 @@
           "name": "board_created_by_user_id_fk",
           "tableFrom": "board",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -745,12 +711,8 @@
           "name": "board_client_id_client_id_fk",
           "tableFrom": "board",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -852,12 +814,8 @@
           "name": "board_group_display_board_id_board_id_fk",
           "tableFrom": "board_group_display",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -946,12 +904,8 @@
           "name": "board_object_board_id_board_id_fk",
           "tableFrom": "board_object",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -959,12 +913,8 @@
           "name": "board_object_updated_by_user_id_fk",
           "tableFrom": "board_object",
           "tableTo": "user",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -972,10 +922,7 @@
       "compositePrimaryKeys": {
         "board_object_board_id_id_pk": {
           "name": "board_object_board_id_id_pk",
-          "columns": [
-            "board_id",
-            "id"
-          ]
+          "columns": ["board_id", "id"]
         }
       },
       "uniqueConstraints": {},
@@ -1048,12 +995,8 @@
           "name": "client_created_by_user_id_fk",
           "tableFrom": "client",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1164,12 +1107,8 @@
           "name": "connection_user_id_user_id_fk",
           "tableFrom": "connection",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1398,12 +1337,8 @@
           "name": "design_run_board_id_board_id_fk",
           "tableFrom": "design_run",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1411,12 +1346,8 @@
           "name": "design_run_client_id_client_id_fk",
           "tableFrom": "design_run",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1424,12 +1355,8 @@
           "name": "design_run_kit_id_style_kit_id_fk",
           "tableFrom": "design_run",
           "tableTo": "style_kit",
-          "columnsFrom": [
-            "kit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kit_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1437,12 +1364,8 @@
           "name": "design_run_chosen_output_id_output_id_fk",
           "tableFrom": "design_run",
           "tableTo": "output",
-          "columnsFrom": [
-            "chosen_output_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["chosen_output_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1450,12 +1373,8 @@
           "name": "design_run_created_by_user_id_fk",
           "tableFrom": "design_run",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1595,12 +1514,8 @@
           "name": "linear_mapping_client_id_client_id_fk",
           "tableFrom": "linear_mapping",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1608,12 +1523,8 @@
           "name": "linear_mapping_created_by_user_id_fk",
           "tableFrom": "linear_mapping",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1765,12 +1676,8 @@
           "name": "output_client_id_client_id_fk",
           "tableFrom": "output",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1778,12 +1685,8 @@
           "name": "output_board_id_board_id_fk",
           "tableFrom": "output",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1791,12 +1694,8 @@
           "name": "output_template_id_template_id_fk",
           "tableFrom": "output",
           "tableTo": "template",
-          "columnsFrom": [
-            "template_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1804,12 +1703,8 @@
           "name": "output_created_by_user_id_fk",
           "tableFrom": "output",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1885,12 +1780,8 @@
           "name": "output_share_output_id_output_id_fk",
           "tableFrom": "output_share",
           "tableTo": "output",
-          "columnsFrom": [
-            "output_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["output_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1898,12 +1789,8 @@
           "name": "output_share_created_by_user_id_fk",
           "tableFrom": "output_share",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2043,12 +1930,8 @@
           "name": "output_version_output_id_output_id_fk",
           "tableFrom": "output_version",
           "tableTo": "output",
-          "columnsFrom": [
-            "output_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["output_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2056,12 +1939,8 @@
           "name": "output_version_kit_id_style_kit_id_fk",
           "tableFrom": "output_version",
           "tableTo": "style_kit",
-          "columnsFrom": [
-            "kit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kit_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2069,12 +1948,8 @@
           "name": "output_version_created_by_user_id_fk",
           "tableFrom": "output_version",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2213,12 +2088,8 @@
           "name": "recent_external_user_id_user_id_fk",
           "tableFrom": "recent_external",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2226,12 +2097,8 @@
           "name": "recent_external_connection_id_connection_id_fk",
           "tableFrom": "recent_external",
           "tableTo": "connection",
-          "columnsFrom": [
-            "connection_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["connection_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2319,12 +2186,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2334,9 +2197,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -2433,12 +2294,8 @@
           "name": "share_board_id_board_id_fk",
           "tableFrom": "share",
           "tableTo": "board",
-          "columnsFrom": [
-            "board_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["board_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2446,12 +2303,8 @@
           "name": "share_created_by_user_id_fk",
           "tableFrom": "share",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2534,12 +2387,8 @@
           "name": "style_kit_client_id_client_id_fk",
           "tableFrom": "style_kit",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2547,12 +2396,8 @@
           "name": "style_kit_created_by_user_id_fk",
           "tableFrom": "style_kit",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2640,12 +2485,8 @@
           "name": "style_kit_version_kit_id_style_kit_id_fk",
           "tableFrom": "style_kit_version",
           "tableTo": "style_kit",
-          "columnsFrom": [
-            "kit_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["kit_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2653,12 +2494,8 @@
           "name": "style_kit_version_created_by_user_id_fk",
           "tableFrom": "style_kit_version",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2774,12 +2611,8 @@
           "name": "template_client_id_client_id_fk",
           "tableFrom": "template",
           "tableTo": "client",
-          "columnsFrom": [
-            "client_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["client_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -2787,12 +2620,8 @@
           "name": "template_created_by_user_id_fk",
           "tableFrom": "template",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2899,12 +2728,8 @@
           "name": "template_version_template_id_template_id_fk",
           "tableFrom": "template_version",
           "tableTo": "template",
-          "columnsFrom": [
-            "template_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["template_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2912,12 +2737,8 @@
           "name": "template_version_created_by_user_id_fk",
           "tableFrom": "template_version",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2985,9 +2806,7 @@
         "user_email_unique": {
           "name": "user_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},

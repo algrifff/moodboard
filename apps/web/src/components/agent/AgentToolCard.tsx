@@ -12,6 +12,8 @@ import {
   ArrowSquareOut,
   BoundingBox,
   Buildings,
+  CheckCircle,
+  Code,
   Crosshair,
   Eye,
   Images,
@@ -21,7 +23,9 @@ import {
   Layout,
   PencilSimple,
   LinkSimple,
+  MagicWand,
   NoteBlank,
+  PaperPlaneTilt,
   Sparkle,
   TextT,
   Warning,
@@ -29,6 +33,7 @@ import {
   type Icon,
 } from '@phosphor-icons/react'
 import { AGENT_META } from '@/components/canvas/AgentRow'
+import { DesignRunCard } from './DesignRunCard'
 import { AssetsToolCard, KitToolCard, OutputToolCard } from './DesignToolCards'
 import { ArtDirectorGlance } from '@/components/canvas/readouts/ArtDirectorReadout'
 import { BriefGlance } from '@/components/canvas/readouts/BriefReadout'
@@ -55,7 +60,12 @@ const TOOL_META: Record<string, { icon: Icon; running: string }> = {
   create_output: { icon: Layout, running: 'Creating an output' },
   get_output: { icon: Layout, running: 'Reading the output' },
   update_output_slots: { icon: PencilSimple, running: 'Editing the output' },
+  update_output_html: { icon: Code, running: 'Editing the output’s HTML' },
   place_output_on_board: { icon: Layout, running: 'Placing the output' },
+  add_asset_to_board: { icon: Images, running: 'Adding an asset to the board' },
+  design_output: { icon: MagicWand, running: 'Designing' },
+  pick_design_variant: { icon: CheckCircle, running: 'Picking the option' },
+  post_linear_comment: { icon: PaperPlaneTilt, running: 'Posting to Linear' },
 }
 
 // Consecutive successful adds of one kind fold into one card.
@@ -94,6 +104,17 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
   const meta = TOOL_META[first.use.name] ?? { icon: Wrench, running: first.use.name }
   const IconCmp = meta.icon
 
+  if (first.use.name === 'design_output' && !first.result?.is_error) {
+    return (
+      <DesignRunCard
+        toolUseId={first.use.id}
+        input={first.use.input}
+        payload={first.result ? toolPayload(first.result.content) : null}
+        running={running}
+      />
+    )
+  }
+
   if (!first.result) {
     return (
       <CardRow icon={IconCmp}>
@@ -130,6 +151,7 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
   if (
     (first.use.name === 'create_output' ||
       first.use.name === 'update_output_slots' ||
+      first.use.name === 'update_output_html' ||
       first.use.name === 'get_output') &&
     payload.output
   ) {
@@ -137,6 +159,27 @@ export function AgentToolCard({ calls, running }: { calls: ToolCall[]; running: 
   }
   if (first.use.name === 'search_assets') {
     return <AssetsToolCard payload={payload} title={title} />
+  }
+
+  if (first.use.name === 'post_linear_comment' && typeof payload.commentUrl === 'string') {
+    return (
+      <CardRow
+        icon={IconCmp}
+        action={
+          <a
+            href={payload.commentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 text-[11.5px] text-[var(--text-mute)] hover:text-foreground transition-colors"
+          >
+            <ArrowSquareOut size={12} weight="bold" />
+            Open
+          </a>
+        }
+      >
+        <span className="text-foreground">{title}</span>
+      </CardRow>
+    )
   }
 
   if (first.use.name === 'analyze_group' && payload.display) {

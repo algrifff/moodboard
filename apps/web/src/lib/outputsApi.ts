@@ -18,7 +18,7 @@ import {
   type OutputShareView,
   type OutputSummary,
   type TemplateDetail,
-  type TemplateSlot,
+  type ProposedSlot,
   type TemplateSummary,
   type UpdateOutputRequest,
 } from '@moodboard/shared'
@@ -91,7 +91,7 @@ export async function deleteOutput(id: string): Promise<void> {
   await requestJson(`/api/outputs/${id}`, { method: 'DELETE' })
 }
 
-export async function proposedSlots(id: string, version?: number): Promise<TemplateSlot[]> {
+export async function proposedSlots(id: string, version?: number): Promise<ProposedSlot[]> {
   const query = version ? `?version=${version}` : ''
   const body = await requestJson(`/api/outputs/${id}/proposed-slots${query}`)
   return proposedSlotsResponseSchema.parse(body).slots

@@ -835,9 +835,10 @@ const postLinearCommentDef = defineTool({
   name: 'post_linear_comment',
   title: 'Post to Linear',
   description:
-    "Post an output to a Linear issue as a comment: its name, a share link (created if needed) and the rendered thumbnail. Only when the user asks. A design_output option must have been picked first and goes to its run's issue by default; any other output needs issue. Uses the signed-in user's Linear connection.",
+    "Post an output to a Linear issue as a comment: its name, a share link (created if needed) and the rendered thumbnail. Only when the user asks. Pass run (design_output's runId) to post the option the user picked on the cards, or output. A design_output option must have been picked first and goes to its run's issue by default; any other output needs issue. Uses the signed-in user's Linear connection.",
   input: {
-    output: outputQuery,
+    run: z.string().min(1).max(64).optional().describe("design_output's runId."),
+    output: outputQuery.optional(),
     issue: z.string().min(1).max(300).optional().describe('Identifier (LIN-123) or issue URL.'),
   },
   run: (ctx, input) => postLinearCommentTool(ctx, input),
